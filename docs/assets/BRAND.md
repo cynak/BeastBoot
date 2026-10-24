@@ -1,4 +1,4 @@
-# beast-booter colours
+# BeastBoot colours
 
 One palette for everything people see: the desktop app
 (`installer/beastbooter/gui/theme.py`), the boot menu theme

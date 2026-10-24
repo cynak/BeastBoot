@@ -1,9 +1,9 @@
 %%# Template for README.txt in every portable package; packaging/portable/build.py
 %%# renders it. "%% if <os> ..." / "%% end" keep a block only for those OSes
 %%# (linux, windows, macos); @NAME@ values are filled in; "%%#" lines are dropped.
-beast-booter @VERSION@ - portable package for @TARGET_NAME@
+BeastBoot @VERSION@ - portable package for @TARGET_NAME@
 @TEST_WARNING@
-beast-booter makes a multi-boot USB drive: copy ISO files onto it and pick one
+BeastBoot makes a multi-boot USB drive: copy ISO files onto it and pick one
 from a boot menu (BIOS and UEFI; Secure Boot stays on). This folder is the
 whole program: nothing is installed, nothing is downloaded while it runs, and
 deleting the folder removes it.
@@ -110,7 +110,7 @@ WHAT IS INSIDE
     Info.plist              app description (bundle id, version, minimum macOS)
     MacOS/BeastBooter       sh script that starts the GUI
     Resources/runtime/      Python @PYTHON@ (see below), unmodified
-    Resources/app/          the beast-booter program: plain .py source files
+    Resources/app/          the BeastBoot program: plain .py source files
     Resources/payload/dist/ the boot files written to the USB drive, with
                             manifest.json (origin + SHA-256 of each)
     Resources/payload/sbom/ software bill of materials (if built with one)
@@ -122,7 +122,7 @@ WHAT IS INSIDE
   BeastBooter, beast-booter sh scripts: GUI and command line
   beast-booter.desktop      starts the GUI from a file manager
   runtime/                  Python @PYTHON@ (see below), unmodified
-  app/                      the beast-booter program: plain .py source files
+  app/                      the BeastBoot program: plain .py source files
   payload/dist/             the boot files written to the USB drive, with
                             manifest.json (origin + SHA-256 of each)
   payload/sbom/             software bill of materials (if built with one)
@@ -133,7 +133,7 @@ WHAT IS INSIDE
   BeastBooter.cmd           starts the GUI (runtime\pythonw.exe, no console)
   beast-booter.cmd          command line (runtime\python.exe)
   runtime\                  Python @PYTHON@ (see below), unmodified
-  app\                      the beast-booter program: plain .py source files
+  app\                      the BeastBoot program: plain .py source files
   payload\dist\             the boot files written to the USB drive, with
                             manifest.json (origin + SHA-256 of each)
   payload\sbom\             software bill of materials (if built with one)
@@ -142,7 +142,7 @@ WHAT IS INSIDE
 %% end
   PACKAGE-MANIFEST.json     SHA-256 and origin of every file in this package
   verify-package.py         checks the files against PACKAGE-MANIFEST.json
-  LICENSE                   GNU GPL v3 (beast-booter)
+  LICENSE                   GNU GPL v3 (BeastBoot)
   README.txt                this file
 
   The launchers only run the bundled runtime on app/beast_booter_launch.py
@@ -163,12 +163,12 @@ WHAT IS INSIDE
 MORE
 %% if macos
   Documentation: BeastBooter.app/Contents/Resources/docs/PORTABLE.md (this
-  package) and SECURE_BOOT.md (Secure Boot and the beast-booter key), and
+  package) and SECURE_BOOT.md (Secure Boot and the BeastBoot key), and
   docs/ARCHITECTURE.md in the source tree.
 %% end
 %% if linux windows
   Documentation: docs/PORTABLE.md (this package) and docs/SECURE_BOOT.md
-  (Secure Boot and the beast-booter key) in this folder, and
+  (Secure Boot and the BeastBoot key) in this folder, and
   docs/ARCHITECTURE.md in the source tree.
 %% end
-  beast-booter is free software under the GNU GPL, version 3 or later.
+  BeastBoot is free software under the GNU GPL, version 3 or later.

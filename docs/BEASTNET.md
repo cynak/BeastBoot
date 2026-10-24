@@ -14,7 +14,7 @@ implement it and propose changes in their reports instead of editing it.
    progress and resume. It verifies the TLS certificate (Ubuntu's CA bundle) and,
    when given, the SHA-256. A plain `http://` URL is refused unless a SHA-256 is
    given.
-4. **Boot it now**: it writes a one-shot entry for the beast-booter menu and
+4. **Boot it now**: it writes a one-shot entry for the BeastBoot menu and
    reboots; the menu boots that ISO once, through the normal recipes (so Secure
    Boot verification works exactly as for any other ISO). The ISO stays on the
    stick for next time.
@@ -225,7 +225,7 @@ of the drive (desktop auto-mounts and mounts made by hand alike), macOS runs
 that a program keeps busy fails with error code `busy`, naming the mountpoint.
 Still refused, mounted or not: a disk holding the running system, /boot or
 the live-boot medium, active swap, device-mapper/LVM/LUKS/RAID holders, a
-loop device backed by a file on it, and the drive beast-booter runs from.
+loop device backed by a file on it, and the drive BeastBoot runs from.
 
 ## 7. Downloading from official sources
 
@@ -278,6 +278,6 @@ Windows 11 Enterprise); `BB_LIVE_SOURCE=id,id` picks others. The links name
 exact releases, so they go stale: a `gone (404)` result means the link in
 the catalog needs updating, not that beast-net is broken.
 
-Windows ISOs download fine but do not boot from beast-booter 0.1 (the menu
+Windows ISOs download fine but do not boot from BeastBoot 0.1 (the menu
 says so, `unsupported-windows`); they are larger than 4 GiB, so the drive
 needs exFAT or NTFS for them.

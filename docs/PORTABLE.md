@@ -1,6 +1,6 @@
 # Portable packages (no installation)
 
-beast-booter is also published as a portable package for Linux, Windows and
+BeastBoot is also published as a portable package for Linux, Windows and
 macOS: unpack the archive, start the program, delete the folder when you are
 done. Nothing is installed, nothing is added to your system, and nothing is
 downloaded while it runs, except the optional firmware packs when you ask for
@@ -13,7 +13,7 @@ Each package is built to be checked by its users. It contains:
   [python-build-standalone](https://github.com/astral-sh/python-build-standalone),
   pinned by SHA-256 in `packaging/portable/runtimes.lock` and unmodified, except
   that its stale bytecode caches are left out (see below);
-- the beast-booter program as **plain `.py` source files**, which you can read.
+- the BeastBoot program as **plain `.py` source files**, which you can read.
   The package holds no Python bytecode (`.pyc`) at all, so Python runs exactly
   the `.py` files you can read;
 - the **boot files** (`dist/`) with their own `manifest.json`, which gives the
@@ -125,7 +125,7 @@ is the one that was published.
   (`git_commit` in the manifest, when the build had one).
 - *Boot files:* in a source checkout, `build/verify-dist.sh <package>/payload/dist`
   checks the signatures (shim signed by Microsoft, GRUB signed by the
-  beast-booter key), the SBAT, and the certificate fingerprint that MokManager
+  BeastBoot key), the SBAT, and the certificate fingerprint that MokManager
   shows (see SECURE_BOOT.md).
 
 ## Run it
@@ -178,7 +178,7 @@ first (above), then:
   ```
 
 While an app is quarantined, macOS may run it from a hidden, read-only copy
-("App Translocation"). beast-booter still works then, because it never writes
+("App Translocation"). BeastBoot still works then, because it never writes
 into its own folder.
 
 ### Linux

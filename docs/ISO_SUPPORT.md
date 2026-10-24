@@ -1,6 +1,6 @@
 # ISO support
 
-beast-booter boots an ISO file straight from the data partition: GRUB opens
+BeastBoot boots an ISO file straight from the data partition: GRUB opens
 the file as a loop device (`loopback loop (<data>)<path>`), looks inside it
 to decide which **recipe** applies, and then starts the ISO's own kernel with
 a command line that tells the ISO's initramfs where to find the ISO file
@@ -10,7 +10,7 @@ of [ARCHITECTURE.md](ARCHITECTURE.md) and implemented in
 
 Status words used below:
 
-- **tested**: checked with the beast-booter test fixtures (fake ISOs that have
+- **tested**: checked with the BeastBoot test fixtures (fake ISOs that have
   the right files but dummy kernels). This proves the detection and the
   command line, not that the distribution then boots.
 - **expected**: what the distribution's documentation or boot scripts say
@@ -47,7 +47,7 @@ Notes per recipe:
 
 - **loopback** is preferred because the distribution's own `loopback.cfg`
   knows its kernel parameters best. A `loopback.cfg` runs as a normal GRUB
-  menu; Esc returns to beast-booter.
+  menu; Esc returns to BeastBoot.
 - **casper** picks the first of `/casper/initrd`, `initrd.lz`, `initrd.gz`,
   `initrd.img` that exists.
 - **dracut-live** and **archiso** use the ISO's volume label. If an ISO has a
@@ -147,10 +147,10 @@ lower case; the menu converts them to upper case like `/dev/disk/by-uuid`).
 
 ## Secure Boot
 
-With Secure Boot on, beast-booter's GRUB is started by shim and every kernel
+With Secure Boot on, BeastBoot's GRUB is started by shim and every kernel
 or EFI program it starts is verified through shim: against the firmware's
 `db`, the MOK list (keys you enrolled with MokManager), or the vendor
-certificate built into shim. beast-booter ships Ubuntu's Microsoft-signed
+certificate built into shim. BeastBoot ships Ubuntu's Microsoft-signed
 shim, whose vendor certificate is Canonical's.
 
 | ISO kernel signed by | Boots with Secure Boot on? |
@@ -159,7 +159,7 @@ shim, whose vendor certificate is Canonical's.
 | another distribution's key (Fedora/Red Hat, Debian, openSUSE/SUSE, ...) | only after you enroll that distribution's signing certificate with MokManager ("Enroll a key (MokManager)" in the menu), if the distribution publishes one; otherwise turn Secure Boot off |
 | nobody (Arch Linux ISO, many smaller distributions) | no: turn Secure Boot off in the firmware settings |
 
-These distributions' own shims are Microsoft-signed too, but beast-booter
+These distributions' own shims are Microsoft-signed too, but BeastBoot
 does not chain-load other distributions' shims: it boots their kernels
 directly, so their kernel signing keys must be trusted by our shim.
 
@@ -188,4 +188,4 @@ QEMU with OVMF (UEFI, Secure Boot off) and SeaBIOS (legacy BIOS) using
 checked with OVMF in Secure Boot mode (Microsoft keys), Ubuntu's signed shim
 and GRUB: an unsigned EFI program and a dummy kernel are both refused by shim
 (`error: bad shim lock signature.`) and reported as `sb-verify-failed`. The
-end-to-end tests in `tests/e2e/` repeat this with beast-booter's own build.
+end-to-end tests in `tests/e2e/` repeat this with BeastBoot's own build.

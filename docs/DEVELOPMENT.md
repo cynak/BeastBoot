@@ -1,4 +1,4 @@
-# Developing beast-booter
+# Developing BeastBoot
 
 This is the developer guide: how to set up a working environment, the
 edit-build-boot loops (boot menu, installer, beast-net helper, desktop app),
@@ -799,14 +799,14 @@ pre-enrolled), never the signed binaries or the verification in them.
    photo is a fine bug report), or on a serial console at 115200 8N1
    (`picocom -b 115200 /dev/ttyUSB0`, `screen /dev/ttyUSB0 115200`) when
    the machine has a serial port or header and `bb_serial=1` is set.
-4. Delete `config.cfg` (or the lines) afterwards; it is your file, beast-booter
+4. Delete `config.cfg` (or the lines) afterwards; it is your file, BeastBoot
    never writes the data partition.
 
 Common failures:
 
 | You see | Meaning | What to do |
 |---|---|---|
-| blue shim screen "Verification failed: (0x1A) Security Violation" | Secure Boot on, beast-booter key not enrolled on this machine | enroll it, [SECURE_BOOT.md §2](SECURE_BOOT.md#2-first-boot-with-secure-boot-on-enroll-the-key) |
+| blue shim screen "Verification failed: (0x1A) Security Violation" | Secure Boot on, BeastBoot key not enrolled on this machine | enroll it, [SECURE_BOOT.md §2](SECURE_BOOT.md#2-first-boot-with-secure-boot-on-enroll-the-key) |
 | shim "SBAT data failed: Security Policy Violation" | the machine's SBAT revocation level is newer than our GRUB | rebuild with a newer GRUB; the sbom-vuln skill checks SBAT |
 | `grub rescue>` or "error: file '/grub/...' not found" | GRUB found no usable ESP / menu files (damaged ESP, or BIOS core.img could not find partition 2) | `beast-booter update --device /dev/sdX` |
 | `BEAST: error no-data-partition`, menu empty | partition 1 not found or not readable; with Secure Boot on an NTFS data partition is invisible | check the partition table (`beast-booter info`); use exFAT/FAT32 |

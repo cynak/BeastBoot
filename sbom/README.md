@@ -1,6 +1,6 @@
 # sbom/: software bill of materials and vulnerability triage
 
-beast-booter puts third-party code in the boot chain (GNU GRUB, shim, a
+BeastBoot puts third-party code in the boot chain (GNU GRUB, shim, a
 Linux kernel and userland from Ubuntu's packages), so it publishes exactly
 what it ships and what is known to be wrong with it.
 
@@ -9,7 +9,7 @@ what it ships and what is known to be wrong with it.
 | File | What it is |
 |---|---|
 | `README.md` | this file |
-| [`vex.openvex.json`](vex.openvex.json) | the project's triage decisions, in [OpenVEX](https://github.com/openvex/spec): for each finding, whether it affects beast-booter and why. Hand-maintained; the only file here people edit. |
+| [`vex.openvex.json`](vex.openvex.json) | the project's triage decisions, in [OpenVEX](https://github.com/openvex/spec): for each finding, whether it affects BeastBoot and why. Hand-maintained; the only file here people edit. |
 
 Everything else in this directory is generated and git-ignored (see
 `.gitignore`).
@@ -67,7 +67,7 @@ SBOM too, when it describes exactly their boot files.
 ## How VEX triage works
 
 1. `make vulns` matches the SBOM against the vulnerability databases. A
-   scanner match is not proof that beast-booter is affected: the vulnerable
+   scanner match is not proof that BeastBoot is affected: the vulnerable
    code may not be built in (for example a GRUB module that is not embedded),
    or Ubuntu may have patched it without changing the upstream version.
 2. For findings where the evidence says so (changelog entry, module not

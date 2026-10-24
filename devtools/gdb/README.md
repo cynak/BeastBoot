@@ -1,6 +1,6 @@
 # Debugging GRUB with gdb (`bb-dev gdb`)
 
-Source-level gdb on the beast-booter GRUB running in QEMU: breakpoints in GRUB
+Source-level gdb on the BeastBoot GRUB running in QEMU: breakpoints in GRUB
 functions (kernel and modules), backtraces, arguments and locals, on BIOS and
 UEFI (with or without Secure Boot).
 

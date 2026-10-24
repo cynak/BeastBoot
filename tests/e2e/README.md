@@ -1,6 +1,6 @@
-# beast-booter end-to-end tests
+# BeastBoot end-to-end tests
 
-These tests boot real beast-booter drive images in QEMU, under legacy BIOS
+These tests boot real BeastBoot drive images in QEMU, under legacy BIOS
 (SeaBIOS), UEFI (OVMF) and UEFI with Secure Boot (OVMF secboot, Microsoft keys).
 They check the menu, folder browsing and every ISO boot recipe through the
 serial console, using the machine-readable `BEAST:` lines from
@@ -18,7 +18,7 @@ pytest -q tests/e2e -m "not slow"   # no QEMU boots: unit tests and static image
 ```
 
 Tests that need something missing skip with the reason: `dist/` (from
-`make build`), the installer (`python3 -m beastbooter`), the beast-booter
+`make build`), the installer (`python3 -m beastbooter`), the BeastBoot
 certificate (`keys/beast-booter.cer`, or the one in dist/), Secure Boot firmware
 and `virt-fw-vars`, or a usable `udisksctl`.
 

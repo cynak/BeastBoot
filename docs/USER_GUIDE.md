@@ -1,6 +1,6 @@
-# beast-booter user guide
+# BeastBoot user guide
 
-How to make a beast-booter USB drive, fill it with ISOs, boot it (with or
+How to make a BeastBoot USB drive, fill it with ISOs, boot it (with or
 without Secure Boot), keep it up to date, download ISOs from the boot menu,
 and what to do when something does not boot.
 
@@ -20,7 +20,7 @@ Contents:
 ## 1. What you need
 
 - A USB drive of at least 1 GiB. **Everything on it is erased** when you
-  make it a beast-booter drive (later updates keep your files).
+  make it a BeastBoot drive (later updates keep your files).
 - A computer running Linux (x86_64), Windows 10 or newer (x86_64), or macOS
   (10.15+ on Intel, 11+ on Apple silicon) to prepare the drive.
 - The portable package for that computer from the release page, plus the
@@ -122,7 +122,7 @@ you open it, so very large folders open slowly.
    on, often **F12**, **F11**, **F10**, **F8** or **Esc** depending on the
    maker. Pick the USB drive. On UEFI machines it may be listed twice
    (UEFI and legacy); choose the UEFI entry unless you want legacy BIOS.
-3. The beast-booter menu shows your folders and ISOs, then the tools.
+3. The BeastBoot menu shows your folders and ISOs, then the tools.
 
 Keys: **↑ ↓** select, **Enter** boots an ISO or opens a folder, **Esc** (or
 **Backspace**) goes back to the parent folder, **c** opens the GRUB console.
@@ -131,7 +131,7 @@ The tools at the bottom of the root menu:
 
 | Entry | What it does |
 |---|---|
-| `System: <maker> <model> · UEFI · Secure Boot on` | System information: firmware, CPU, memory, boot mode, Secure Boot state, beast-booter version, the drive's partitions |
+| `System: <maker> <model> · UEFI · Secure Boot on` | System information: firmware, CPU, memory, boot mode, Secure Boot state, BeastBoot version, the drive's partitions |
 | Download an ISO from a link | the network helper ([section 8](#8-download-an-iso-from-a-link)); only when it is on the drive |
 | Secure Boot status / help | whether Secure Boot is on and what that means for your ISOs |
 | Enroll a key (MokManager) | UEFI: enroll a distribution's signing key |
@@ -142,7 +142,7 @@ Which ISOs boot and how: [ISO_SUPPORT.md](ISO_SUPPORT.md).
 
 ## 6. First boot with Secure Boot on
 
-Once per computer, you enroll the beast-booter key in MokManager. Nothing
+Once per computer, you enroll the BeastBoot key in MokManager. Nothing
 running in an operating system can do this for you; it needs a keyboard
 at the machine.
 
@@ -165,13 +165,13 @@ your own key: [SECURE_BOOT.md](SECURE_BOOT.md).
 
 ## 7. Update the boot files
 
-A newer beast-booter replaces only the boot partition and boot code; your
+A newer BeastBoot replaces only the boot partition and boot code; your
 ISOs and other files on partition 1 are never written.
 
 - **App:** choose the drive and click **Update boot files...**.
 - **Command line:** `sudo ./beast-booter update --device /dev/sdX`.
 
-**The app tells you when a drive is out of date.** For every beast-booter
+**The app tells you when a drive is out of date.** For every BeastBoot
 drive in the list it reads which version the drive has, without asking for
 administrator rights, and shows it on the drive's card: *update available*,
 *up to date*, *different build*, *newer than this app* (don't update with an
@@ -180,7 +180,7 @@ with older boot files; select one and **Update boot files...** becomes the
 main button. On Linux the app reads the version by mounting the drive's
 boot partition read-only for a moment (udisks, no password); on Windows and
 macOS it can read it only where the system shows that partition, otherwise
-the card just says *beast-booter drive*. From the command line:
+the card just says *BeastBoot drive*. From the command line:
 `./beast-booter list-devices --check-installed`.
 
 Installed firmware packs and a pending one-time download boot are carried
@@ -188,14 +188,14 @@ over. If the new boot files are signed with a different key (for example,
 you move from boot files you built yourself to a release), enroll the new
 key once more as in [section 6](#6-first-boot-with-secure-boot-on).
 
-A drive made by beast-booter before layout 2 (512 MiB boot partition) cannot
+A drive made by BeastBoot before layout 2 (512 MiB boot partition) cannot
 be updated: `update` stops with `reinstall-needed`. Copy your files off,
 run `install` again, and copy them back.
 
 **If an update stops because the drive stopped responding**
 (`device-vanished`): some USB sticks report "no medium" right after their
 files are unmounted, especially when they are warm or have been plugged in
-for a long time. That is the stick, not beast-booter. Unplug it, plug it
+for a long time. That is the stick, not BeastBoot. Unplug it, plug it
 back in and click **Update boot files...** again. An update that was
 interrupted this way is finished by the next one, including your firmware
 packs and a pending one-time boot (the app keeps a copy of them on this
@@ -223,7 +223,7 @@ on):
 ### Firmware packs
 
 Most Ethernet adapters work out of the box. Many WiFi chips (and some
-Ethernet ones) need closed-source firmware files, which beast-booter does
+Ethernet ones) need closed-source firmware files, which BeastBoot does
 not put on the drive by default. When firmware is missing, the helper names
 the driver and the pack to install.
 
@@ -284,8 +284,8 @@ With `set bb_debug=1` in `config.cfg`, the menu also prints a `BEAST: error
 
 | Code | Meaning | What to do |
 |---|---|---|
-| `sb-verify-failed` | Secure Boot refused the ISO's kernel: it is not signed by a key this computer trusts | enroll the distribution's key with **Enroll a key (MokManager)** if it publishes one, or turn Secure Boot off for this ISO. beast-booter never retries without verification. |
-| `no-recipe` | beast-booter does not recognise how this ISO boots | check [ISO_SUPPORT.md](ISO_SUPPORT.md#recipes); report the ISO |
+| `sb-verify-failed` | Secure Boot refused the ISO's kernel: it is not signed by a key this computer trusts | enroll the distribution's key with **Enroll a key (MokManager)** if it publishes one, or turn Secure Boot off for this ISO. BeastBoot never retries without verification. |
+| `no-recipe` | BeastBoot does not recognise how this ISO boots | check [ISO_SUPPORT.md](ISO_SUPPORT.md#recipes); report the ISO |
 | `unsupported-windows` | a Windows installer ISO | not supported in 0.1 |
 | `no-data-partition` | the menu cannot find the storage partition | with Secure Boot on and NTFS, see below; otherwise the partition was deleted or reformatted: reinstall |
 | `iso-not-found`, `loopback-failed` | the ISO file is gone or cannot be opened | copy it again; check it with its SHA-256 |
@@ -293,7 +293,7 @@ With `set bb_debug=1` in `config.cfg`, the menu also prints a `BEAST: error
 
 **The ISO starts, then stops looking for its files** (an initramfs shell,
 "unable to find a medium"): the ISO's own Linux must mount the storage
-partition to find the ISO. On exFAT, beast-booter gives Ubuntu desktop ISOs
+partition to find the ISO. On exFAT, BeastBoot gives Ubuntu desktop ISOs
 (and, untested, other casper and Debian live ISOs) the exFAT driver from the
 ISO itself ([the exFAT add-on](ISO_SUPPORT.md#the-exfat-add-on)); if Ubuntu
 desktop still says "Could not find the ISO", update the drive's boot files and
@@ -308,7 +308,7 @@ GRUB 2.14 switches its NTFS driver off when Secure Boot is on, so the menu
 cannot see an NTFS storage partition at all and says so. Use exFAT or FAT32,
 or boot with Secure Boot off.
 
-### Secure Boot refuses beast-booter itself
+### Secure Boot refuses BeastBoot itself
 
 If the blue shim screen keeps coming back after you enrolled the key, or
 shim reports an SBAT violation, your computer hit one of the two known
@@ -366,12 +366,12 @@ More: [PORTABLE.md](PORTABLE.md#run-it).
 | Code | Meaning |
 |---|---|
 | `reinstall-needed` | the drive has an older layout; `update` cannot convert it ([section 7](#7-update-the-boot-files)) |
-| `layout-too-new` | the drive was made by a newer beast-booter; use that version |
+| `layout-too-new` | the drive was made by a newer BeastBoot; use that version |
 | `cancelled` | you stopped it (Cancel, Ctrl+C); after a cancelled `install`, run it again before using the drive |
 | `busy` | a program still uses the drive; on Linux the message names it (an open file, a terminal in a folder on it, an ISO attached as a disk image). Close it and try again |
 | `device-vanished` | the drive stopped responding while it was prepared or written (it reported "no medium" or was unplugged). Unplug it, plug it back in and run the same command again ([section 7](#7-update-the-boot-files)) |
 
-Still stuck? [Open an issue](https://github.com/cynak/BeastBoot/issues) with the beast-booter version (`bb_version` on the
+Still stuck? [Open an issue](https://github.com/cynak/BeastBoot/issues) with the BeastBoot version (`bb_version` on the
 System information page), the computer model, the boot mode and the
 `BEAST:` lines. Security problems go privately, see
 [SECURITY.md](../SECURITY.md).

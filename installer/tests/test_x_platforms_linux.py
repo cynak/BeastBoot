@@ -772,7 +772,8 @@ def test_exclusive_probe_errors(monkeypatch):
     with pytest.raises(BeastError, match="in use by the system or a program") as e:
         devmod._exclusive_probe("/nonexistent/sdx")
     assert e.value.code == "busy"
-    monkeypatch.setattr(os, "open", fail(errno.ENOMEDIUM))
+    # ENOMEDIUM is Linux-only (these tests also run on macOS / Windows CI); ENXIO counts too
+    monkeypatch.setattr(os, "open", fail(getattr(errno, "ENOMEDIUM", errno.ENXIO)))
     with pytest.raises(BeastError, match="stopped responding") as e:
         devmod._exclusive_probe("/nonexistent/sdx")
     assert e.value.code == "device-vanished"

@@ -1,6 +1,6 @@
-# Contributing to beast-booter
+# Contributing to BeastBoot
 
-Thank you for helping. beast-booter sits in the boot chain of other people's
+Thank you for helping. BeastBoot sits in the boot chain of other people's
 computers, so a few rules matter more here than in most projects; they are
 listed under [Principles](#principles). Everything else is in
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).

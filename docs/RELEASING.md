@@ -1,4 +1,4 @@
-# Releasing beast-booter
+# Releasing BeastBoot
 
 A release is made by pushing a tag `vX.Y.Z`. GitHub Actions then builds every
 release file, tests it, writes the SBOM and the vulnerability report, attests
@@ -95,7 +95,7 @@ run takes roughly 15-30 minutes, most of it the scan and the tests.
 
 ## 3. The release signing key (once)
 
-Every beast-booter user enrolls the release certificate in MokManager once.
+Every BeastBoot user enrolls the release certificate in MokManager once.
 Changing the key forces everyone to enroll again, so create it once, carefully:
 
 1. On an offline machine with a checkout of this repository:
@@ -211,7 +211,7 @@ Before enrolling the certificate, compare its fingerprint with
 (section 3, "Check the key before you enroll it"): MokManager's **View key**
 must show the same SHA-1 fingerprint. Every release since the key was created
 has the same certificate; a different one means the drive or download is not an
-official beast-booter build.
+official BeastBoot build.
 
 ## 8. CI details (GitHub Actions)
 

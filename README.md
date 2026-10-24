@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-dark.svg">
-    <img src="docs/assets/hero-light.svg" width="100%" alt="beast-booter: one USB drive, many ISOs, Secure Boot intact. Boots on legacy BIOS, UEFI, and UEFI with Secure Boot via MOK, from a drive that stays normal exFAT storage.">
+    <img src="docs/assets/hero-light.svg" width="100%" alt="BeastBoot: one USB drive, many ISOs, Secure Boot intact. Boots on legacy BIOS, UEFI, and UEFI with Secure Boot via MOK, from a drive that stays normal exFAT storage; Ubuntu ISOs boot from exFAT, ISOs download over WiFi or Ethernet, and out-of-date drives are pointed out.">
   </picture>
 </p>
 
@@ -39,8 +39,8 @@
   default). Drop `.iso` files anywhere on it, in any folders. When you boot
   from it, a graphical menu lists the ISOs and lets you browse folders.
 - **Boots everywhere.** Legacy BIOS, UEFI, and UEFI with Secure Boot on.
-- **Secure Boot done properly.** Microsoft-signed shim, then beast-booter's
-  GRUB 2.14 signed with a beast-booter key that *you* enroll once in
+- **Secure Boot done properly.** Microsoft-signed shim, then BeastBoot's
+  GRUB 2.14 signed with a BeastBoot key that *you* enroll once in
   MokManager. Nothing is disabled or bypassed. An ISO whose kernel your
   machine doesn't trust is refused, with an explanation.
 - **Download an ISO from the boot menu.** A small Linux helper connects over
@@ -49,17 +49,24 @@
   repo or copied unmodified from a named Ubuntu package, and listed with its
   origin and SHA-256 in a manifest you can verify. Every release publishes an
   SBOM and a vulnerability report.
+- **Drives stay current.** The app notices when a drive has older boot files
+  and updates them in place; your ISOs and files are never touched.
 - **One app for Linux, Windows and macOS.** A desktop app and a command line,
   in plain Python, shipped as portable packages that need no installation.
 
 > Status: **0.1, in development.** See the [roadmap](#roadmap) and the
 > [known Secure Boot limits](#secure-boot).
 
+> The project is **BeastBoot**. The program, its commands and files, and the
+> drive's labels keep the technical name `beast-booter` (for example
+> `./beast-booter install`, `beast-booter-<v>-linux-x86_64.tar.gz`,
+> the `BEASTBOOTER` partition), so existing drives keep working.
+
 ## Screenshots
 
 <table>
 <tr>
-<td width="50%" valign="top"><img src="docs/assets/screenshots/menu-root.png" width="100%" alt="The beast-booter boot menu: folders and ISO files with distribution icons, then System information, Download an ISO from a link, Secure Boot help, Reboot and Power off"><br>
+<td width="50%" valign="top"><img src="docs/assets/screenshots/menu-root.png" width="100%" alt="The BeastBoot boot menu: folders and ISO files with distribution icons, then System information, Download an ISO from a link, Secure Boot help, Reboot and Power off"><br>
 <sub><b>Boot menu.</b> ISOs and folders on the drive, each with its distribution's icon, then the tools.</sub></td>
 <td width="50%" valign="top"><img src="docs/assets/screenshots/menu-folder.png" width="100%" alt="The boot menu inside the Linux folder, listing ISO files"><br>
 <sub><b>Folders.</b> Any folder on the drive opens as its own list; Esc goes back.</sub></td>
@@ -71,7 +78,7 @@
 <sub><b>Download an ISO from a link.</b> The network helper asks for a link, downloads it over HTTPS and checks it.</sub></td>
 </tr>
 <tr>
-<td width="50%" valign="top"><img src="docs/assets/screenshots/app-drive.png" width="100%" alt="The beast-booter desktop app listing USB drives"><br>
+<td width="50%" valign="top"><img src="docs/assets/screenshots/app-drive.png" width="100%" alt="The BeastBoot desktop app listing USB drives"><br>
 <sub><b>The app: choose the drive.</b> Only removable drives are offered; system and read-only disks are refused.</sub></td>
 <td width="50%" valign="top"><img src="docs/assets/screenshots/app-options.png" width="100%" alt="The options page of the desktop app"><br>
 <sub><b>Options.</b> File system, partition table, label, and the boot files with their Secure Boot key fingerprints.</sub></td>
@@ -79,7 +86,7 @@
 <tr>
 <td width="50%" valign="top"><img src="docs/assets/screenshots/app-confirm.png" width="100%" alt="The erase confirmation dialog of the desktop app"><br>
 <sub><b>Nothing is erased by accident.</b> You tick a box before the drive is erased.</sub></td>
-<td width="50%" valign="top"><img src="docs/assets/screenshots/app-update-available.png" width="100%" alt="The desktop app pointing out a drive with older beast-booter boot files and offering Update boot files"><br>
+<td width="50%" valign="top"><img src="docs/assets/screenshots/app-update-available.png" width="100%" alt="The desktop app pointing out a drive with older BeastBoot boot files and offering Update boot files"><br>
 <sub><b>Out-of-date drives are pointed out.</b> A drive with older boot files gets a notice and one-click Update boot files; your files on it stay.</sub></td>
 </tr>
 </table>
@@ -156,7 +163,7 @@ disk image instead, without administrator rights. Every command has
 2. Copy `.iso` files onto the drive's `BEASTBOOTER` partition, in any folders.
 3. Boot the computer from the drive (its one-time boot menu key, often F12,
    F11, F10, F8 or Esc) and pick an ISO.
-4. With Secure Boot on, enroll the beast-booter key once per computer (below).
+4. With Secure Boot on, enroll the BeastBoot key once per computer (below).
 
 The step-by-step version, with every option and the common errors:
 [docs/USER_GUIDE.md](docs/USER_GUIDE.md).
@@ -181,7 +188,7 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
 ## Secure Boot
 
 On the first boot with Secure Boot on, shim reports that it can't verify
-beast-booter and opens MokManager. Choose **Enroll key from disk**, select
+BeastBoot and opens MokManager. Choose **Enroll key from disk**, select
 `ENROLL_THIS_KEY_IN_MOKMANAGER.cer` on the `BEAST-EFI` volume, check the
 fingerprint, confirm, and reboot. This is a one-time step per computer.
 ISOs then boot if their kernel is signed by a key the machine trusts
@@ -197,7 +204,7 @@ enroll their key; unsigned ones only with Secure Boot off).
   which is signed only by the 2011 CA.
 
 Both are fixed by shipping a newer GRUB and shim from Ubuntu's updates;
-beast-booter will not fake the SBAT number. With an NTFS data partition,
+BeastBoot will not fake the SBAT number. With an NTFS data partition,
 GRUB cannot see your ISOs under Secure Boot; use exFAT or FAT32. Full
 guide: [docs/SECURE_BOOT.md](docs/SECURE_BOOT.md).
 
@@ -209,7 +216,7 @@ Boot on). It brings up Ethernet by DHCP or joins a WiFi network, downloads
 an ISO over HTTPS into `/downloads/` with resume, checks an optional SHA-256
 (required for plain `http://`), and reboots into the menu to boot it once.
 
-Many WiFi chips need closed-source firmware, which beast-booter does not
+Many WiFi chips need closed-source firmware, which BeastBoot does not
 ship. If you want it, install a **firmware pack** from the desktop app
 (**Firmware packs**) or with `beast-booter firmware fetch` and
 `beast-booter firmware install`. Each pack's files come from the upstream
@@ -219,7 +226,7 @@ Details: [docs/BEASTNET.md](docs/BEASTNET.md).
 
 ## SBOM and vulnerabilities
 
-beast-booter puts third-party code in the boot chain (GNU GRUB, shim and a
+BeastBoot puts third-party code in the boot chain (GNU GRUB, shim and a
 Linux kernel from Ubuntu's packages), so every release publishes what it
 ships and what is known to be wrong with it:
 
@@ -302,6 +309,6 @@ Releases are built by GitHub Actions when a `vX.Y.Z` tag is pushed, with
 
 ## License
 
-GPL-3.0-or-later. See [LICENSE](LICENSE). beast-booter distributes GNU GRUB
+GPL-3.0-or-later. See [LICENSE](LICENSE). BeastBoot distributes GNU GRUB
 (GPL-3.0-or-later), shim (BSD-2-Clause) and a Linux kernel (GPL-2.0) from
 Ubuntu's packages; each package's licence is listed in the SBOM.

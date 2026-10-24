@@ -1,16 +1,16 @@
 # Security policy
 
-beast-booter sits in the boot chain, so its security rules are part of the design.
+BeastBoot sits in the boot chain, so its security rules are part of the design.
 
-## What beast-booter promises
+## What BeastBoot promises
 
 1. It never disables, patches, hooks or overrides firmware or shim signature
    verification. Everything loaded after shim is verified by shim.
 2. It never ships known-vulnerable or revoked signed binaries.
 3. The SBAT metadata embedded in its GRUB truthfully describes the GRUB code it
    ships, so that existing revocations apply to it. It adds its own
-   `grub.beastbooter` entry so beast-booter-specific issues can be revoked too.
-4. Machines only trust beast-booter after the owner enrolls its key in
+   `grub.beastbooter` entry so BeastBoot-specific issues can be revoked too.
+4. Machines only trust BeastBoot after the owner enrolls its key in
    MokManager, which requires physical presence.
 5. Every file placed on a drive is listed in `dist/manifest.json` with its
    origin and SHA-256. `build/verify-dist.sh` re-checks a build.
@@ -74,6 +74,6 @@ enroll anything.
 
 Please report security issues privately, with GitHub's private vulnerability
 reporting (https://github.com/cynak/BeastBoot/security/advisories/new), instead of opening a
-public issue. Include the beast-booter version (`bb_version` in
+public issue. Include the BeastBoot version (`bb_version` in
 `grub/beast/version.cfg` on the drive), firmware/machine details, and steps to
 reproduce.

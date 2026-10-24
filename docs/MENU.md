@@ -1,6 +1,6 @@
 # The boot menu
 
-When you boot a beast-booter drive you get a graphical GRUB menu in the
+When you boot a BeastBoot drive you get a graphical GRUB menu in the
 project's dark theme (see [Graphical menu](#graphical-menu)); where graphics
 are not available, or with `bb_gfx=0`, the same menu appears as a plain GRUB
 text menu. It works the same on legacy BIOS and UEFI (with or without Secure
@@ -96,7 +96,7 @@ set bb_serial=1
 | `bb_dryrun=1` | do everything except actually starting the kernel or boot loader: print what would be run and return to the menu |
 | `bb_gfx=0` | no graphics: the plain text menu, exactly as on a console without graphics |
 | `bb_gfxmode=WxH` | screen mode(s) for the graphical menu, a GRUB `gfxmode` list such as `1280x720` or `1024x768,auto`. Default: `1920x1080,1280x720,1024x768,auto` (the first mode the firmware offers) |
-| `bb_theme=/path/theme.txt` | use your own GRUB theme file from the data partition instead of beast-booter's (see [Changing the look](#changing-the-look)) |
+| `bb_theme=/path/theme.txt` | use your own GRUB theme file from the data partition instead of BeastBoot's (see [Changing the look](#changing-the-look)) |
 | `bb_fs_addon=0` | do not use the [exFAT add-on](ISO_SUPPORT.md#the-exfat-add-on): casper and live-boot ISOs on an exFAT drive are started exactly as on FAT32 (with the ISO's own `loopback.cfg`). Default: on |
 | `bb_beastnet_script=/path/plan.json` | start the network helper in script mode with this JSON plan (a path on the data partition) instead of asking questions; see [BEASTNET.md](BEASTNET.md) §5 |
 
@@ -107,7 +107,7 @@ missing; values from `config.cfg` win when both set one.
 
 The file is GRUB script, so a syntax error there shows up as a GRUB error
 at boot. Anything not listed above is passed through to GRUB unchanged. It is
-your file: beast-booter's installer and updater never write to the data
+your file: BeastBoot's installer and updater never write to the data
 partition.
 
 ## Debug output (`bb_debug=1`)
@@ -134,7 +134,7 @@ BEAST: error no-recipe /mystery.iso
   line never shares a raw serial line with the escape codes of the screen
   GRUB just cleared.
 - GRUB word-wraps output at the terminal width. On a serial console
-  (`bb_serial=1`) beast-booter sets the width to 1024 columns when
+  (`bb_serial=1`) BeastBoot sets the width to 1024 columns when
   `bb_debug=1`, so `BEAST:` lines stay on one line; on the UEFI console the
   width is whatever the firmware offers (160 columns in QEMU/OVMF), so very
   long paths can still wrap there.
@@ -196,7 +196,7 @@ user configuration and after a `bb_autoboot` attempt, just before the menu
 is built:
 
 - dark grey background with a soft red glow (colours:
-  [assets/BRAND.md](assets/BRAND.md)), the beast-booter logo, name and
+  [assets/BRAND.md](assets/BRAND.md)), the logo, the name (`beast-booter`) and
   version at the top, and badges for the firmware mode and Secure Boot
   state (`UEFI` + `Secure Boot on` / `off`, or `Legacy BIOS`). A theme file
   cannot show variables, so there is one theme per badge set
@@ -287,7 +287,7 @@ from the firmware's SMBIOS tables:
   firmware clock (`date`, usually UTC), and whether the graphical menu or
   the text console is used (GRUB cannot report the exact screen mode it
   picked, so the page shows the `gfxmode` list it picked from);
-- beast-booter version and build id, the data partition (device,
+- BeastBoot version and build id, the data partition (device,
   filesystem, label, UUID) and the boot partition with its partition table.
 
 Values the firmware does not report show as `unknown`, never as errors:

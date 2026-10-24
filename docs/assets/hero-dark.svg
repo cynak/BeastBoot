@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="420" viewBox="0 0 1280 420" role="img" aria-labelledby="t d">
-<title id="t">beast-booter: one USB drive, many ISOs, Secure Boot intact</title>
-<desc id="d">Banner for beast-booter, an open-source, fully transparent multi-boot USB tool. It boots ISO files from a drive that stays normal exFAT storage, on legacy BIOS, UEFI, and UEFI with Secure Boot via a MOK key the user enrolls. Illustration: a USB stick with a shield and check mark next to a stack of discs.</desc>
+<title id="t">BeastBoot: one USB drive, many ISOs, Secure Boot intact</title>
+<desc id="d">Banner for BeastBoot, an open-source, fully transparent multi-boot USB tool. It boots ISO files, Ubuntu ISOs included, from a drive that stays normal exFAT storage, on legacy BIOS, UEFI, and UEFI with Secure Boot via a MOK key the user enrolls. It can download ISOs over WiFi or Ethernet and checks whether a drive is out of date. Illustration: a USB stick with a shield and check mark next to a stack of discs.</desc>
 <defs>
 <style>text{font-family:system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Helvetica, Arial, 'Noto Sans', 'Liberation Sans', sans-serif}</style>
 <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#141415"/><stop offset="1" stop-color="#2A1215"/></linearGradient>
@@ -20,20 +20,26 @@
 <circle cx="1030" cy="215" r="250" fill="url(#glow)"/>
 </g>
 <rect x="0.75" y="0.75" width="1278.5" height="418.5" rx="23.5" fill="none" stroke="#2F2F33" stroke-width="1.5"/>
-<text x="74" y="96" font-size="17" font-weight="700" letter-spacing="3" fill="#FF8A93">OPEN-SOURCE MULTI-BOOT USB</text>
-<text x="70" y="178" font-size="84" font-weight="800" letter-spacing="-2" fill="#F2F2F3">beast<tspan fill="#F0505E">-</tspan>booter</text>
-<text x="73" y="228" font-size="28" font-weight="500" fill="#CFCFD4">One USB drive. Many ISOs. Secure Boot intact.</text>
-<rect x="72" y="262" width="150" height="40" rx="20" fill="#2A1215" fill-opacity="0.75" stroke="#7A1622" stroke-width="1.5"/>
-<text x="147" y="288.5" font-size="18" font-weight="600" text-anchor="middle" fill="#F2F2F3">Legacy BIOS</text>
-<rect x="236" y="262" width="90" height="40" rx="20" fill="#2A1215" fill-opacity="0.75" stroke="#7A1622" stroke-width="1.5"/>
-<text x="281" y="288.5" font-size="18" font-weight="600" text-anchor="middle" fill="#F2F2F3">UEFI</text>
-<rect x="340" y="262" width="246" height="40" rx="20" fill="#2A1215" fill-opacity="0.75" stroke="#7A1622" stroke-width="1.5"/>
-<text x="463" y="288.5" font-size="18" font-weight="600" text-anchor="middle" fill="#F2F2F3">Secure Boot via MOK</text>
-<rect x="72" y="314" width="264" height="40" rx="20" fill="#2A1215" fill-opacity="0.75" stroke="#7A1622" stroke-width="1.5"/>
-<text x="204" y="340.5" font-size="18" font-weight="600" text-anchor="middle" fill="#F2F2F3">Normal exFAT storage</text>
-<rect x="350" y="314" width="222" height="40" rx="20" fill="#2A1215" fill-opacity="0.75" stroke="#7A1622" stroke-width="1.5"/>
-<text x="461" y="340.5" font-size="18" font-weight="600" text-anchor="middle" fill="#F2F2F3">Fully transparent</text>
-<ellipse cx="995" cy="352" rx="190" ry="22" fill="#000000" opacity="0.45"/>
+<text x="74" y="76" font-size="17" font-weight="700" letter-spacing="3" fill="#FF8A93">OPEN-SOURCE MULTI-BOOT USB</text>
+<text x="70" y="158" font-size="84" font-weight="800" letter-spacing="-2" fill="#F2F2F3">Beast<tspan dx="-2" fill="#F0505E">Boot</tspan></text>
+<text x="73" y="208" font-size="28" font-weight="500" fill="#CFCFD4">One USB drive. Many ISOs. Secure Boot intact.</text>
+<rect x="72" y="240" width="140" height="38" rx="19" fill="#2A1215" fill-opacity="0.75" stroke="#7A1622" stroke-width="1.5"/>
+<text x="142" y="265.12" font-size="17" font-weight="600" text-anchor="middle" fill="#F2F2F3">Legacy BIOS</text>
+<rect x="222" y="240" width="80" height="38" rx="19" fill="#2A1215" fill-opacity="0.75" stroke="#7A1622" stroke-width="1.5"/>
+<text x="262" y="265.12" font-size="17" font-weight="600" text-anchor="middle" fill="#F2F2F3">UEFI</text>
+<rect x="312" y="240" width="210" height="38" rx="19" fill="#2A1215" fill-opacity="0.75" stroke="#7A1622" stroke-width="1.5"/>
+<text x="417" y="265.12" font-size="17" font-weight="600" text-anchor="middle" fill="#F2F2F3">Secure Boot via MOK</text>
+<rect x="532" y="240" width="180" height="38" rx="19" fill="#2A1215" fill-opacity="0.75" stroke="#7A1622" stroke-width="1.5"/>
+<text x="622" y="265.12" font-size="17" font-weight="600" text-anchor="middle" fill="#F2F2F3">Fully transparent</text>
+<rect x="72" y="288" width="330" height="38" rx="19" fill="#2A1215" fill-opacity="0.75" stroke="#7A1622" stroke-width="1.5"/>
+<text x="237" y="313.12" font-size="17" font-weight="600" text-anchor="middle" fill="#F2F2F3">Download ISOs over WiFi / Ethernet</text>
+<rect x="412" y="288" width="234" height="38" rx="19" fill="#2A1215" fill-opacity="0.75" stroke="#7A1622" stroke-width="1.5"/>
+<text x="529" y="313.12" font-size="17" font-weight="600" text-anchor="middle" fill="#F2F2F3">Out-of-date drive check</text>
+<rect x="72" y="336" width="220" height="38" rx="19" fill="#2A1215" fill-opacity="0.75" stroke="#7A1622" stroke-width="1.5"/>
+<text x="182" y="361.12" font-size="17" font-weight="600" text-anchor="middle" fill="#F2F2F3">Normal exFAT storage</text>
+<rect x="302" y="336" width="220" height="38" rx="19" fill="#2A1215" fill-opacity="0.75" stroke="#7A1622" stroke-width="1.5"/>
+<text x="412" y="361.12" font-size="17" font-weight="600" text-anchor="middle" fill="#F2F2F3">Ubuntu ISOs on exFAT</text>
+<ellipse cx="995" cy="352" rx="190" ry="22" fill="#0F0F10" opacity="0.45"/>
 <ellipse cx="955" cy="324" rx="118" ry="38" fill="#7A1622"/><ellipse cx="955" cy="318" rx="118" ry="38" fill="url(#tint0)" stroke="#0F0F10" stroke-opacity="0.35" stroke-width="1"/>
 <ellipse cx="955" cy="300" rx="118" ry="38" fill="#3D3D42"/><ellipse cx="955" cy="294" rx="118" ry="38" fill="url(#tint1)" stroke="#0F0F10" stroke-opacity="0.35" stroke-width="1"/>
 <ellipse cx="955" cy="276" rx="118" ry="38" fill="#B01E2E"/><ellipse cx="955" cy="270" rx="118" ry="38" fill="url(#tint2)" stroke="#0F0F10" stroke-opacity="0.35" stroke-width="1"/>

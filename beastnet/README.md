@@ -1,10 +1,10 @@
 # beast-net helper application
 
 The program that runs inside the small Linux environment started by the
-beast-booter menu entry **Download an ISO from a link**. It brings up the
+BeastBoot menu entry **Download an ISO from a link**. It brings up the
 network (Ethernet automatically, or a WiFi network the user picks), asks for an
 ISO link and an optional SHA-256, downloads the ISO onto the stick under
-`/downloads/`, verifies it, and hands it to the beast-booter menu to boot once.
+`/downloads/`, verifies it, and hands it to the BeastBoot menu to boot once.
 The contract is [docs/BEASTNET.md](../docs/BEASTNET.md) (sections 1, 4, 5 and 6).
 
 ## Layout

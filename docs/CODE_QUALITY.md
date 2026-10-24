@@ -141,7 +141,7 @@ Only open-source tools are used, and nothing needs a licence key, an
 account or a server:
 
 - ruff: MIT. ShellCheck: GPL-3.0 (run as a separate program; nothing of it is
-  shipped on a drive or linked into beast-booter).
+  shipped on a drive or linked into BeastBoot).
 - The recommended editor extensions are MIT or EPL-2.0 (table above).
 
 Note that the Marketplace build of `ms-python.python` installs Pylance, a

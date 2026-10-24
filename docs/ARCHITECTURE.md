@@ -1,6 +1,6 @@
-# beast-booter architecture
+# BeastBoot architecture
 
-beast-booter turns a USB drive into a multi-boot drive that stays usable as
+BeastBoot turns a USB drive into a multi-boot drive that stays usable as
 normal storage. You copy `.iso` files onto it like any other files; when you
 boot from it, a menu lists the ISOs (and lets you browse folders) and boots the
 one you pick. It works on legacy BIOS, UEFI, and UEFI with Secure Boot enabled.
@@ -16,20 +16,20 @@ if this document and that file disagree, the file wins and this document is a bu
    and recorded (with its SHA-256 and origin) in `dist/manifest.json`. No
    unexplained binaries.
 2. **Secure Boot is respected, never weakened.**
-   - beast-booter never disables, patches, hooks or overrides firmware or shim
+   - BeastBoot never disables, patches, hooks or overrides firmware or shim
      signature verification. Everything loaded after shim is verified by shim
      against the firmware `db`, the MOK list, or shim's built-in vendor cert.
-   - beast-booter never ships known-vulnerable or revoked signed binaries.
+   - BeastBoot never ships known-vulnerable or revoked signed binaries.
    - The SBAT metadata in our GRUB truthfully describes the GRUB code we ship
      (copied from the matching distribution build) plus our own product line.
-   - Trusting the beast-booter key requires the user to enroll it themselves in
+   - Trusting the BeastBoot key requires the user to enroll it themselves in
      MokManager, which requires physical presence at the machine (shim design).
    - An ISO whose kernel is not signed by a trusted key **fails closed**: the
      menu explains why and what the user can do (enroll that distro's key via
      MokManager, or turn Secure Boot off). It does not try to work around it.
 3. **The drive stays normal storage.** Partition 1 is a plain exFAT (or
    FAT32/NTFS) filesystem that any OS can mount and write. Updating
-   beast-booter rewrites only the boot area and partition 2, never partition 1.
+   BeastBoot rewrites only the boot area and partition 2, never partition 1.
 4. **Boring, auditable code.** Installer (CLI and Tkinter GUI) and `bb-dev`:
    Python 3.10+ standard library only. Menu: plain GRUB script. Build: bash.
    No network access at install time; the only command that downloads is
@@ -357,7 +357,7 @@ beast-booter firmware list    (--device DEV | --image PATH) [--json]
   "disks": [{...DiskInfo..., "eligible": true|false, "reason": ...}]}`; without
   `--all` only eligible (removable, non-system) disks are listed. With
   `--check-installed` each disk also gets `"installed"`: `null` (not a
-  beast-booter drive) or `{"version", "build_id", "state", "summary", "note"}`,
+  BeastBoot drive) or `{"version", "build_id", "state", "summary", "note"}`,
   read without administrator rights by `PlatformBackend.probe_installed`
   (`installed.py`, `installed_probe.py`; Linux mounts partition 2 read-only
   with udisks for a moment and unmounts it again). `state` is one of

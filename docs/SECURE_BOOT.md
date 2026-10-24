@@ -1,8 +1,8 @@
-# Secure Boot and beast-booter
+# Secure Boot and BeastBoot
 
-beast-booter boots with UEFI Secure Boot **on**. It does that the same way
+BeastBoot boots with UEFI Secure Boot **on**. It does that the same way
 Linux distributions do: with a Microsoft-signed *shim*, and without weakening
-any check. The one thing you have to do yourself is enroll the beast-booter
+any check. The one thing you have to do yourself is enroll the BeastBoot
 key once per computer, in a blue screen called MokManager. This page explains
 what is trusted and why, how to enroll (and later remove) the key, how to
 check the key first, and which ISOs can boot with Secure Boot on.
@@ -26,14 +26,14 @@ firmware (Secure Boot db: Microsoft UEFI CA)
 |---|---|---|
 | `EFI/BOOT/BOOTX64.EFI` (shim 15.8, Ubuntu) | Microsoft Corporation UEFI CA 2011 | that CA is in the firmware `db` of most PCs |
 | `EFI/BOOT/mmx64.efi` (MokManager, Ubuntu) | Canonical Ltd. Secure Boot Signing (2022 v1) | shim has Canonical's CA built in |
-| `EFI/BOOT/grubx64.efi` (beast-booter GRUB) | the beast-booter key | you enrolled `ENROLL_THIS_KEY_IN_MOKMANAGER.cer` in MokManager |
+| `EFI/BOOT/grubx64.efi` (BeastBoot GRUB) | the BeastBoot key | you enrolled `ENROLL_THIS_KEY_IN_MOKMANAGER.cer` in MokManager |
 | kernels inside ISOs | their distribution | see [section 6](#6-which-isos-boot-with-secure-boot-on) |
 
-Why beast-booter has its own GRUB: Ubuntu's signed GRUB cannot read exFAT or
-NTFS, the filesystems your ISOs usually live on. beast-booter's GRUB is built
+Why BeastBoot has its own GRUB: Ubuntu's signed GRUB cannot read exFAT or
+NTFS, the filesystems your ISOs usually live on. BeastBoot's GRUB is built
 from **the same Ubuntu GRUB package** (unmodified modules from
 `grub-efi-amd64-bin`, same version as Ubuntu's signed GRUB), with exFAT and
-NTFS added, and is signed with the beast-booter key. Ventoy uses the same model.
+NTFS added, and is signed with the BeastBoot key. Ventoy uses the same model.
 
 With Secure Boot on, GRUB runs in *lockdown*: it refuses to load GRUB modules
 from disk and asks shim to verify every kernel or EFI program before running
@@ -51,9 +51,9 @@ running in an operating system can do it for you (that is the point of MOK).
 These screens were recorded with shim 15.8 in a virtual machine; real firmware
 looks the same because shim draws them, but colours and fonts may differ.
 
-1. Boot from the beast-booter drive. A blue screen says
+1. Boot from the BeastBoot drive. A blue screen says
    **ERROR — Verification failed: (0x1A) Security Violation** with an **OK** button.
-   This is shim refusing beast-booter's GRUB because it does not know the key yet.
+   This is shim refusing BeastBoot's GRUB because it does not know the key yet.
    Press **Enter**.
 2. **Shim UEFI key management — Press any key to perform MOK management**, with
    a countdown (10 seconds). Press any key. (If the countdown runs out, the
@@ -64,12 +64,12 @@ looks the same because shim draws them, but colours and fonts may differ.
 5. A list of files: choose **ENROLL_THIS_KEY_IN_MOKMANAGER.cer**.
 6. **[Enroll MOK]**: choose **View key 0** and check it (see
    [section 3](#3-check-the-key-before-you-enroll-it)): *Subject* should be
-   the beast-booter key, and *[Fingerprint]* must match the published SHA-1
+   the BeastBoot key, and *[Fingerprint]* must match the published SHA-1
    fingerprint. Press a key to go back, then choose **Continue**.
 7. **Enroll the key(s)?** The cursor starts on **No**. Choose **Yes**.
 8. **Perform MOK management**: choose **Reboot**.
 
-From now on this computer boots the beast-booter menu directly.
+From now on this computer boots the BeastBoot menu directly.
 
 Alternative, if the computer already runs Linux: `sudo mokutil --import
 ENROLL_THIS_KEY_IN_MOKMANAGER.cer` asks you to choose a one-time password;
@@ -79,7 +79,7 @@ on the next reboot MokManager shows **Enroll MOK** and asks for that password.
 
 Enrolling a key means: *this computer will run any boot program signed with
 it*. Only enroll a key whose fingerprint you got from a source you trust: the
-release notes of the beast-booter build you use, or, if you built the drive
+release notes of the BeastBoot build you use, or, if you built the drive
 yourself, the output of `make keys` / `build/verify-dist.sh`.
 
 MokManager's **View key** shows the **SHA-1** fingerprint as 20 hex pairs in
@@ -117,7 +117,7 @@ password, reboot. `mokutil --list-delete` shows the pending request and
 `mokutil --revoke-delete` cancels it. (`mokutil --reset` deletes *all* MOKs,
 including keys used for DKMS drivers. Avoid it unless you know you want that.)
 
-After removal, beast-booter's GRUB is refused again (you get the screen from
+After removal, BeastBoot's GRUB is refused again (you get the screen from
 step 1). Nothing else on the computer changes.
 
 ## 5. Use your own key instead
@@ -136,7 +136,7 @@ beast-booter update --device /dev/sdX    # or install, see the README
   unless you run `build/keygen.sh --force`. `BB_KEY_CN` sets the certificate
   name, `BB_KEY_DIR` the directory (`make build` reads `BB_KEY_DIR` too).
 - Computers must enroll *your* certificate (section 2). A computer that
-  enrolled another beast-booter key will not trust your build, and the reverse.
+  enrolled another BeastBoot key will not trust your build, and the reverse.
 - **Protect the private key.** Anyone who has it can make boot programs that
   every computer with your certificate enrolled will run. Keep it offline;
   if it leaks, remove the certificate from every computer (section 4) and
@@ -163,18 +163,18 @@ revoked.
 - **Distributions that ship Ubuntu's signed kernels** (for example Linux Mint,
   elementary OS, Zorin OS) should boot the same way **(unverified)**.
 - **Other distributions** (Fedora, Debian, openSUSE, ...) sign their kernels
-  with their own keys, which only *their* shim trusts. With beast-booter you
+  with their own keys, which only *their* shim trusts. With BeastBoot you
   can either enroll that distribution's Secure Boot certificate as a MOK
   (get it from the distribution, then `mokutil --import` it) **(unverified:
   works if the kernel signature chains to that certificate)**, or turn Secure
   Boot off in the firmware settings for that boot.
 - **Unsigned kernels** (for example Arch Linux's official ISO, many rescue
   ISOs) do not boot with Secure Boot on. Turn Secure Boot off, or sign them
-  yourself and enroll your key — your choice, not beast-booter's.
-- **Windows installers** are not supported by beast-booter 0.1 (with or
+  yourself and enroll your key — your choice, not BeastBoot's.
+- **Windows installers** are not supported by BeastBoot 0.1 (with or
   without Secure Boot).
 
-beast-booter never works around a failed check. The menu explains what failed
+BeastBoot never works around a failed check. The menu explains what failed
 and what you can do (enroll that distribution's key, or turn Secure Boot off).
 
 **Ubuntu on an exFAT drive with Secure Boot on.** For Ubuntu desktop (and
@@ -186,14 +186,14 @@ of trust. shim still verifies the ISO's kernel; the initramfs is not covered
 by Secure Boot signatures in any GRUB boot (the same is true when Ubuntu's own
 `loopback.cfg` loads it); and the kernel, locked down by Secure Boot, still
 checks the module's signature. It accepts the module because the ISO's kernel
-build signed it. beast-booter ships no kernel modules and signs none: the
+build signed it. BeastBoot ships no kernel modules and signs none: the
 module is exactly what the distribution built for that kernel. Tested with
 Ubuntu 26.04.1 under OVMF with Secure Boot on: lockdown `integrity`, module
 loaded, not tainted.
 
 Note that a locked-down Ubuntu kernel trusts more than its own build key: it
 also accepts kernels and modules signed by keys enrolled in MOK, and that
-includes the beast-booter key you enrolled. This is how DKMS modules work
+includes the BeastBoot key you enrolled. This is how DKMS modules work
 under Secure Boot, and it is one more reason to check the key before you
 enroll it (§3) and to remove it when you no longer need it (§4).
 
@@ -207,7 +207,7 @@ generation N". That table of names and generations inside each program is
 Revoking by generation is much cheaper than adding every old file's hash to
 the firmware's small revocation list (`dbx`).
 
-beast-booter's GRUB carries these SBAT lines:
+BeastBoot's GRUB carries these SBAT lines:
 
 ```
 sbat,1,SBAT Version,sbat,1,https://github.com/rhboot/shim/blob/main/SBAT.md
@@ -221,24 +221,24 @@ grub.beastbooter,1,beast-booter,grub2,2.14-2ubuntu1+bb0.1.0,https://github.com/c
 - The first five lines are copied **verbatim** from Ubuntu's signed GRUB of
   the same version. Our GRUB contains exactly Ubuntu's GRUB code, so it must
   share Ubuntu's fate: if that GRUB is revoked, ours is revoked too, and you
-  need a newer beast-booter build. We never claim a higher generation than the
+  need a newer BeastBoot build. We never claim a higher generation than the
   code deserves. The build refuses to run if the signed Ubuntu GRUB and the
   GRUB modules are different versions (a development override exists and is
   recorded in the manifest as `sbat_version_check`).
-- The last line is beast-booter's own. If a problem is specific to
-  beast-booter (for example a bad module choice), that generation is raised
-  and older beast-booter builds can be revoked without touching Ubuntu's.
+- The last line is BeastBoot's own. If a problem is specific to
+  BeastBoot (for example a bad module choice), that generation is raised
+  and older BeastBoot builds can be revoked without touching Ubuntu's.
 - The build also refuses if any of our generations is below the revocation
   level built into the shim it ships.
 
 If a future revocation hits the GRUB on your drive, shim refuses it like an
 unknown key (the screen from step 1) **(unverified: exact message)**. Update
-the drive with a newer beast-booter release; your ISOs on partition 1 are not
+the drive with a newer BeastBoot release; your ISOs on partition 1 are not
 touched.
 
 ### Known compatibility limits in 0.1 (found by `make vulns`, 2026-10-23)
 
-With Secure Boot **on**, beast-booter 0.1 will not start on a PC in either of
+With Secure Boot **on**, BeastBoot 0.1 will not start on a PC in either of
 these situations. Booting with Secure Boot off is unaffected.
 
 1. **The PC has applied the November 2025 SBAT revocation** (`SbatLevel`
@@ -255,7 +255,7 @@ these situations. Booting with Secure Boot off is unaffected.
 `make vulns` reports both as boot-chain findings (`BB-SBAT-REVOKED-grub`,
 `BB-SHIM-UEFI-CA-2011-ONLY`) until they are fixed.
 
-## 8. What beast-booter never does
+## 8. What BeastBoot never does
 
 - Never disables, patches, hooks or works around signature verification —
   not in firmware, not in shim, not in GRUB. Our GRUB is built without
