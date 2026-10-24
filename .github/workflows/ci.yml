@@ -56,17 +56,29 @@ jobs:
   unit:
     name: unit tests
     runs-on: ubuntu-latest
+    # The project's build platform (same container as the release build), so the
+    # reference tools the tests compare against (mkfs.exfat, mkfs.fat, GRUB) are
+    # the versions the tests were validated with.
+    container:
+      image: ubuntu:26.04
     timeout-minutes: 30
     steps:
+      - name: Host tools the tests use as independent validators
+        run: |
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends \
+            ca-certificates git python3 python3-venv \
+            mtools dosfstools exfatprogs ntfs-3g fdisk gdisk xorriso \
+            grub-common grub-pc-bin grub-efi-amd64-bin
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Python dev tools and the installer's host tools
+      - name: Python dev tools
         run: |
           python3 -m venv .venv
           .venv/bin/pip install --quiet --disable-pip-version-check --require-hashes -r requirements-dev.txt
-          sudo apt-get update -q && sudo apt-get install -y -q mtools dosfstools exfatprogs
 
       - name: Installer, devtools and beast-net unit tests
         run: |

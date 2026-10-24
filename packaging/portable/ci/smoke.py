@@ -123,7 +123,7 @@ class Smoke:
 
     def image_install(self, work: Path) -> None:
         img = work / "bb smoke.img"  # a space in the path on purpose
-        p, out = self.run([*self.cli, "install", "--image", str(img), "--size", "256M", "--yes",
+        p, out = self.run([*self.cli, "install", "--image", str(img), "--size", "1G", "--yes",
                            "--dist", str(self.dist)])
         if not self.check("image-install", p is not None and p.returncode == 0, f"exit {p and p.returncode}: {out}"):
             return
@@ -141,7 +141,7 @@ class Smoke:
 
     def env_dist(self, work: Path) -> None:
         img = work / "bb env-dist.img"
-        p, out = self.run([*self.cli, "install", "--image", str(img), "--size", "256M", "--yes"])
+        p, out = self.run([*self.cli, "install", "--image", str(img), "--size", "1G", "--yes"])
         self.check("env-dist (install without --dist uses BEAST_BOOTER_DIST)",
                    p is not None and p.returncode == 0,
                    f"exit {p and p.returncode}: {out}\n    (TODO: CLI must default --dist to $BEAST_BOOTER_DIST)",

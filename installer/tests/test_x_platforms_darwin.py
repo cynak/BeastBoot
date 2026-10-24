@@ -388,6 +388,10 @@ def test_raw_target_flush_uses_f_fullfsync(raw_file, monkeypatch):
             calls.append(cmd)
             return 0
 
+        @staticmethod
+        def ioctl(fd, request, arg):  # raw_file is a regular file: macOS answers ENOTTY
+            raise OSError(25, "Inappropriate ioctl for device")
+
     monkeypatch.setitem(sys.modules, "fcntl", Fcntl)  # darwin.py imports fcntl where it uses it
     with DarwinRawTarget(str(raw_file), writable=True, sector_size=512, size=RAW_SIZE) as t:
         t.flush()

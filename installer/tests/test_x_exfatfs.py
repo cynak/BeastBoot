@@ -45,6 +45,24 @@ BLKID = shutil.which("blkid")
 UDISKSCTL = shutil.which("udisksctl")
 needs_fsck = pytest.mark.skipif(FSCK is None, reason="fsck.exfat (exfatprogs) not installed")
 needs_mkfs = pytest.mark.skipif(MKFS is None, reason="mkfs.exfat (exfatprogs) not installed")
+
+
+def _exfatprogs_version() -> tuple[int, ...] | None:
+    if MKFS is None:
+        return None
+    p = subprocess.run([MKFS, "-V"], capture_output=True, text=True)
+    m = re.search(r"exfatprogs version\s*:\s*(\d+)\.(\d+)\.(\d+)", p.stdout + p.stderr)
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+# The byte-for-byte reference comparisons were validated against exfatprogs 1.3
+# (Ubuntu 26.04, the build platform). Older releases round the FAT length
+# differently and lack -s (sector size), so those tests would only measure the
+# tool's version; correctness is still covered by fsck.exfat and kernel mounts.
+EXFATPROGS = _exfatprogs_version()
+needs_reference_exfatprogs = pytest.mark.skipif(
+    EXFATPROGS is None or EXFATPROGS < (1, 3, 0),
+    reason=f"reference comparison needs exfatprogs >= 1.3 (found {EXFATPROGS})")
 needs_blkid = pytest.mark.skipif(BLKID is None, reason="blkid not installed")
 
 
@@ -198,6 +216,7 @@ def test_checksums_match_what_mkfs_exfat_writes(tmp_path):
         assert vol.label == LABEL and vol.listdir("/") == []
 
 
+@needs_reference_exfatprogs
 @pytest.mark.parametrize("size", [8 * MIB, 100 * MIB + 512, 256 * MIB, 256 * MIB + 512, 4 * GIB,
                                   32 * GIB, 32 * GIB + MIB, 64 * GIB, TIB, 2 * TIB, 231842304])
 def test_geometry_and_default_cluster_size_match_mkfs_exfat(tmp_path, size):
@@ -224,6 +243,7 @@ def test_geometry_and_default_cluster_size_match_mkfs_exfat(tmp_path, size):
     assert region(ours, heap, meta) == region(ref, heap, meta)
 
 
+@needs_reference_exfatprogs
 @needs_mkfs
 def test_boot_region_differs_from_mkfs_exfat_only_where_intended(tmp_path):
     """Intentional differences: VolumeSerialNumber (given, not time-based), the
@@ -358,6 +378,7 @@ class FileTarget4K(FileTarget):
     sector_size = 4096
 
 
+@needs_reference_exfatprogs
 @needs_fsck
 def test_4k_sector_volumes(tmp_path):
     size = 512 * MIB

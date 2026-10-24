@@ -8,6 +8,7 @@ Needs a Python with tkinter and a display, like test_x_gui_window.py.
 from __future__ import annotations
 
 import json
+import sys
 import subprocess
 import textwrap
 
@@ -170,7 +171,12 @@ def test_wheel_burst_is_coalesced_smooth_and_cheap(fake_dist, tmp_path):
     notch, limit = r["notch"], r["limit"]
     burst = r["burst"]
     assert burst["final"] == min(limit, 60 * notch), r
-    assert burst["relayouts"] <= 2, r  # was one per scroll step
+    if sys.platform.startswith("linux"):
+        assert burst["relayouts"] <= 2, r  # was one per scroll step
+    else:
+        # Aqua and Win32 Tk send <Configure> to the embedded cards on every move;
+        # there the relayout is coalesced to at most one per painted frame.
+        assert burst["relayouts"] <= burst["paints"], r
     assert burst["syncs"] <= 4, r  # cards sliding under a still pointer are not restyled
     assert burst["paints"] <= 40, r  # at most one view update per frame (~16 ms)
     # Afterwards exactly the card under the pointer shows as hovered
