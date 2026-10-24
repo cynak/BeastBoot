@@ -1,0 +1,27 @@
+#!/bin/sh
+# beast-booter portable (Linux): start the GUI.
+#
+# Runs only what is in this folder: the bundled Python (runtime/), the
+# installer sources (app/) and the verified boot files (payload/dist).
+# Nothing is installed. The window runs as you; it asks for your password
+# (polkit) only for the step that writes the USB drive.
+#
+#   -s  ignore ~/.local Python packages      -E  ignore PYTHON* variables
+#   -B  write no .pyc files into this folder -S  no site-packages, no .pth files
+set -e
+
+# Find this folder, also when started through a symlink.
+self=$0
+while [ -L "$self" ]; do
+  link=$(readlink "$self")
+  case $link in
+    /*) self=$link ;;
+    *) self=$(dirname -- "$self")/$link ;;
+  esac
+done
+here=$(CDPATH='' cd -- "$(dirname -- "$self")" && pwd -P)
+
+BEAST_BOOTER_DIST=$here/payload/dist
+export BEAST_BOOTER_DIST
+unset TCL_LIBRARY TK_LIBRARY  # use the bundled Tcl/Tk, never a system one
+exec "$here/runtime/bin/python3" -s -E -B -S "$here/app/beast_booter_launch.py" --gui "$@"

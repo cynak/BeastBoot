@@ -1,0 +1,17 @@
+{
+    "Number":  0,
+    "FriendlyName":  "KBG40ZNS256G NVMe KIOXIA 256GB",
+    "Model":  "KBG40ZNS256G NVMe KIOXIA 256GB",
+    "SerialNumber":  "8CE3_8E10_0167_A29B.",
+    "Size":  256060514304,
+    "LogicalSectorSize":  512,
+    "PhysicalSectorSize":  512,
+    "BusType":  17,
+    "IsBoot":  true,
+    "IsSystem":  true,
+    "IsReadOnly":  false,
+    "IsOffline":  false,
+    "PartitionStyle":  2,
+    "Location":  "PCIROOT(0)#PCI(1D00)#PCI(0000)#NVME(P00T00L00)",
+    "Path":  "\\\\?\\scsi#disk\u0026ven_nvme\u0026prod_kbg40zns256g_nvm#4\u00263a9f8a7\u00260\u0026000000#{53f56307-b6bf-11d0-94f2-00a0c91efb8b}"
+}

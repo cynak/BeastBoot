@@ -1,0 +1,37 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://beast-booter.invalid/vex/beast-booter-vex",
+  "author": "beast-booter maintainers",
+  "role": "Document Creator",
+  "timestamp": "2026-10-23T00:00:00Z",
+  "version": 2,
+  "tooling": "hand-maintained; see .claude/skills/sbom-vuln/references/remediation.md",
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "BB-SBAT-REVOKED-grub"
+      },
+      "products": [
+        {
+          "@id": "file:esp/EFI/BOOT/grubx64.efi"
+        }
+      ],
+      "status": "affected",
+      "timestamp": "2026-10-23T00:00:00Z",
+      "action_statement": "Maintainer decision 2026-10-23: wait for Ubuntu to publish a grub2 build whose SBAT carries grub,6, then rebuild (make build), re-scan (make vulns) and re-test (make e2e). The grub generation is never raised by hand. Until then Secure Boot boots fail on PCs that applied SbatLevel 2025112400; documented in docs/SECURE_BOOT.md."
+    },
+    {
+      "vulnerability": {
+        "name": "BB-SHIM-UEFI-CA-2011-ONLY"
+      },
+      "products": [
+        {
+          "@id": "file:esp/EFI/BOOT/BOOTX64.EFI"
+        }
+      ],
+      "status": "affected",
+      "timestamp": "2026-10-23T00:00:00Z",
+      "action_statement": "Maintainer decision 2026-10-23: wait for Ubuntu to publish a shim-signed build signed by the Microsoft UEFI CA 2023, then rebuild, re-scan and re-test. Until then Secure Boot boots fail on PCs whose db trusts only the 2023 CA; documented in docs/SECURE_BOOT.md."
+    }
+  ]
+}

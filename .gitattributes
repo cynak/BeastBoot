@@ -1,0 +1,22 @@
+# Normalise text to LF in the repository.
+* text=auto eol=lf
+
+# Windows launchers must keep CRLF (packaging/portable checks this).
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary formats: never touch line endings or diff them as text.
+*.png binary
+*.jpg binary
+*.ico binary
+*.pf2 binary
+*.efi binary
+*.img binary
+*.iso binary
+*.cer binary
+*.der binary
+*.cpio binary
+*.gz binary
+*.xz binary
+*.zip binary

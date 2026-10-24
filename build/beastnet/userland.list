@@ -1,0 +1,47 @@
+# beast-net userland: which files of each locked package go into the initramfs.
+#
+#   <package> <glob>...     take matching paths from that package (relative to /)
+#   exclude <glob>...       never ship matching paths (checked after everything else)
+#
+# '*' does not cross '/', '**' matches any depth. Matching directories are
+# created as needed; symlinks are kept as symlinks (their targets must be
+# shipped too, the build checks it).
+#
+# Not listed here:
+#   - shared libraries: every DT_NEEDED of every shipped ELF file is resolved
+#     against the locked packages (packages.lock, role "lib") and exactly those
+#     library files (and their symlink chains) are shipped;
+#   - linux-modules-*: selected by modules.list (closure via modules.dep);
+#   - linux-image-*: only /boot/vmlinuz-<kver>, which goes next to the initrd;
+#   - ca-certificates: /etc/ssl/certs/ca-certificates.crt is built from it
+#     (see mkinitrd.py, same result as update-ca-certificates).
+
+busybox-static        usr/bin/busybox
+kmod                  usr/bin/kmod usr/bin/lsmod usr/sbin/depmod usr/sbin/insmod usr/sbin/lsmod
+kmod                  usr/sbin/modinfo usr/sbin/modprobe usr/sbin/rmmod
+wpasupplicant         usr/sbin/wpa_supplicant usr/sbin/wpa_cli usr/bin/wpa_passphrase
+iw                    usr/sbin/iw
+python3.14-minimal    usr/bin/python3.14
+libpython3.14-minimal usr/lib/python3.14/** etc/python3.14/**
+libpython3.14-stdlib  usr/lib/python3.14/**
+ncurses-base          usr/share/terminfo/**
+wireless-regdb        lib/firmware/regulatory.db lib/firmware/regulatory.db.p7s
+
+# dlopen()ed, so not found through DT_NEEDED:
+libzstd1              usr/lib/x86_64-linux-gnu/libzstd.so.1*
+libgcc-s1             usr/lib/x86_64-linux-gnu/libgcc_s.so.1
+
+# Python: no test suites, GUI, IDE, docs browser, pip bootstrap, or modules
+# whose libraries we do not ship (sqlite3, dbm.gnu/ndbm). lzma, bz2, zstd,
+# ctypes, readline, decimal, asyncio etc. stay: they are small and their
+# libraries are already here.
+exclude usr/lib/python3.14/test/** usr/lib/python3.14/**/tests/** usr/lib/python3.14/**/test/**
+exclude usr/lib/python3.14/idlelib/** usr/lib/python3.14/tkinter/** usr/lib/python3.14/turtledemo/**
+exclude usr/lib/python3.14/turtle.py usr/lib/python3.14/ensurepip/** usr/lib/python3.14/pydoc_data/**
+exclude usr/lib/python3.14/sqlite3/** usr/lib/python3.14/lib-dynload/_sqlite3.*
+exclude usr/lib/python3.14/lib-dynload/_dbm.* usr/lib/python3.14/lib-dynload/_gdbm.*
+exclude usr/lib/python3.14/lib-dynload/_test* usr/lib/python3.14/lib-dynload/_ctypes_test.*
+exclude usr/lib/python3.14/lib-dynload/xx* usr/lib/python3.14/lib-dynload/_xxtestfuzz.*
+exclude usr/lib/python3.14/lib-dynload/_remote_debugging.*
+exclude usr/lib/python3.14/__phello__/** usr/lib/python3.14/**/*.exe
+exclude usr/lib/python3.14/config-*/**

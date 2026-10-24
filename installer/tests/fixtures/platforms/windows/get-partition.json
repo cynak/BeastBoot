@@ -1,0 +1,122 @@
+[
+    {
+        "DiskNumber":  0,
+        "PartitionNumber":  1,
+        "DriveLetter":  "\u0000",
+        "Offset":  1048576,
+        "Size":  104857600,
+        "Type":  "System",
+        "MbrType":  null,
+        "GptType":  "{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}",
+        "IsBoot":  false,
+        "IsSystem":  true,
+        "AccessPaths":  [
+                            "\\\\?\\Volume{4c1b02c1-d990-11dc-99ae-806e6f6e6963}\\"
+                        ]
+    },
+    {
+        "DiskNumber":  0,
+        "PartitionNumber":  2,
+        "DriveLetter":  "\u0000",
+        "Offset":  105906176,
+        "Size":  16777216,
+        "Type":  "Reserved",
+        "MbrType":  null,
+        "GptType":  "{e3c9e316-0b5c-4db8-817d-f92df00215ae}",
+        "IsBoot":  false,
+        "IsSystem":  false,
+        "AccessPaths":  null
+    },
+    {
+        "DiskNumber":  0,
+        "PartitionNumber":  3,
+        "DriveLetter":  "C",
+        "Offset":  122683392,
+        "Size":  999283064832,
+        "Type":  "Basic",
+        "MbrType":  null,
+        "GptType":  "{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}",
+        "IsBoot":  true,
+        "IsSystem":  false,
+        "AccessPaths":  [
+                            "C:\\",
+                            "\\\\?\\Volume{9a7e2f10-3b1c-4d6e-8f20-5c4b3a291807}\\"
+                        ]
+    },
+    {
+        "DiskNumber":  0,
+        "PartitionNumber":  4,
+        "DriveLetter":  "\u0000",
+        "Offset":  999405748224,
+        "Size":  797966336,
+        "Type":  "Recovery",
+        "MbrType":  null,
+        "GptType":  "{de94bba4-06d1-4d40-a16a-bfd50179d6ac}",
+        "IsBoot":  false,
+        "IsSystem":  false,
+        "AccessPaths":  [
+                            "\\\\?\\Volume{0f5d3c2b-6a19-4e8d-b7c6-a5f4e3d2c1b0}\\"
+                        ]
+    },
+    {
+        "DiskNumber":  1,
+        "PartitionNumber":  1,
+        "DriveLetter":  "\u0000",
+        "Offset":  17408,
+        "Size":  16759808,
+        "Type":  "Reserved",
+        "MbrType":  null,
+        "GptType":  "{e3c9e316-0b5c-4db8-817d-f92df00215ae}",
+        "IsBoot":  false,
+        "IsSystem":  false,
+        "AccessPaths":  null
+    },
+    {
+        "DiskNumber":  1,
+        "PartitionNumber":  2,
+        "DriveLetter":  "D",
+        "Offset":  16777216,
+        "Size":  1000194703360,
+        "Type":  "Basic",
+        "MbrType":  null,
+        "GptType":  "{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}",
+        "IsBoot":  false,
+        "IsSystem":  false,
+        "AccessPaths":  [
+                            "D:\\",
+                            "\\\\?\\Volume{5e8a1b2c-0d3f-4a6b-9c8d-7e6f5a4b3c2d}\\"
+                        ]
+    },
+    {
+        "DiskNumber":  1,
+        "PartitionNumber":  3,
+        "DriveLetter":  "\u0000",
+        "Offset":  1000211480576,
+        "Size":  1000186363904,
+        "Type":  "Basic",
+        "MbrType":  null,
+        "GptType":  "{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}",
+        "IsBoot":  false,
+        "IsSystem":  false,
+        "AccessPaths":  [
+                            "C:\\Archive\\",
+                            "\\\\?\\Volume{7b6c5d4e-3f2a-4b1c-8d9e-0f1a2b3c4d5e}\\"
+                        ]
+    },
+    {
+        "DiskNumber":  2,
+        "PartitionNumber":  1,
+        "DriveLetter":  "E",
+        "Offset":  1048576,
+        "Size":  30751588352,
+        "Type":  "FAT32 XINT13",
+        "MbrType":  12,
+        "GptType":  null,
+        "IsBoot":  false,
+        "IsSystem":  false,
+        "AccessPaths":  [
+                            "E:\\",
+                            "\\\\?\\Volume{d1c2b3a4-9e8f-11ef-a5b6-c7d8e9f0a1b2}\\"
+                        ]
+    }
+]

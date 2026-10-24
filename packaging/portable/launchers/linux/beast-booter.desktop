@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Beast Booter
+GenericName=Multi-boot USB maker
+Comment=Make and update beast-booter multi-boot USB drives (portable, nothing installed)
+Exec=sh -c "exec \\"\\$(dirname \\"\\$0\\")/BeastBooter\\"" %k
+Icon=drive-removable-media
+Terminal=false
+Categories=System;Filesystem;
+Keywords=USB;boot;ISO;multiboot;

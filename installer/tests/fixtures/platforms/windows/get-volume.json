@@ -1,0 +1,50 @@
+[
+    {
+        "DriveLetter":  "C",
+        "FileSystemLabel":  "Windows",
+        "FileSystem":  "NTFS",
+        "DriveType":  "Fixed",
+        "Path":  "\\\\?\\Volume{9a7e2f10-3b1c-4d6e-8f20-5c4b3a291807}\\",
+        "Size":  999283060736
+    },
+    {
+        "DriveLetter":  null,
+        "FileSystemLabel":  "",
+        "FileSystem":  "FAT32",
+        "DriveType":  "Fixed",
+        "Path":  "\\\\?\\Volume{4c1b02c1-d990-11dc-99ae-806e6f6e6963}\\",
+        "Size":  100663296
+    },
+    {
+        "DriveLetter":  null,
+        "FileSystemLabel":  "",
+        "FileSystem":  "NTFS",
+        "DriveType":  "Fixed",
+        "Path":  "\\\\?\\Volume{0f5d3c2b-6a19-4e8d-b7c6-a5f4e3d2c1b0}\\",
+        "Size":  797962240
+    },
+    {
+        "DriveLetter":  "D",
+        "FileSystemLabel":  "Data",
+        "FileSystem":  "NTFS",
+        "DriveType":  "Fixed",
+        "Path":  "\\\\?\\Volume{5e8a1b2c-0d3f-4a6b-9c8d-7e6f5a4b3c2d}\\",
+        "Size":  1000194699264
+    },
+    {
+        "DriveLetter":  null,
+        "FileSystemLabel":  "Archive",
+        "FileSystem":  "NTFS",
+        "DriveType":  "Fixed",
+        "Path":  "\\\\?\\Volume{7b6c5d4e-3f2a-4b1c-8d9e-0f1a2b3c4d5e}\\",
+        "Size":  1000186359808
+    },
+    {
+        "DriveLetter":  "E",
+        "FileSystemLabel":  "STICK",
+        "FileSystem":  "FAT32",
+        "DriveType":  "Removable",
+        "Path":  "\\\\?\\Volume{d1c2b3a4-9e8f-11ef-a5b6-c7d8e9f0a1b2}\\",
+        "Size":  30735056896
+    }
+]

@@ -1,0 +1,6 @@
+# linux-firmware pin for the firmware pack catalog (gen_catalog.py, docs/BEASTNET.md section 6).
+# The tag must point at this commit on both git.kernel.org and the GitLab mirror.
+# To move to a newer tag: change both lines, then run build/beastnet/build.sh
+# (gen_catalog.py downloads and double-checks the new files).
+tag     20261019
+commit  a2dcb924f0897368b0b4f305cbf9808cdda90ce0

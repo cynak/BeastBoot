@@ -1,0 +1,30 @@
+# beast-net top-level packages (Ubuntu 26.04 "resolute", amd64).
+#
+#   <package>[=<version>] <role>
+#
+# roles: kernel (vmlinuz), modules (module subset, modules.list), tool
+# (programs + Python, userland.list), data (CA bundle, terminfo), lib
+# (libraries; normally added by lock.py from the tools' DT_NEEDED entries and
+# the packages' Depends - list one here only when it is dlopen()ed).
+#
+# After editing, run:  python3 -I build/beastnet/lock.py
+# which downloads the packages (apt verifies them against the signed archive
+# index), resolves the libraries and rewrites packages.lock with every .deb's
+# SHA-256. The build itself only ever uses packages.lock.
+
+linux-image-7.0.0-38-generic=7.0.0-38.38       kernel
+linux-modules-7.0.0-38-generic=7.0.0-38.38     modules
+busybox-static=1:1.37.0-7ubuntu1               tool
+kmod=34.2-2ubuntu2                             tool
+wpasupplicant=2:2.11-0ubuntu5                  tool
+iw=6.17-1                                      tool
+python3.14-minimal=3.14.4-1ubuntu0.2           tool
+libpython3.14-minimal=3.14.4-1ubuntu0.2        tool
+libpython3.14-stdlib=3.14.4-1ubuntu0.2         tool
+ca-certificates=20260816ubuntu0.26.04.1        data
+ncurses-base=6.6+20251231-1                    data
+wireless-regdb=2026.05.30-0ubuntu1~26.04.1      data  # signed regulatory.db for cfg80211 (ISC licence)
+
+# dlopen()ed (no DT_NEEDED entry points at them)
+libzstd1=1.5.7+dfsg-3                          lib   # kmod: reading .ko.zst modules
+libgcc-s1=16-20260322-1ubuntu1                 lib   # glibc: pthread_cancel/pthread_exit unwinding

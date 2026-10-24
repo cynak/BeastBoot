@@ -1,0 +1,7 @@
+6,498,1100345,-;pci 0000:00:14.3: [8086:51f0] type 00 class 0x028000 PCIe Root Complex Integrated Endpoint
+6,512,1200345,-;iwlwifi 0000:00:14.3: enabling device (0000 -> 0002)
+6,513,1205678,-;iwlwifi 0000:00:14.3: Detected crf-id 0x400410, cnv-id 0x80400 wfpm id 0x80000020
+3,520,1210000,-;iwlwifi 0000:00:14.3: no suitable firmware found!
+3,521,1210001,-;iwlwifi 0000:00:14.3: minimum version required: iwlwifi-so-a0-gf-a0-77
+3,522,1210002,-;iwlwifi 0000:00:14.3: maximum version supported: iwlwifi-so-a0-gf-a0-89
+3,523,1210003,-;iwlwifi 0000:00:14.3: check git://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git

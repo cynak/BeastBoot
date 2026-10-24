@@ -1,0 +1,28 @@
+#!/bin/sh
+# beast-booter portable (macOS): BeastBooter.app's main program; starts the GUI.
+#
+# Runs only what is inside the app: the bundled Python (Resources/runtime),
+# the installer sources (Resources/app) and the verified boot files
+# (Resources/payload/dist). Nothing is installed. The window runs as you;
+# macOS asks for an administrator password only for writing the USB drive.
+#
+#   -s  ignore ~/.local Python packages      -E  ignore PYTHON* variables
+#   -B  write no .pyc files (the app may sit on a read-only volume)
+#   -S  no site-packages, no .pth files
+set -e
+here=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)      # .../BeastBooter.app/Contents/MacOS
+res=$(CDPATH='' cd -- "$here/../Resources" && pwd -P)
+
+# Older macOS versions pass a -psn_X_Y process serial number; drop it.
+for arg do
+  shift
+  case $arg in
+    -psn_*) ;;
+    *) set -- "$@" "$arg" ;;
+  esac
+done
+
+BEAST_BOOTER_DIST=$res/payload/dist
+export BEAST_BOOTER_DIST
+unset TCL_LIBRARY TK_LIBRARY  # use the bundled Tcl/Tk
+exec "$res/runtime/bin/python3" -s -E -B -S "$res/app/beast_booter_launch.py" --gui "$@"

@@ -1,0 +1,16 @@
+{
+    "DiskNumber":  0,
+    "PartitionNumber":  1,
+    "DriveLetter":  "C",
+    "Offset":  1048576,
+    "Size":  256058417152,
+    "Type":  "Basic",
+    "MbrType":  null,
+    "GptType":  "{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}",
+    "IsBoot":  true,
+    "IsSystem":  true,
+    "AccessPaths":  [
+                        "C:\\",
+                        "\\\\?\\Volume{a0b1c2d3-e4f5-11ee-8a9b-0c1d2e3f4a5b}\\"
+                    ]
+}

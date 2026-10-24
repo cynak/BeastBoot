@@ -1,0 +1,53 @@
+[
+    {
+        "Number":  0,
+        "FriendlyName":  "Samsung SSD 980 PRO 1TB",
+        "Model":  "Samsung SSD 980 PRO 1TB",
+        "SerialNumber":  "0025_3852_1150_1B2D.",
+        "Size":  1000204886016,
+        "LogicalSectorSize":  512,
+        "PhysicalSectorSize":  512,
+        "BusType":  "NVMe",
+        "IsBoot":  true,
+        "IsSystem":  true,
+        "IsReadOnly":  false,
+        "IsOffline":  false,
+        "PartitionStyle":  "GPT",
+        "Location":  "PCIROOT(0)#PCI(0103)#PCI(0000)#NVME(P00T00L00)",
+        "Path":  "\\\\?\\scsi#disk\u0026ven_nvme\u0026prod_samsung_ssd_980#5\u00262f6a3d6b\u00260\u0026000000#{53f56307-b6bf-11d0-94f2-00a0c91efb8b}"
+    },
+    {
+        "Number":  1,
+        "FriendlyName":  "ST2000DM008-2FR102",
+        "Model":  "ST2000DM008-2FR102",
+        "SerialNumber":  "            ZFL1B3QX",
+        "Size":  2000398934016,
+        "LogicalSectorSize":  512,
+        "PhysicalSectorSize":  4096,
+        "BusType":  "SATA",
+        "IsBoot":  false,
+        "IsSystem":  false,
+        "IsReadOnly":  false,
+        "IsOffline":  false,
+        "PartitionStyle":  "GPT",
+        "Location":  "PCIROOT(0)#PCI(1700)#ATA(C02T00L00)",
+        "Path":  "\\\\?\\scsi#disk\u0026ven_\u0026prod_st2000dm008-2fr1#4\u00261a3b5c7d\u00260\u0026020000#{53f56307-b6bf-11d0-94f2-00a0c91efb8b}"
+    },
+    {
+        "Number":  2,
+        "FriendlyName":  "SanDisk Ultra",
+        "Model":  "Ultra",
+        "SerialNumber":  "4C530001090820116024",
+        "Size":  30752636928,
+        "LogicalSectorSize":  512,
+        "PhysicalSectorSize":  512,
+        "BusType":  "USB",
+        "IsBoot":  false,
+        "IsSystem":  false,
+        "IsReadOnly":  false,
+        "IsOffline":  false,
+        "PartitionStyle":  "MBR",
+        "Location":  "Integrated : Bus 0 : Device 20 : Function 0 : Adapter 1 : Port 2",
+        "Path":  "\\\\?\\usbstor#disk\u0026ven_sandisk\u0026prod_ultra\u0026rev_1.00#4c530001090820116024\u00260#{53f56307-b6bf-11d0-94f2-00a0c91efb8b}"
+    }
+]

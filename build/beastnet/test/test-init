@@ -1,0 +1,141 @@
+#!/bin/sh
+# Test-only /init for build/beastnet/test/qemu_test.py. It is appended to a
+# COPY of initrd.img as an overlay cpio (never part of the build output) and
+# checks the beast-net environment itself: module autoload, DHCP, TLS with the
+# shipped CA bundle, WiFi (mac80211_hwsim + wpa_supplicant), filesystems,
+# firmware pack layering. Every result is a "BNTEST: " line on the console.
+export PATH=/usr/sbin:/usr/bin HOME=/root TERM=vt102 LANG=C.UTF-8
+# busybox-static runs its own applets in preference to $PATH: call kmod by
+# full path (kmod is what matches depmod's softdep/weakdep output).
+MODPROBE=/usr/sbin/modprobe
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mount -t tmpfs tmpfs /run
+mount -t tmpfs -o mode=1777 tmpfs /tmp
+exec </dev/console >/dev/console 2>&1
+t() { echo "BNTEST: $*"; }
+t "init pid=$$ kernel=$(uname -r) cmdline=$(cat /proc/cmdline)"
+t "modprobe: $(readlink -f $MODPROBE) ($($MODPROBE --version | head -n 1))"
+t "sig_enforce=$(cat /sys/module/module/parameters/sig_enforce 2>/dev/null) lockdown=$(cat /sys/kernel/security/lockdown 2>/dev/null || echo n/a)"
+
+coldplug() {
+	# shellcheck disable=SC2038  # sysfs modalias paths contain no whitespace
+	find /sys/devices -name modalias -type f | xargs cat | sort -u | xargs $MODPROBE -qab 2>/dev/null
+}
+# A bare "modprobe" in busybox sh is busybox's own applet (FEATURE_SH_STANDALONE),
+# whatever $PATH says; show what it does with Ubuntu's modules.
+if modprobe isofs 2>/tmp/bbmod.err && grep -q '^isofs ' /proc/modules; then
+	t "bare modprobe (busybox applet): loaded isofs"
+else
+	t "bare modprobe (busybox applet): FAILED: $(head -n 1 /tmp/bbmod.err)"
+fi
+coldplug; sleep 2; coldplug; sleep 1
+
+t "modules loaded: $(cut -d' ' -f1 /proc/modules | sort | tr '\n' ' ')"
+for i in /sys/class/net/*; do
+	n=${i##*/}; [ "$n" = lo ] && continue
+	d=$(readlink "$i/device/driver"); t "nic $n driver=${d##*/} mac=$(cat "$i/address")"
+done
+
+# --- DHCP (busybox udhcpc) on every Ethernet interface --------------------------
+ip link set lo up
+for i in /sys/class/net/eth*; do
+	n=${i##*/}
+	if udhcpc -i "$n" -n -q -t 6 -T 2 -s /test/udhcpc.script >"/tmp/udhcpc.$n.log" 2>&1; then
+		t "dhcp ok iface=$n ip=$(cat "/tmp/ip.$n") driver=$(basename "$(readlink "$i/device/driver")")"
+	else
+		t "dhcp FAIL iface=$n $(tail -n 2 "/tmp/udhcpc.$n.log" | tr '\n' ' ')"
+	fi
+done
+t "route: $(ip route | tr '\n' ';')"
+
+# --- Python + TLS --------------------------------------------------------------------
+# shellcheck disable=SC2046  # word splitting intended: host port sha256 [url]
+python3 /test/check.py $(cat /test/server) || t "python check FAIL rc=$?"
+
+# --- WiFi: two hwsim radios, one AP and one station (wpa_supplicant, WPA2-PSK) --
+if $MODPROBE mac80211_hwsim radios=2; then
+	sleep 1
+	# shellcheck disable=SC2012  # display only; sysfs names are plain
+	t "hwsim loaded: phys=$(ls /sys/class/ieee80211 | tr '\n' ' ') wlan=$(cd /sys/class/net && ls -d wlan* | tr '\n' ' ')"
+	t "iw: $(iw dev | grep -E 'Interface|type' | tr -s ' \t' ' ' | tr '\n' ';')"
+	mkdir -p /run/wpa
+	cat >/tmp/ap.conf <<-EOF
+	ctrl_interface=/run/wpa
+	network={
+	  ssid="bntest"
+	  mode=2
+	  frequency=2437
+	  key_mgmt=WPA-PSK
+	  proto=RSN
+	  pairwise=CCMP
+	  group=CCMP
+	  psk="correct horse battery"
+	}
+	EOF
+	cat >/tmp/sta.conf <<-EOF
+	ctrl_interface=/run/wpa
+	network={
+	  ssid="bntest"
+	  key_mgmt=WPA-PSK
+	  psk="correct horse battery"
+	}
+	EOF
+	wpa_supplicant -B -i wlan0 -D nl80211 -c /tmp/ap.conf -P /run/ap.pid >/tmp/wpa-ap.log 2>&1
+	n=0
+	while [ $n -lt 20 ] && ! wpa_cli -p /run/wpa -i wlan0 status 2>/dev/null | grep -q '^mode=AP'; do
+		sleep 1; n=$((n + 1))
+	done
+	t "ap up after ${n}s: $(iw dev wlan0 info | grep -E 'channel|type' | tr -s ' \t' ' ' | tr '\n' ';')"
+	ip link set wlan1 up
+	t "scan: $(iw dev wlan1 scan 2>&1 | grep -E 'SSID:|signal|rror' | tr -s ' \t' ' ' | tr '\n' ';')"
+	ip link set wlan1 down
+	wpa_supplicant -B -i wlan1 -D nl80211 -c /tmp/sta.conf -P /run/sta.pid >/tmp/wpa-sta.log 2>&1
+	n=0; st=
+	while [ $n -lt 30 ]; do
+		st=$(wpa_cli -p /run/wpa -i wlan1 status 2>/dev/null | grep '^wpa_state=')
+		[ "$st" = wpa_state=COMPLETED ] && break
+		sleep 1; n=$((n + 1))
+	done
+	t "wifi station: $st $(wpa_cli -p /run/wpa -i wlan1 status 2>/dev/null | grep -E '^(ssid|pairwise_cipher|key_mgmt)=' | tr '\n' ' ')"
+	t "wifi ap: $(wpa_cli -p /run/wpa -i wlan0 status 2>/dev/null | grep -E '^(wpa_state|mode|ssid)=' | tr '\n' ' ')"
+	[ "$st" = wpa_state=COMPLETED ] || { t "ap log: $(tail -n 8 /tmp/wpa-ap.log | tr '\n' '|')"; t "sta log: $(tail -n 8 /tmp/wpa-sta.log | tr '\n' '|')"; }
+	ip addr add 192.168.77.1/24 dev wlan0; ip addr add 192.168.77.2/24 dev wlan1
+	ip link set wlan0 up; ip link set wlan1 up
+	t "wifi link: $(iw dev wlan1 link | head -n 3 | tr -s ' \t' ' ' | tr '\n' ';')"
+	t "crypto modules: $(cut -d' ' -f1 /proc/modules | grep -E 'ccm|cmac|aesni|ghash|libarc4|michael' | tr '\n' ' ')"
+else
+	t "hwsim FAIL"
+fi
+
+# --- filesystems on the attached USB disks ------------------------------------------
+sleep 1; coldplug; sleep 2
+for dev in /dev/sd?; do
+	[ -b "$dev" ] || continue
+	mkdir -p /mnt/t
+	for fs in exfat vfat ntfs3 iso9660; do
+		if mount -t $fs "$dev" /mnt/t 2>/dev/null; then
+			m=$(cat /mnt/t/marker.txt 2>/dev/null)
+			echo "written by beast-net test" >/mnt/t/out.txt && w=ok || w=FAIL
+			sync
+			t "fs $dev type=$fs marker=$m write=$w via=$(basename "$(readlink "/sys/block/${dev##*/}/device/driver")") $(basename "$(readlink -f "/sys/block/${dev##*/}/device/../../../../driver" 2>/dev/null)")"
+			umount /mnt/t
+			break
+		fi
+	done
+done
+t "usb storage modules: $(cut -d' ' -f1 /proc/modules | grep -E '^(usb_storage|uas|exfat|ntfs3|isofs|nls_)' | tr '\n' ' ')"
+
+# --- firmware pack layering (extra newc cpio after the initrd, docs/BEASTNET.md s6) --
+if [ -f /lib/firmware/bntest/hello.bin ]; then
+	t "firmware pack ok: $(cat /lib/firmware/bntest/hello.bin) (resolved $(readlink -f /lib/firmware/bntest/hello.bin))"
+else
+	t "firmware pack FAIL"
+fi
+
+t "tainted=$(cat /proc/sys/kernel/tainted)"
+t "unsigned-module messages: $(dmesg | grep -ci 'module verification failed\|unsigned module\|Loading of unsigned')"
+t "done"
+sync
+poweroff -f

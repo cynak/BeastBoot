@@ -1,0 +1,11 @@
+24 30 0:22 / /sys rw,nosuid,nodev,noexec,relatime shared:7 - sysfs sysfs rw
+25 30 0:23 / /proc rw,nosuid,nodev,noexec,relatime shared:14 - proc proc rw
+26 30 0:5 / /dev rw,nosuid,relatime shared:2 - devtmpfs udev rw,size=16303520k,nr_inodes=4075880,mode=755,inode64
+27 26 0:24 / /dev/pts rw,nosuid,noexec,relatime shared:3 - devpts devpts rw,gid=5,mode=620,ptmxmode=000
+28 30 0:25 / /run rw,nosuid,nodev,noexec,relatime shared:5 - tmpfs tmpfs rw,size=3268548k,mode=755,inode64
+30 1 259:2 / / rw,relatime shared:1 - ext4 /dev/nvme0n1p2 rw
+31 24 0:6 / /sys/kernel/security rw,nosuid,nodev,noexec,relatime shared:8 - securityfs securityfs rw
+44 30 7:1 / /snap/core22/1380 ro,nodev,relatime shared:42 - squashfs /dev/loop1 ro,errors=continue,threads=single
+62 30 259:1 / /boot/efi rw,relatime shared:31 - vfat /dev/nvme0n1p1 rw,fmask=0077,dmask=0077,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro
+88 28 0:52 / /run/user/1000 rw,nosuid,nodev,relatime shared:503 - tmpfs tmpfs rw,size=3268544k,nr_inodes=817136,mode=700,uid=1000,gid=1000,inode64
+512 88 8:17 / /media/user/MY\040STICK rw,nosuid,nodev,relatime shared:278 - vfat /dev/sdb1 rw,uid=1000,gid=1000,fmask=0022,dmask=0022,codepage=437,iocharset=iso8859-1,shortname=mixed,showexec,utf8,flush,errors=remount-ro

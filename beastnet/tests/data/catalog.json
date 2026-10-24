@@ -1,0 +1,18 @@
+{"v": 1, "kernel": "7.0.0-10-generic",
+ "source": {"name": "linux-firmware", "repo": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git",
+            "tag": "20260918", "url_template": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/{path}?h={tag}"},
+ "packs": [
+  {"id": "intel-wifi", "title": "Intel WiFi", "description": "Intel Wi-Fi 6/6E/7 adapters",
+   "modules": ["iwlwifi", "iwlmvm", "iwlmld"], "licenses": ["LICENCE.iwlwifi_firmware"], "size": 3000000,
+   "files": [{"path": "iwlwifi-so-a0-gf-a0-89.ucode", "sha256": "00", "size": 1, "license": "x"},
+             {"path": "iwlwifi-so-a0-gf-a0.pnvm", "sha256": "00", "size": 1, "license": "x"}]},
+  {"id": "realtek-wifi", "title": "Realtek WiFi", "description": "",
+   "modules": ["rtw88_8822ce", "rtw89_8852ae"], "licenses": [], "size": 1,
+   "files": [{"path": "rtw88/rtw8822c_fw.bin", "sha256": "00", "size": 1, "license": "x"}]},
+  {"id": "mediatek-wifi", "title": "MediaTek WiFi", "description": "",
+   "modules": ["mt7921e"], "licenses": [], "size": 1,
+   "files": [{"path": "mediatek/WIFI_MT7961_patch_mcu_1_2_hdr.bin", "sha256": "00", "size": 1, "license": "x"}]},
+  {"id": "realtek-ethernet", "title": "Realtek Ethernet", "description": "",
+   "modules": ["r8169"], "licenses": [], "size": 1,
+   "files": [{"path": "rtl_nic/rtl8168h-2.fw", "sha256": "00", "size": 1, "license": "x"}]}
+ ]}

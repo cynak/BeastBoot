@@ -1,0 +1,37 @@
+#!/bin/sh
+# shellcheck disable=SC2154  # interface, ip, mask, broadcast, router, dns, ...: set by udhcpc in the environment
+# udhcpc event script for beast-net (busybox udhcpc -s).
+# Configures the address, default route and DNS, and records the lease in
+# $BEASTNET_RUN/dhcp-<interface> for the app.
+
+RESOLV=${RESOLV_CONF:-/etc/resolv.conf}
+STATE=${BEASTNET_RUN:-/run/beastnet}
+
+case "$1" in
+deconfig)
+	ip -4 addr flush dev "$interface" 2>/dev/null
+	ip link set dev "$interface" up
+	;;
+bound|renew)
+	ip -4 addr flush dev "$interface"
+	ip -4 addr add "$ip/${mask:-24}" ${broadcast:+broadcast "$broadcast"} dev "$interface"
+	if [ -n "$router" ]; then
+		for _ in 1 2 3 4 5 6 7 8; do
+			ip -4 route del default dev "$interface" 2>/dev/null || break
+		done
+		for r in $router; do
+			ip -4 route add default via "$r" dev "$interface" && break
+		done
+	fi
+	[ -z "$dns" ] && dns=${router%% *}	# most home routers answer DNS
+	{
+		[ -n "$domain" ] && echo "search $domain"
+		for d in $dns; do echo "nameserver $d"; done
+	} >"$RESOLV.tmp" && mv "$RESOLV.tmp" "$RESOLV"
+	mkdir -p "$STATE"
+	echo "ip=$ip mask=$mask router=$router dns=$dns" >"$STATE/dhcp-$interface"
+	;;
+leasefail|nak)
+	;;
+esac
+exit 0

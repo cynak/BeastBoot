@@ -1,0 +1,32 @@
+# Local rootless toolchain (scripts/bootstrap-tools.sh)
+/.tools/
+
+# Build and test outputs
+/dist/
+/out/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Secure Boot private keys must never be committed.
+/keys/*.key
+/keys/*.p12
+/keys/*.pem
+/keys/*.crt
+/keys/*.cer
+!/keys/README.md
+
+# Python dev virtualenv (bin/bb-dev setup)
+/.venv/
+
+# ruff cache
+/.ruff_cache/
+
+# build/build.sh staging directory (removed when a build ends)
+/.dist-staging.*/
+
+# Generated SBOM / vulnerability reports describe one build; each release
+# publishes its own (see sbom/README.md). The triage decisions are source.
+/sbom/*
+!/sbom/README.md
+!/sbom/vex.openvex.json

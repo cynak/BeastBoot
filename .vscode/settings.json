@@ -1,0 +1,62 @@
+{
+  // Open-source language server (the default, Pylance, is closed source).
+  "python.languageServer": "Jedi",
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.terminal.activateEnvironment": true,
+  "python.envFile": "${workspaceFolder}/out/dev/vscode.env",
+  "python.analysis.extraPaths": [
+    "installer",
+    "devtools",
+    "tests/e2e"
+  ],
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestEnabled": true,
+  "python.testing.cwd": "${workspaceFolder}",
+  "python.testing.pytestArgs": [
+    "installer/tests",
+    "devtools/tests"
+  ],
+  "python.testing.autoTestDiscoverOnSaveEnabled": true,
+
+  "ruff.importStrategy": "fromEnvironment",
+  "ruff.lint.enable": true,
+
+  "files.associations": {
+    "**/grub/**/*.cfg": "shellscript",
+    "**/build/early-bios.cfg": "shellscript",
+    "**/build/*.lst": "plaintext",
+    "**/out/vm/**/*.log": "log",
+    "**/out/e2e/logs/*.log": "log"
+  },
+
+  "shellcheck.enable": true,
+  "shellcheck.useWorkspaceRootAsCwd": true,
+  "shellcheck.ignorePatterns": {
+    "**/grub/**/*.cfg": true,
+    "**/build/early-bios.cfg": true,
+    "**/.tools/**": true,
+    "**/out/**": true,
+    "**/dist/**": true
+  },
+
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.pytest_cache": true
+  },
+  "search.exclude": {
+    "**/.tools": true,
+    "**/out": true,
+    "**/dist": true,
+    "**/.venv": true,
+    "**/.pytest_cache": true,
+    "**/__pycache__": true
+  },
+  "files.watcherExclude": {
+    "**/.tools/**": true,
+    "**/out/**": true,
+    "**/dist/**": true,
+    "**/.venv/**": true,
+    "**/.pytest_cache/**": true,
+    "**/__pycache__/**": true
+  }
+}

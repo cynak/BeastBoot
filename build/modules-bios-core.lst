@@ -1,0 +1,9 @@
+# GRUB modules embedded in dist/bios/core.img (i386-pc), one per line.
+# Only what is needed to read the ESP and run early-bios.cfg; everything else
+# is loaded from /grub/i386-pc/ on the ESP by normal mode.
+biosdisk
+part_msdos
+part_gpt
+fat
+probe
+regexp

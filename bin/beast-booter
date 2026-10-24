@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# Run the beast-booter installer from a source checkout.
+here="$(cd "$(dirname "$0")/.." && pwd)"
+PYTHONPATH="$here/installer${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m beastbooter "$@"

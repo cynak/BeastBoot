@@ -1,0 +1,169 @@
+#!/bin/sh
+# beast-net /init (PID 1, busybox sh).
+#
+# Mounts the kernel filesystems, loads drivers for the hardware present,
+# mounts the beast-booter data partition and ESP, and runs the beast-net app
+# (python3 -m beastnet) on the console. The app is a child process, not
+# exec'd: whatever happens to it, PID 1 survives and offers a shell, so a
+# failure can never turn into a kernel panic loop.
+#
+# Kernel parameters: beastnet.data=UUID=... beastnet.esp=UUID=...
+# beastnet.debug=1 (see docs/BEASTNET.md section 5; the app reads the rest).
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+HOME=/root
+LANG=C.UTF-8
+PYTHONPATH=/usr/lib/python3/dist-packages
+PYTHONDONTWRITEBYTECODE=1
+export PATH HOME LANG PYTHONPATH PYTHONDONTWRITEBYTECODE
+
+mkdir -p /proc /sys /dev /run /tmp /root /mnt/data /mnt/esp
+mount -t proc -o nosuid,nodev,noexec proc /proc
+mount -t sysfs -o nosuid,nodev,noexec sysfs /sys
+mount -t devtmpfs -o nosuid,mode=0755 devtmpfs /dev
+mkdir -p /dev/pts /dev/shm
+mount -t devpts -o nosuid,noexec,gid=5,mode=0620 devpts /dev/pts
+mount -t tmpfs -o nosuid,nodev,mode=0755 tmpfs /run
+mount -t tmpfs -o nosuid,nodev,mode=1777 tmpfs /tmp
+mkdir -p /run/beastnet
+dmesg -n 1 2>/dev/null   # keep kernel messages off the screen (they stay in dmesg)
+
+CMDLINE=$(cat /proc/cmdline)
+
+# param NAME: value of the last NAME=value on the kernel command line.
+param() {
+	_v=
+	for _w in $CMDLINE; do
+		case "$_w" in "$1="*) _v=${_w#*=} ;; "$1") _v=1 ;; esac
+	done
+	echo "$_v"
+}
+
+DEBUG=$(param beastnet.debug)
+DATA=$(param beastnet.data)
+ESP=$(param beastnet.esp)
+
+# The console the user sees: the last console= wins, like /dev/console.
+CONSOLE=/dev/tty1
+TERM=linux
+for _w in $CMDLINE; do
+	case "$_w" in
+	console=ttyS*|console=ttyUSB*|console=ttyAMA*)
+		_c=${_w#console=}; CONSOLE=/dev/${_c%%,*}; TERM=vt102 ;;
+	console=tty*) CONSOLE=/dev/tty1; TERM=linux ;;
+	esac
+done
+[ -c "$CONSOLE" ] || { CONSOLE=/dev/console; TERM=vt102; }
+export TERM
+
+# The serial port for BEASTNET: lines, if a UART is really there.
+SERIAL=
+_t=$(cat /sys/class/tty/ttyS0/type 2>/dev/null)
+[ -n "$_t" ] && [ "$_t" != 0 ] && [ -c /dev/ttyS0 ] && SERIAL=/dev/ttyS0
+
+say() { echo "$*" >"$CONSOLE" 2>/dev/null || echo "$*"; }
+
+emit() {
+	[ "$DEBUG" = 1 ] || return 0
+	say "BEASTNET: $*"
+	[ -n "$SERIAL" ] && [ "$SERIAL" != "$CONSOLE" ] && echo "BEASTNET: $*" >"$SERIAL" 2>/dev/null
+	return 0
+}
+
+shell() {
+	say ""
+	say "Type 'exit' to start beast-net again, 'reboot -f' to reboot, 'poweroff -f' to power off."
+	# shellcheck disable=SC2094  # $CONSOLE is a tty, read and written on purpose
+	setsid -c sh -l <"$CONSOLE" >"$CONSOLE" 2>&1 || sh
+}
+
+fail() {	# fail CODE TEXT...: report a problem (the caller decides what next)
+	_code=$1; shift
+	say ""
+	say "beast-net: $*"
+	emit "error $_code $*"
+}
+
+# Load drivers for every device the kernel found (and what appears after,
+# e.g. USB devices behind a newly loaded host controller): a few rounds.
+coldplug() {
+	_n=0
+	while [ $_n -lt 4 ]; do
+		_before=$(wc -l </proc/modules)
+		mdev -s 2>/dev/null
+		# shellcheck disable=SC2038  # sysfs modalias paths contain no whitespace
+		find /sys/devices -name modalias -type f 2>/dev/null | xargs cat 2>/dev/null |
+			sort -u | xargs -r /usr/sbin/modprobe -qab 2>/dev/null
+		sleep 1
+		[ "$(wc -l </proc/modules)" = "$_before" ] && [ $_n -ge 1 ] && break
+		_n=$((_n + 1))
+	done
+}
+
+# find_dev SPEC: the device for UUID=..., LABEL=... or /dev/...; waits for USB.
+find_dev() {
+	_i=0
+	while [ $_i -lt 30 ]; do
+		case "$1" in
+		/dev/*) [ -b "$1" ] && { echo "$1"; return 0; } ;;
+		*) _d=$(findfs "$1" 2>/dev/null) && [ -n "$_d" ] && { echo "$_d"; return 0; } ;;
+		esac
+		[ $((_i % 5)) = 4 ] && coldplug
+		sleep 1
+		_i=$((_i + 1))
+	done
+	return 1
+}
+
+# mount_part SPEC DIR TYPES...: mount read-write with the first type that works.
+mount_part() {
+	_spec=$1; _dir=$2; shift 2
+	_dev=$(find_dev "$_spec") || return 1
+	for _fs in "$@"; do
+		mount -t "$_fs" -o rw,noatime "$_dev" "$_dir" 2>/dev/null && return 0
+	done
+	return 2
+}
+
+is_mounted() { grep -q " $1 " /proc/mounts; }
+
+mount_all() {
+	if [ -z "$DATA" ] || [ -z "$ESP" ]; then
+		fail mount "beastnet.data= and beastnet.esp= are missing from the kernel command line."
+		return 1
+	fi
+	if ! is_mounted /mnt/data; then
+		mount_part "$DATA" /mnt/data exfat vfat ntfs3
+		case $? in
+		1) fail mount "the data partition ($DATA) was not found."; return 1 ;;
+		2) fail mount "the data partition ($DATA) could not be mounted read-write" \
+			"(exFAT, FAT32 or NTFS). If it is NTFS, shut Windows down fully" \
+			"(no fast startup) and try again."; return 1 ;;
+		esac
+	fi
+	if ! is_mounted /mnt/esp; then
+		mount_part "$ESP" /mnt/esp vfat
+		case $? in
+		1) fail mount "the ESP ($ESP) was not found."; return 1 ;;
+		2) fail mount "the ESP ($ESP) could not be mounted read-write."; return 1 ;;
+		esac
+	fi
+	return 0
+}
+
+[ -w /proc/sys/kernel/hotplug ] && echo /sbin/mdev >/proc/sys/kernel/hotplug
+coldplug
+until mount_all; do shell; done
+
+if [ "$CONSOLE" != /dev/tty1 ] && [ -c /dev/tty1 ]; then
+	echo "beast-net is running on the serial console ($CONSOLE)." >/dev/tty1 2>/dev/null
+fi
+
+while :; do
+	# shellcheck disable=SC2094  # $CONSOLE is a tty, read and written on purpose
+	setsid -c python3 -m beastnet <"$CONSOLE" >"$CONSOLE" 2>&1
+	rc=$?
+	say ""
+	say "beast-net stopped (exit code $rc)."
+	shell
+done

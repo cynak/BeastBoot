@@ -1,0 +1,8 @@
+# ShellCheck settings for beast-booter: used by scripts/lint.sh and by editor
+# integrations (timonwong.shellcheck) alike. See docs/CODE_QUALITY.md.
+
+# Follow `source`/`.` to files given on the command line or found via
+# source-path, so sourced helpers (scripts/dev-env.sh, ...) are checked too.
+external-sources=true
+# Resolve relative `source` paths against the directory of the script itself.
+source-path=SCRIPTDIR

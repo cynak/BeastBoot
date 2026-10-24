@@ -1,0 +1,13 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.debugpy",
+    "charliermarsh.ruff",
+    "timonwong.shellcheck",
+    "eclipse-cdt.cdt-gdb-vscode"
+  ],
+  "unwantedRecommendations": [
+    "ms-vscode.cpptools",
+    "ms-vscode-remote.remote-containers"
+  ]
+}

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template for BeastBooter.app/Contents/Info.plist. packaging/portable/build.py
+  loads it with plistlib, fills in the @...@ values and writes it again:
+    @VERSION@    the VERSION file
+    @ARCH@       x86_64 or arm64 (the runtime's architecture)
+    @MACOS_MIN@  minimum macOS version, read from the bundled python executable
+    @BUNDLE_ID@  reverse-DNS bundle identifier (build.py: BUNDLE_ID)
+  The app is not code signed (see docs/PORTABLE.md, "Gatekeeper").
+-->
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleDisplayName</key>
+  <string>Beast Booter</string>
+  <key>CFBundleExecutable</key>
+  <string>BeastBooter</string>
+  <key>CFBundleIdentifier</key>
+  <string>@BUNDLE_ID@</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>BeastBooter</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>@VERSION@</string>
+  <key>CFBundleVersion</key>
+  <string>@VERSION@</string>
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.utilities</string>
+  <key>LSArchitecturePriority</key>
+  <array>
+    <string>@ARCH@</string>
+  </array>
+  <key>LSMinimumSystemVersion</key>
+  <string>@MACOS_MIN@</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>NSHumanReadableCopyright</key>
+  <string>beast-booter is free software: GPL-3.0-or-later</string>
+</dict>
+</plist>

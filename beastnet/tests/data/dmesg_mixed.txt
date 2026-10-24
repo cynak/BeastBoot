@@ -1,0 +1,10 @@
+[    0.000000] Linux version 7.0.0-10-generic (buildd@lcy02-amd64-001) #10-Ubuntu SMP PREEMPT_DYNAMIC
+[    2.345678] e1000 0000:00:03.0 eth0: (PCI:33MHz:32-bit) 52:54:00:12:34:56
+[    2.345700] e1000 0000:00:03.0 eth0: Intel(R) PRO/1000 Network Connection
+[    3.100000] rtw_8822ce 0000:02:00.0: Direct firmware load for rtw88/rtw8822c_fw.bin failed with error -2
+[    3.100100] rtw_8822ce 0000:02:00.0: failed to request firmware
+[    3.200000] i915 0000:00:02.0: Direct firmware load for i915/adlp_dmc.bin failed with error -2
+[    3.300000] r8169 0000:03:00.0: Unable to load firmware patch rtl_nic/rtl8168h-2.fw (-2)
+[    3.400000] mt7921e 0000:04:00.0: Direct firmware load for mediatek/WIFI_MT7961_patch_mcu_1_2_hdr.bin failed with error -2
+[    3.500000] foo_wifi 0000:05:00.0: firmware: failed to load foo/unknown-fw.bin (-2)
+[    3.600000] bluetooth hci0: Direct firmware load for intel/ibt-0040-0041.sfi failed with error -2

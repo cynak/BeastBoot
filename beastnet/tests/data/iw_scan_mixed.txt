@@ -1,0 +1,208 @@
+BSS 3c:84:6a:12:34:56(on wlan0)
+	last seen: 1520.112s [boottime]
+	TSF: 123456789 usec (0d, 00:02:03)
+	freq: 5180.0
+	beacon interval: 100 TUs
+	capability: ESS Privacy SpectrumMgmt ShortSlotTime RadioMeasure (0x1511)
+	signal: -48.00 dBm
+	last seen: 120 ms ago
+	Information elements from Probe Response frame:
+	SSID: HomeNet
+	Supported rates: 6.0* 9.0 12.0* 18.0 24.0* 36.0 48.0 54.0 
+	DS Parameter set: channel 36
+	RSN:	 * Version: 1
+		 * Group cipher: CCMP
+		 * Pairwise ciphers: CCMP
+		 * Authentication suites: PSK SAE
+		 * Capabilities: 1-PTKSA-RC 1-GTKSA-RC MFP-capable (0x0080)
+	HT capabilities:
+		Capabilities: 0x1ef
+			RX LDPC
+	WPS:	 * Version: 1.0
+		 * Wi-Fi Protected Setup State: 2 (Configured)
+BSS 3c:84:6a:12:34:57(on wlan0)
+	last seen: 1520.112s [boottime]
+	TSF: 123456789 usec (0d, 00:02:03)
+	freq: 2412.0
+	beacon interval: 100 TUs
+	capability: ESS Privacy ShortSlotTime (0x0411)
+	signal: -60.00 dBm
+	last seen: 120 ms ago
+	Information elements from Probe Response frame:
+	SSID: HomeNet
+	Supported rates: 6.0* 9.0 12.0* 18.0 24.0* 36.0 48.0 54.0 
+	DS Parameter set: channel 36
+	RSN:	 * Version: 1
+		 * Group cipher: CCMP
+		 * Pairwise ciphers: CCMP
+		 * Authentication suites: PSK SAE
+		 * Capabilities: 1-PTKSA-RC 1-GTKSA-RC (0x0000)
+	HT capabilities:
+		Capabilities: 0x1ef
+			RX LDPC
+	WPS:	 * Version: 1.0
+		 * Wi-Fi Protected Setup State: 2 (Configured)
+BSS 00:11:22:33:44:55(on wlan0)
+	last seen: 1520.112s [boottime]
+	TSF: 123456789 usec (0d, 00:02:03)
+	freq: 2437.0
+	beacon interval: 100 TUs
+	capability: ESS ShortSlotTime (0x0401)
+	signal: -71.00 dBm
+	last seen: 120 ms ago
+	Information elements from Probe Response frame:
+	SSID: Cafe Free WiFi
+	Supported rates: 6.0* 9.0 12.0* 18.0 24.0* 36.0 48.0 54.0 
+	DS Parameter set: channel 36
+	HT capabilities:
+		Capabilities: 0x1ef
+			RX LDPC
+	WPS:	 * Version: 1.0
+		 * Wi-Fi Protected Setup State: 2 (Configured)
+BSS 00:11:22:33:44:66(on wlan0)
+	last seen: 1520.112s [boottime]
+	TSF: 123456789 usec (0d, 00:02:03)
+	freq: 5500.0
+	beacon interval: 100 TUs
+	capability: ESS Privacy (0x0011)
+	signal: -66.00 dBm
+	last seen: 120 ms ago
+	Information elements from Probe Response frame:
+	SSID: Corp
+	Supported rates: 6.0* 9.0 12.0* 18.0 24.0* 36.0 48.0 54.0 
+	DS Parameter set: channel 36
+	RSN:	 * Version: 1
+		 * Group cipher: CCMP
+		 * Pairwise ciphers: CCMP
+		 * Authentication suites: IEEE 802.1X FT/IEEE 802.1X
+		 * Capabilities: 1-PTKSA-RC 1-GTKSA-RC (0x0000)
+BSS 00:11:22:33:44:77(on wlan0)
+	last seen: 1520.112s [boottime]
+	TSF: 123456789 usec (0d, 00:02:03)
+	freq: 5955.0
+	beacon interval: 100 TUs
+	capability: ESS Privacy (0x0011)
+	signal: -58.00 dBm
+	last seen: 120 ms ago
+	Information elements from Probe Response frame:
+	SSID: Neighbour-WPA3
+	Supported rates: 6.0* 9.0 12.0* 18.0 24.0* 36.0 48.0 54.0 
+	DS Parameter set: channel 36
+	RSN:	 * Version: 1
+		 * Group cipher: CCMP
+		 * Pairwise ciphers: CCMP
+		 * Authentication suites: SAE
+		 * Capabilities: 1-PTKSA-RC 1-GTKSA-RC MFP-required MFP-capable (0x00c0)
+BSS 00:11:22:33:44:88(on wlan0)
+	last seen: 1520.112s [boottime]
+	TSF: 123456789 usec (0d, 00:02:03)
+	freq: 2462.0
+	beacon interval: 100 TUs
+	capability: ESS Privacy (0x0411)
+	signal: -88.00 dBm
+	last seen: 120 ms ago
+	Information elements from Probe Response frame:
+	SSID: Old Router
+	Supported rates: 6.0* 9.0 12.0* 18.0 24.0* 36.0 48.0 54.0 
+	DS Parameter set: channel 36
+	WPA:	 * Version: 1
+		 * Group cipher: TKIP
+		 * Pairwise ciphers: TKIP CCMP
+		 * Authentication suites: PSK
+BSS 00:11:22:33:44:99(on wlan0)
+	last seen: 1520.112s [boottime]
+	TSF: 123456789 usec (0d, 00:02:03)
+	freq: 2412.0
+	beacon interval: 100 TUs
+	capability: ESS Privacy (0x0011)
+	signal: -80.00 dBm
+	last seen: 120 ms ago
+	Information elements from Probe Response frame:
+	SSID: Very Old
+	Supported rates: 6.0* 9.0 12.0* 18.0 24.0* 36.0 48.0 54.0 
+	DS Parameter set: channel 36
+BSS 00:11:22:33:44:aa(on wlan0)
+	last seen: 1520.112s [boottime]
+	TSF: 123456789 usec (0d, 00:02:03)
+	freq: 2412.0
+	beacon interval: 100 TUs
+	capability: ESS Privacy (0x0011)
+	signal: -40.00 dBm
+	last seen: 120 ms ago
+	Information elements from Probe Response frame:
+	SSID: 
+	Supported rates: 6.0* 9.0 12.0* 18.0 24.0* 36.0 48.0 54.0 
+	DS Parameter set: channel 36
+	RSN:	 * Version: 1
+		 * Group cipher: CCMP
+		 * Pairwise ciphers: CCMP
+		 * Authentication suites: PSK
+		 * Capabilities: 1-PTKSA-RC 1-GTKSA-RC (0x0000)
+BSS 00:11:22:33:44:bb(on wlan0)
+	last seen: 1520.112s [boottime]
+	TSF: 123456789 usec (0d, 00:02:03)
+	freq: 2412.0
+	beacon interval: 100 TUs
+	capability: ESS Privacy (0x0011)
+	signal: -45.00 dBm
+	last seen: 120 ms ago
+	Information elements from Probe Response frame:
+	SSID: \x00\x00\x00\x00
+	Supported rates: 6.0* 9.0 12.0* 18.0 24.0* 36.0 48.0 54.0 
+	DS Parameter set: channel 36
+	RSN:	 * Version: 1
+		 * Group cipher: CCMP
+		 * Pairwise ciphers: CCMP
+		 * Authentication suites: PSK
+		 * Capabilities: 1-PTKSA-RC 1-GTKSA-RC (0x0000)
+BSS 00:11:22:33:44:cc(on wlan0)
+	last seen: 1520.112s [boottime]
+	TSF: 123456789 usec (0d, 00:02:03)
+	freq: 5745
+	beacon interval: 100 TUs
+	capability: ESS Privacy (0x0011)
+	signal: -77.00 dBm
+	last seen: 120 ms ago
+	Information elements from Probe Response frame:
+	SSID: Caf\xc3\xa9 \xe2\x98\x95\x20
+	Supported rates: 6.0* 9.0 12.0* 18.0 24.0* 36.0 48.0 54.0 
+	DS Parameter set: channel 36
+	RSN:	 * Version: 1
+		 * Group cipher: CCMP
+		 * Pairwise ciphers: CCMP
+		 * Authentication suites: PSK
+		 * Capabilities: 1-PTKSA-RC 1-GTKSA-RC (0x0000)
+BSS 00:11:22:33:44:dd(on wlan0)
+	last seen: 1520.112s [boottime]
+	TSF: 123456789 usec (0d, 00:02:03)
+	freq: 2412.0
+	beacon interval: 100 TUs
+	capability: ESS (0x0001)
+	signal: -70.00 dBm
+	last seen: 120 ms ago
+	Information elements from Probe Response frame:
+	SSID: a\x5cb:c
+	Supported rates: 6.0* 9.0 12.0* 18.0 24.0* 36.0 48.0 54.0 
+	DS Parameter set: channel 36
+	RSN:	 * Version: 1
+		 * Group cipher: CCMP
+		 * Pairwise ciphers: CCMP
+		 * Authentication suites: OWE
+		 * Capabilities: 1-PTKSA-RC 1-GTKSA-RC (0x0000)
+BSS 00:11:22:33:44:ee(on wlan0)
+	last seen: 1520.112s [boottime]
+	TSF: 123456789 usec (0d, 00:02:03)
+	freq: 5200.0
+	beacon interval: 100 TUs
+	capability: ESS Privacy (0x0011)
+	signal: -52.00 dBm
+	last seen: 120 ms ago
+	Information elements from Probe Response frame:
+	SSID: Mesh-PSK256
+	Supported rates: 6.0* 9.0 12.0* 18.0 24.0* 36.0 48.0 54.0 
+	DS Parameter set: channel 36
+	RSN:	 * Version: 1
+		 * Group cipher: CCMP
+		 * Pairwise ciphers: CCMP
+		 * Authentication suites: PSK/SHA-256 FT/PSK
+		 * Capabilities: 1-PTKSA-RC 1-GTKSA-RC (0x0000)

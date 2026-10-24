@@ -1,0 +1,65 @@
+# beast-booter build environment: Ubuntu 26.04 with pinned package versions.
+#
+# NOTE: written without access to a container runtime; not yet tested.
+#
+# Build the image (from the repository root):
+#   podman build -t beast-booter-build -f build/Containerfile .
+# Run a build. Keys are mounted read-only; the output goes to a mounted
+# *parent* directory (build.sh swaps dist/ atomically, which cannot be done
+# on a bind-mount point itself). The image has no .git, so pass the commit time:
+#   mkdir -p out/container
+#   podman run --rm \
+#     -v "$PWD/keys:/src/keys:ro,Z" -v "$PWD/out/container:/out:Z" \
+#     -e BB_DIST_DIR=/out/dist -e SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" \
+#     beast-booter-build
+#   build/verify-dist.sh out/container/dist
+# (docker works the same way; drop the ",Z" SELinux labels if not needed.)
+#
+# The files that end up on the drive come from the payload packages below.
+# They are fetched with `apt-get download` and unpacked with `dpkg-deb -x`
+# into /src/.tools (as scripts/bootstrap-tools.sh does), so no maintainer
+# scripts run, and build.sh checks every file against the .deb's md5sums.
+# Tool packages (grub-mkimage, sbsign, objcopy, ...) are installed normally.
+# For a fully pinned base image, replace the tag by a digest:
+#   FROM docker.io/library/ubuntu:26.04@sha256:<digest>
+FROM docker.io/library/ubuntu:26.04
+
+# Payload: copied to / built into the boot partition.
+ARG GRUB_EFI_BIN_VERSION=2.14-2ubuntu1
+ARG GRUB_EFI_SIGNED_VERSION=1.215+2.14-2ubuntu1
+ARG GRUB_PC_BIN_VERSION=2.14-2ubuntu2.1
+ARG SHIM_SIGNED_VERSION=1.59+15.8-0ubuntu2
+# Tools (and grub2-common's unicode.pf2, which is also payload).
+ARG GRUB_COMMON_VERSION=2.14-2ubuntu2.1
+ARG SBSIGNTOOL_VERSION=0.9.4-3.1ubuntu9
+ARG BINUTILS_VERSION=2.46-3ubuntu2
+ARG OPENSSL_VERSION=3.5.5-1ubuntu3.7
+ARG PYTHON3_VERSION=3.14.3-0ubuntu2
+ARG MAKE_VERSION=4.4.1-3
+
+ENV DEBIAN_FRONTEND=noninteractive LC_ALL=C.UTF-8 TZ=UTC
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      grub-common=${GRUB_COMMON_VERSION} grub2-common=${GRUB_COMMON_VERSION} \
+      sbsigntool=${SBSIGNTOOL_VERSION} binutils=${BINUTILS_VERSION} \
+      openssl=${OPENSSL_VERSION} python3=${PYTHON3_VERSION} make=${MAKE_VERSION} \
+ && mkdir -p /src/.tools/debs /src/.tools/root \
+ && cd /src/.tools/debs \
+ && apt-get download \
+      grub-efi-amd64-bin=${GRUB_EFI_BIN_VERSION} \
+      grub-efi-amd64-signed=${GRUB_EFI_SIGNED_VERSION} \
+      grub-pc-bin=${GRUB_PC_BIN_VERSION} \
+      shim-signed=${SHIM_SIGNED_VERSION} \
+ && for d in *.deb; do dpkg-deb -x "$d" /src/.tools/root; done \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+# Only the inputs the build reads (no host .tools/, no keys, no dist/).
+COPY VERSION ./
+COPY scripts/dev-env.sh scripts/
+COPY installer/beastbooter/layout.py installer/beastbooter/
+COPY build/ build/
+COPY grub/ grub/
+
+CMD ["bash", "-c", "source scripts/dev-env.sh && exec build/build.sh"]

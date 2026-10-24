@@ -1,0 +1,49 @@
+${banner}## beast-booter ${version}
+
+${kind} ${tag}. Download the package for your system, unpack it and start **BeastBooter**
+(docs/PORTABLE.md), or install from the boot files directly with
+`beast-booter install --dist beast-booter-${version}-dist.zip`.
+
+### Secure Boot certificate
+
+On the first Secure Boot start, MokManager asks you to enroll
+`ENROLL_THIS_KEY_IN_MOKMANAGER.cer` (also attached as
+`beast-booter-${version}-ENROLL_THIS_KEY_IN_MOKMANAGER.cer`). Enroll it only if
+**View key** shows exactly this SHA-1 fingerprint:
+
+    ${cert_sha1}
+
+- Subject: `${cert_subject}` (valid until ${cert_until})
+- SHA-1: `${cert_sha1_colons}`
+- SHA-256: `${cert_sha256}`
+
+The procedure is in docs/SECURE_BOOT.md, section 3 "Check the key before you enroll it".
+
+### Vulnerabilities
+
+From `beast-booter-${version}-VULNERABILITIES.md` (SBOM scan with grype and osv-scanner, OpenVEX applied,
+plus the boot-chain checks: SBAT, dbx, signing certificates):
+
+- Open boot-chain findings: ${open_boot}
+- Open findings in shipped software (drive, beast-net, portable runtimes): ${open_shipped}
+- Open findings in build/test tooling (not shipped): ${open_build}
+- Closed by VEX statements: ${closed}
+- Release gate: ${gate}
+
+Boot-chain findings and their VEX status:
+
+${boot_findings}
+
+Critical/high findings in shipped software: ${shipped_high}
+
+### Verify the download
+
+    sha256sum -c SHA256SUMS --ignore-missing   # Windows: Get-FileHash <file> -Algorithm SHA256${attest_line}
+
+The SBOM (`beast-booter-${version}-sbom.cdx.json`, CycloneDX 1.6; `.spdx.json`, SPDX 2.3) lists every
+file on the drive, the packages they come from, the beast-net kernel and initrd packages and the
+Python runtimes in the portable packages. How releases are built and checked: docs/RELEASING.md.
+
+### Files
+
+${assets_table}

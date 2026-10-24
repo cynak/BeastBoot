@@ -1,0 +1,5 @@
+# Batch files must keep CRLF line endings (cmd.exe misreads LF-only files);
+# the sh launchers must keep LF. build.py checks both.
+*.cmd text eol=crlf
+launchers/linux/* text eol=lf
+launchers/macos/* text eol=lf

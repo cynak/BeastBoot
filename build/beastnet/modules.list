@@ -1,0 +1,95 @@
+# beast-net kernel module subset (from linux-modules-<kver>, files unmodified).
+#
+# One pattern per line:
+#   <path glob>    contains '/': matched against the module path below
+#                  /usr/lib/modules/<kver>/kernel/ without the .ko* suffix
+#                  ('*' stays within one directory, '**' crosses directories)
+#   <name glob>    no '/': matched against module names ('-' and '_' are equal)
+#   !<pattern>     drop matching modules from the roots above
+#
+# The build adds every dependency (modules.dep), softdep (pre: and post:) and
+# weakdep of the selected modules, then runs depmod for the subset. A pattern
+# that matches nothing is an error (catches renamed drivers on kernel updates);
+# built-in drivers (modules.builtin) need no entry: virtio_net/virtio_pci/
+# virtio_blk, xhci/ehci/ohci/uhci, sd_mod, loop, vfat/fat, nls_cp437,
+# af_packet, i8042/atkbd/evdev and the crypto core are built in.
+
+# --- wired NICs: PCI/PCIe (desktops, laptops, mini PCs) ----------------------
+drivers/net/ethernet/intel/**            # e1000, e1000e, igb, igc, ixgb(e), i40e, ice, ...
+drivers/net/ethernet/realtek/**          # r8169 (most desktop boards), 8139too/cp
+drivers/net/ethernet/broadcom/**         # tg3, bnx2, b44, bnxt_en
+drivers/net/ethernet/atheros/**          # alx (Killer E2xxx), atl1c, atl1e, atl1
+drivers/net/ethernet/marvell/**          # sky2, skge, mvneta ...
+drivers/net/ethernet/nvidia/**           # forcedeth
+drivers/net/ethernet/amd/**              # pcnet32 (VirtualBox/VMware default), xgbe
+drivers/net/ethernet/aquantia/**         # atlantic (AQC107/113 10G on consumer boards)
+drivers/net/ethernet/jme                 # JMicron JMC250/260
+drivers/net/ethernet/via/**              # via-rhine, via-velocity
+drivers/net/ethernet/sis/**
+drivers/net/ethernet/dlink/**
+drivers/net/ethernet/3com/**
+drivers/net/ethernet/dec/**              # tulip (Hyper-V legacy NIC)
+drivers/net/ethernet/natsemi/**
+drivers/net/ethernet/8390/**             # ne2k-pci
+drivers/net/ethernet/smsc/**
+drivers/net/ethernet/microchip/**        # lan743x
+drivers/net/ethernet/stmicro/**          # stmmac / dwmac-intel (Elkhart/Alder Lake N boards)
+drivers/net/ethernet/sun/**              # sungem, cassini (older Macs)
+drivers/net/ethernet/wangxun/**          # ngbe/txgbe
+drivers/net/ethernet/mucse/**
+drivers/net/phy/**                       # PHY drivers (r8169 -> realtek, ...)
+# --- wired NICs: USB adapters, docks, phone tethering -----------------------
+drivers/net/usb/**                       # r8152, ax88179_178a, asix, cdc_ether, cdc_ncm,
+                                         # rndis_host (Android), ipheth (iPhone), lan78xx, ...
+# --- wired NICs: virtual machines --------------------------------------------
+drivers/net/vmxnet3/**                   # VMware
+drivers/net/hyperv/**                    # Hyper-V netvsc
+mii
+
+# --- WiFi ----------------------------------------------------------------------
+net/wireless/**                          # cfg80211, lib80211
+net/mac80211/**
+drivers/net/wireless/intel/**            # iwlwifi + iwlmvm/iwlmld/iwldvm, iwlegacy
+drivers/net/wireless/realtek/**          # rtw88, rtw89, rtlwifi, rtl8xxxu, rtl818x
+drivers/net/wireless/mediatek/**         # mt76 family (mt7921/22/25, mt7601u, ...)
+drivers/net/wireless/ralink/**           # rt2x00 (rt2800usb, ...): MediaTek (Ralink) chips
+drivers/net/wireless/ath/**              # ath9k, ath9k_htc, ath10k, ath11k, ath12k, ath6kl, carl9170
+drivers/net/wireless/broadcom/**         # brcmfmac, brcmsmac, b43, b43legacy
+drivers/net/wireless/virtual/mac80211_hwsim   # tests
+# crypto that mac80211/cfg80211 request by algorithm name at run time
+# (crypto_alloc_*() -> request_module("crypto-..."), invisible to modules.dep);
+# aes/gcm/ctr/ghash/sha256/hmac/cbc/ecb are built in
+ccm
+cmac
+michael_mic
+aesni-intel
+ghash-clmulni-intel
+libarc4
+
+# --- USB storage (the beast-booter drive itself) ------------------------------
+drivers/usb/storage/**                   # usb-storage, uas, ums-*
+xhci-pci-renesas
+
+# --- keyboards (the helper is interactive) -----------------------------------
+hid
+hid-generic
+drivers/hid/usbhid/**
+drivers/hid/i2c-hid/**
+hid-apple
+hid-asus
+hid-cherry
+hid-chicony
+hid-lenovo
+hid-logitech
+hid-logitech-dj
+hid-logitech-hidpp
+hid-microsoft
+hid-multitouch
+uhid
+
+# --- filesystems ----------------------------------------------------------------
+fs/exfat/**
+fs/ntfs3/**
+fs/isofs/**
+fs/nls/**                                # vfat iocharset=iso8859-1/utf8, exfat utf8, ...
+fs/fat/msdos

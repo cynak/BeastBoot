@@ -1,0 +1,83 @@
+# GRUB modules embedded in esp/EFI/BOOT/grubx64.efi (x86_64-efi), one per line.
+# Taken unmodified from $BB_GRUB_EFI_DIR (Ubuntu grub-efi-amd64-bin). With
+# Secure Boot on, GRUB lockdown forbids loading modules from disk, so every
+# module the menu (grub/) uses must be listed here. grub-mkimage adds
+# dependencies automatically. build.sh fails if a listed module is missing.
+#
+# Order matters only for reproducibility (grub-mkimage embeds them in order).
+
+# core / scripting
+normal
+configfile
+echo
+test
+true
+regexp
+loadenv
+minicmd
+help
+cat
+ls
+sleep
+halt
+reboot
+gettext
+cpuid
+smbios
+date
+keystatus
+probe
+search
+search_fs_file
+search_fs_uuid
+search_label
+
+# partition maps and filesystems (data partition: exfat/fat32/ntfs; ISOs inside)
+part_msdos
+part_gpt
+fat
+exfat
+ntfs
+iso9660
+udf
+ext2
+btrfs
+xfs
+squash4
+loopback
+
+# decompressors
+gzio
+xzio
+zstd
+lzopio
+
+# loaders (verified by shim when Secure Boot is on)
+linux
+chain
+peimage
+boot
+
+# console and graphics
+terminal
+terminfo
+serial
+font
+video
+all_video
+efi_gop
+gfxterm
+gfxterm_background
+gfxmenu
+png
+jpeg
+
+# memdisk with the graphical menu's fonts (see build.sh: fonts on disk are
+# refused under Secure Boot)
+memdisk
+tar
+
+# EFI
+efifwsetup
+lsefi
+tpm
