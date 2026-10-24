@@ -36,7 +36,8 @@ RUN apt-get update \
       grub-pc-dbg grub-efi-amd64-dbg gdb \
       python3-venv \
       ca-certificates make git fdisk util-linux openssl binutils grub-common \
-      python3 curl gnupg unzip xz-utils procps file less
+      python3 curl gnupg unzip xz-utils procps file less \
+      fonts-noto-core fonts-noto-mono gdisk
 
 # Non-root user. Ubuntu images ship a user "ubuntu" with UID 1000; replace it
 # so USER_UID/USER_GID are free. VS Code's updateRemoteUserUID then maps the

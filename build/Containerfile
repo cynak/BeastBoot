@@ -36,6 +36,7 @@ ARG BINUTILS_VERSION=2.46-3ubuntu2
 ARG OPENSSL_VERSION=3.5.5-1ubuntu3.7
 ARG PYTHON3_VERSION=3.14.3-0ubuntu2
 ARG MAKE_VERSION=4.4.1-3
+ARG NOTO_VERSION=20201225-2build1
 
 ENV DEBIAN_FRONTEND=noninteractive LC_ALL=C.UTF-8 TZ=UTC
 
@@ -44,6 +45,7 @@ RUN apt-get update \
       grub-common=${GRUB_COMMON_VERSION} grub2-common=${GRUB_COMMON_VERSION} \
       sbsigntool=${SBSIGNTOOL_VERSION} binutils=${BINUTILS_VERSION} \
       openssl=${OPENSSL_VERSION} python3=${PYTHON3_VERSION} make=${MAKE_VERSION} \
+      fonts-noto-core=${NOTO_VERSION} fonts-noto-mono=${NOTO_VERSION} \
  && mkdir -p /src/.tools/debs /src/.tools/root \
  && cd /src/.tools/debs \
  && apt-get download \
