@@ -14,7 +14,7 @@
 
 linux-image-7.0.0-38-generic=7.0.0-38.38       kernel
 linux-modules-7.0.0-38-generic=7.0.0-38.38     modules
-busybox-static=1:1.37.0-7ubuntu1               tool
+busybox=1:1.37.0-7ubuntu1                      tool  # dynamic: uses the locked libc6 (busybox-static embeds its own glibc copy)
 kmod=34.2-2ubuntu2                             tool
 wpasupplicant=2:2.11-0ubuntu5                  tool
 iw=6.17-1                                      tool

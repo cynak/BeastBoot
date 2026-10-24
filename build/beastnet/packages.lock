@@ -2,7 +2,7 @@
 # Do not edit by hand. <package> <version> <arch> <sha256 of the .deb> <role>
 linux-image-7.0.0-38-generic 7.0.0-38.38 amd64 f268d635efaa2e19a18e12813ffdbc2e32db2390cf67d4416abd59292975e7aa kernel
 linux-modules-7.0.0-38-generic 7.0.0-38.38 amd64 ad2fed69c4430fea2d67f23bd672a4e68773049cf9984a63894f093879ec2ae0 modules
-busybox-static 1:1.37.0-7ubuntu1 amd64 fd605342f62268753076aa7d9321ff098b36ba53e47434145a9aedc28fd141a4 tool
+busybox 1:1.37.0-7ubuntu1 amd64 700e372b95cd6f648f1f58a92061dd4d538840490d2bd140223bcdb58b26e37d tool
 iw 6.17-1 amd64 5addb9bf7cddd0b0582d1bfe62f003598368cf15b0604584821a24b81326296a tool
 kmod 34.2-2ubuntu2 amd64 5595fb6bb2fba1dc53e005e17d24a389450296bdc5defb19dbcc0aa0ae33ae91 tool
 libpython3.14-minimal 3.14.4-1ubuntu0.2 amd64 fac6f0728cf9490a7a698e6b343e4140283e92355b060193c04f5770a666df8a tool

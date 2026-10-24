@@ -86,14 +86,16 @@ such links (`iwlwifi-*.ucode -> intel/iwlwifi/...`).
 
 ## Notes for the app
 
-- busybox-static runs its own applets in preference to `$PATH`
-  (`FEATURE_SH_STANDALONE`): a bare `modprobe` in a busybox shell script (and
-  in busybox `xargs`, `mdev.conf`) is busybox's modprobe, not kmod. It does
-  load Ubuntu's `.ko.zst` modules (checked in QEMU), but kmod is the tool
-  that matches depmod's output (softdeps such as r8169 -> realtek PHY,
-  weakdeps, modprobe.d), so call `/usr/sbin/modprobe` by full path. Python's `subprocess`
-  uses `$PATH` and gets kmod.
-- No udhcpc default script is shipped (busybox-static has none); pass `-s`.
+- busybox is Ubuntu's dynamically linked `busybox` package (it uses the
+  locked libc6; `busybox-static` embeds its own glibc copy, which the SBOM
+  then reports with that glibc's CVEs). It is built without
+  `FEATURE_SH_STANDALONE`, so busybox sh, `xargs` and `mdev` find programs
+  through `$PATH`: a bare `modprobe` is kmod's (`/usr/sbin/modprobe` from the
+  kmod package wins over an applet link, which is only made for names no
+  package ships). Calling `/usr/sbin/modprobe` by full path stays the safe
+  habit; kmod is the tool that matches depmod's output (softdeps such as
+  r8169 -> realtek PHY, weakdeps, modprobe.d).
+- No udhcpc default script is shipped (the busybox package has none); pass `-s`.
 
 ## Updating
 

@@ -5,8 +5,7 @@
 # shipped CA bundle, WiFi (mac80211_hwsim + wpa_supplicant), filesystems,
 # firmware pack layering. Every result is a "BNTEST: " line on the console.
 export PATH=/usr/sbin:/usr/bin HOME=/root TERM=vt102 LANG=C.UTF-8
-# busybox-static runs its own applets in preference to $PATH: call kmod by
-# full path (kmod is what matches depmod's softdep/weakdep output).
+# Call kmod by full path (kmod is what matches depmod's softdep/weakdep output).
 MODPROBE=/usr/sbin/modprobe
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
@@ -23,12 +22,13 @@ coldplug() {
 	# shellcheck disable=SC2038  # sysfs modalias paths contain no whitespace
 	find /sys/devices -name modalias -type f | xargs cat | sort -u | xargs $MODPROBE -qab 2>/dev/null
 }
-# A bare "modprobe" in busybox sh is busybox's own applet (FEATURE_SH_STANDALONE),
-# whatever $PATH says; show what it does with Ubuntu's modules.
+# busybox (dynamic build, no FEATURE_SH_STANDALONE) looks a bare "modprobe" up
+# in $PATH, which should find kmod's; show which one it is and that it works.
+_bare=$(readlink -f "$(command -v modprobe)")
 if modprobe isofs 2>/tmp/bbmod.err && grep -q '^isofs ' /proc/modules; then
-	t "bare modprobe (busybox applet): loaded isofs"
+	t "bare modprobe ($_bare): loaded isofs"
 else
-	t "bare modprobe (busybox applet): FAILED: $(head -n 1 /tmp/bbmod.err)"
+	t "bare modprobe ($_bare): FAILED: $(head -n 1 /tmp/bbmod.err)"
 fi
 coldplug; sleep 2; coldplug; sleep 1
 

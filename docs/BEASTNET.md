@@ -77,7 +77,8 @@ recorded in the manifest:
   subset: wired NICs incl. USB adapters, WiFi drivers, cfg80211/mac80211,
   crypto deps, USB/xhci/usb-storage/uas/sd_mod, exfat/vfat/ntfs3/iso9660/loop,
   nls, virtio + e1000 for tests, mac80211_hwsim for tests), resolved with modules.dep;
-- `busybox-static` (sh, mount, udhcpc, ip, mdev, findfs …), `kmod` (modprobe),
+- `busybox` (sh, mount, udhcpc, ip, mdev, findfs …; the dynamic build, linked
+  against the shipped libc6), `kmod` (modprobe),
   `wpasupplicant` (wpa_supplicant, wpa_cli), `iw`, `ca-certificates`,
   `python3.14-minimal` + the stdlib modules the app needs (ssl, hashlib,
   curses + ncurses terminfo, json, urllib, socket, subprocess) and their shared
@@ -134,9 +135,10 @@ Error codes: `no-network`, `wifi-auth`, `dhcp`, `tls`, `http`, `refused-plain-ht
 `grubenv`, `script`, `exists`, `internal`.
 
 Initramfs notes: `/lib` is a real directory, not a symlink (the kernel replaces
-a `/lib` symlink when a firmware pack cpio brings `lib/`); busybox applets shadow
-`$PATH`, so kmod is always called as `/usr/sbin/modprobe` (softdeps such as
-r8169 -> realtek PHY need it).
+a `/lib` symlink when a firmware pack cpio brings `lib/`); busybox finds programs
+through `$PATH` (no applet link where a package ships the program), and kmod is
+called as `/usr/sbin/modprobe` all the same (softdeps such as r8169 -> realtek
+PHY need it).
 
 ## 6. Firmware packs
 

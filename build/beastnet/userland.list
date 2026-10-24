@@ -16,7 +16,7 @@
 #   - ca-certificates: /etc/ssl/certs/ca-certificates.crt is built from it
 #     (see mkinitrd.py, same result as update-ca-certificates).
 
-busybox-static        usr/bin/busybox
+busybox               usr/bin/busybox
 kmod                  usr/bin/kmod usr/bin/lsmod usr/sbin/depmod usr/sbin/insmod usr/sbin/lsmod
 kmod                  usr/sbin/modinfo usr/sbin/modprobe usr/sbin/rmmod
 wpasupplicant         usr/sbin/wpa_supplicant usr/sbin/wpa_cli usr/bin/wpa_passphrase

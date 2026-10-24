@@ -28,7 +28,6 @@ import os
 import re
 import shutil
 import stat
-import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -373,15 +372,19 @@ def main() -> int:
 
     # --- generated: python3, busybox applets, CA bundle, OpenSSL default paths ---
     st.add_link("usr/bin/python3", "python3.14", "built:python3 -> python3.14 (as python3-minimal)")
-    bb = os.path.join(ptree("busybox-static"), "usr/bin/busybox")
-    applets = subprocess.run([bb, "--list-full"], check=True, capture_output=True, text=True).stdout.split()
+    # busybox is dynamically linked: list its applets with the locked glibc, not the host's.
+    if "busybox" not in pk or "libc6" not in pk:
+        raise BuildError("packages.lock needs busybox and libc6")
+    bb = os.path.join(ptree("busybox"), "usr/bin/busybox")
+    applets = bnlib.tree_exec(ptree("libc6"), bb, "busybox", ["--list-full"], check=True,
+                              capture_output=True, text=True).stdout.split()
     n_app = 0
     for ap_path in sorted(applets):
         top, _, rest = ap_path.partition("/")
         rel = {"bin": "usr/bin/", "sbin": "usr/sbin/"}.get(top, top + "/") + rest
         if not rel.startswith("usr/") or rel.endswith("/busybox") or st.has(rel):
             continue
-        st.add_link(rel, "/usr/bin/busybox", f"built:busybox applet link ({pk['busybox-static'].key})")
+        st.add_link(rel, "/usr/bin/busybox", f"built:busybox applet link ({pk['busybox'].key})")
         n_app += 1
 
     ca = pk.get("ca-certificates")
