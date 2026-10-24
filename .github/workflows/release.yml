@@ -55,6 +55,10 @@ jobs:
     timeout-minutes: 180
     permissions:
       contents: read
+    # Container jobs default to `sh` (dash); the steps use bash.
+    defaults:
+      run:
+        shell: bash
     container:
       image: ubuntu:26.04
       options: ${{ needs.probe.outputs.container-options }}

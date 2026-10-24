@@ -59,6 +59,10 @@ jobs:
     # The project's build platform (same container as the release build), so the
     # reference tools the tests compare against (mkfs.exfat, mkfs.fat, GRUB) are
     # the versions the tests were validated with.
+    # Container jobs default to `sh` (dash); the steps use bash.
+    defaults:
+      run:
+        shell: bash
     container:
       image: ubuntu:26.04
     timeout-minutes: 30
