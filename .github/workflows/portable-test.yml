@@ -22,13 +22,19 @@ jobs:
     name: ${{ matrix.target }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    # macOS 26 is checked but does not block yet (see the macos-26 entry below).
+    continue-on-error: ${{ matrix.experimental == true }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - { os: ubuntu-latest, target: linux-x86_64, ext: tar.gz }
           - { os: windows-latest, target: windows-x86_64, ext: zip }
-          - { os: macos-latest, target: macos-arm64, ext: zip }
+          # Pinned: macos-latest moved to macOS 26 (2026-10-24), where two tests fail
+          # (Tk 9 ignores the --scale override; the fake-osascript kill test exits 127).
+          # Both are tracked in the experimental macOS 26 entry until they are fixed.
+          - { os: macos-15, target: macos-arm64, ext: zip }
+          - { os: macos-26, target: macos-arm64, ext: zip, experimental: true }
           # The plan named macos-13; that image has been retired. macos-15-intel
           # is GitHub's x86_64 macOS runner now.
           - { os: macos-15-intel, target: macos-x86_64, ext: zip }

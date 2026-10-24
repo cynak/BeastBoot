@@ -419,6 +419,12 @@ real boot files in `build/Containerfile`, signed with a throwaway key.
 - **macOS app details.** The app's main program is a shell script, so the Dock
   shows the Python icon and name while it runs. On Apple silicon, use the arm64
   package: the x86_64 one needs Rosetta.
+- **macOS 26 is not fully verified yet.** The test suite passes on macOS 15
+  (Apple silicon and Intel). On macOS 26 two checks still fail in CI: the
+  `--scale` option has no effect (Tk 9 keeps the system scaling), and one
+  test of the administrator prompt being killed from outside. Installing and
+  updating drives is not affected by either, but macOS 26 counts as
+  unverified until both pass.
 - **The `.desktop` file** only works inside the package folder (desktop entries
   cannot use relative paths).
 - **Size.** The python-build-standalone `install_only` builds are kept
