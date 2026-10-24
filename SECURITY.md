@@ -51,7 +51,7 @@ enroll anything.
    release page belongs to):
 
    ```sh
-   gh attestation verify beast-booter-<v>-linux-x86_64.tar.gz --repo <owner>/beast-booter
+   gh attestation verify beast-booter-<v>-linux-x86_64.tar.gz --repo cynak/BeastBoot
    ```
 3. **Certificate.** `CERTIFICATE.txt` gives the subject, validity and the
    SHA-1 and SHA-256 fingerprints of the signing certificate. They must
@@ -72,7 +72,8 @@ enroll anything.
 
 ## Reporting a vulnerability
 
-Please report security issues privately to the maintainers instead of opening a
+Please report security issues privately, with GitHub's private vulnerability
+reporting (https://github.com/cynak/BeastBoot/security/advisories/new), instead of opening a
 public issue. Include the beast-booter version (`bb_version` in
 `grub/beast/version.cfg` on the drive), firmware/machine details, and steps to
 reproduce.

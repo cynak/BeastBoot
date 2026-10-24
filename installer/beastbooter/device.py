@@ -3,6 +3,11 @@
 All system paths are module attributes (SYS, PROC_MOUNTINFO, PROC_SWAPS, DEV)
 and the two syscalls that need a real device (_stat_block, _exclusive_probe)
 are small functions, so tests can point them at a fake tree.
+
+The medium helpers (medium_sectors, request_rescan, wait_for_medium) cover
+drives that stop responding: a USB stick that reports "medium not present"
+makes the kernel set its size to 0 (dmesg: "detected capacity change from N
+to 0"); /sys/block/<disk>/size then reads 0 and opening it fails ENOMEDIUM.
 """
 
 from __future__ import annotations
@@ -25,6 +30,12 @@ PROC_SWAPS = "/proc/swaps"
 SYSTEM_MOUNTPOINTS = ("/", "/boot", "/boot/efi")
 # Virtual / unsuitable whole-disk devices we never write to.
 REFUSED_PREFIXES = ("dm-", "md", "sr", "ram", "zram")
+# errno values that mean "the drive is gone" (no medium, detached). EIO, ENOSPC
+# (a write past a size that dropped to 0) and short reads only may: the size in
+# sysfs decides (medium_sectors).
+MEDIUM_ERRNOS = frozenset(
+    e for e in (getattr(errno, "ENOMEDIUM", None), errno.ENXIO, errno.ENODEV) if e is not None
+)
 
 
 @dataclass
@@ -59,15 +70,101 @@ def _stat_block(path: str) -> str | None:
 
 def _exclusive_probe(node: str) -> None:
     """Open the disk with O_EXCL: the kernel refuses if it or a partition is in use."""
+    os.close(_exclusive_open(node))
+
+
+def _exclusive_open(node: str) -> int:
+    """The disk opened read-only with O_EXCL (refused if it or a partition is in use).
+    While this fd stays open, nothing can mount or claim a partition of it."""
     try:
-        fd = os.open(node, os.O_RDONLY | os.O_EXCL | os.O_CLOEXEC)
+        return os.open(node, os.O_RDONLY | os.O_EXCL | os.O_CLOEXEC)
     except PermissionError:
         raise BeastError(f"permission denied opening {node}: run as root (sudo)") from None
     except OSError as e:
         if e.errno == errno.EBUSY:
-            raise BeastError(f"{node} is in use by the system (mounted, swap, RAID or device-mapper)") from None
+            raise BeastError(f"{node} is in use by the system or a program (the kernel refused exclusive access)",
+                             code="busy") from None
+        if e.errno in MEDIUM_ERRNOS:
+            raise BeastError(f"{node} stopped responding ({e.strerror})", code="device-vanished") from None
         raise BeastError(f"cannot open {node}: {e.strerror}") from None
-    os.close(fd)
+
+
+def medium_sectors(name: str) -> int | None:
+    """Size of disk `name` as the kernel sees it now, in 512-byte units: 0 means
+    no medium (the drive stopped responding), None no such disk (unplugged)."""
+    try:
+        return int(_read(os.path.join(SYS, "block", name, "size")))
+    except ValueError:
+        return None
+
+
+def request_rescan(name: str) -> bool:
+    """Ask the driver to check the drive again (SCSI: TEST UNIT READY and READ
+    CAPACITY, via /sys/block/<disk>/device/rescan). Best effort: False if refused."""
+    try:
+        with open(os.path.join(SYS, "block", name, "device", "rescan"), "w", encoding="ascii") as f:
+            f.write("1")
+        return True
+    except OSError:
+        return False
+
+
+def disk_identity(name: str) -> dict[str, str] | None:
+    """What tells this drive from another one under the same name: its sysfs device
+    (a drive plugged in again is a new one, even on the same port), devnum, model,
+    serial and WWN. None if there is no such disk."""
+    link = os.path.join(SYS, "block", name)
+    if not os.path.exists(link):
+        return None
+    sysdir = os.path.realpath(link)
+    vendor = _read(os.path.join(sysdir, "device", "vendor"))
+    model = _read(os.path.join(sysdir, "device", "model"))
+    return {
+        "sysdir": sysdir,
+        "dev": _read(os.path.join(sysdir, "dev")),
+        "model": " ".join(x for x in (vendor, model) if x),
+        "serial": _serial(sysdir),
+        "wwid": _read(os.path.join(sysdir, "wwid")) or _read(os.path.join(sysdir, "device", "wwid")),
+    }
+
+
+def _serial(sysdir: str) -> str:
+    """NVMe/MMC: device/serial; USB: the serial of the USB device above the SCSI host."""
+    own = _read(os.path.join(sysdir, "device", "serial"))
+    if own:
+        return own
+    top = os.path.realpath(SYS)
+    d = os.path.dirname(sysdir)
+    while d.startswith(top + os.sep):
+        if os.path.exists(os.path.join(d, "idVendor")):
+            return _read(os.path.join(d, "serial"))
+        d = os.path.dirname(d)
+    return ""
+
+
+def wait_for_medium(name: str, identity: dict[str, str], timeout: float, poll: float = 0.25) -> int | None:
+    """Wait until disk `name` has a medium again, as long as it is the same device
+    (disk_identity == `identity`). Returns its size (512-byte units) as soon as it
+    is non-zero (the caller compares it with the old size); None at once if the
+    disk went away or another device now has its name (never wait for, or accept,
+    a drive plugged in meanwhile); 0 when `timeout` has passed. Asks for a rescan
+    again every few seconds."""
+    deadline = time.monotonic() + timeout
+    next_rescan = time.monotonic() + 3.0
+    while True:
+        if disk_identity(name) != identity:
+            return None
+        now = medium_sectors(name)
+        if now is None:
+            return None
+        if now:
+            return now if disk_identity(name) == identity else None
+        if time.monotonic() >= deadline:
+            return 0
+        if time.monotonic() >= next_rescan:
+            request_rescan(name)
+            next_rescan = time.monotonic() + 3.0
+        time.sleep(poll)
 
 
 def _read(path: str, default: str = "") -> str:
@@ -126,14 +223,16 @@ def _unescape_mount(s: str) -> str:
     return re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), s)
 
 
-def read_mounts() -> list[tuple[set[str], str, str]]:
-    """[(devnums, source, mountpoint)] from mountinfo."""
+def read_mounts(path: str | None = None) -> list[tuple[set[str], str, str]]:
+    """[(devnums, source, mountpoint)] from mountinfo (ours, or `path`: another
+    process's /proc/<pid>/mountinfo)."""
     out = []
+    path = path or PROC_MOUNTINFO
     try:
-        with open(PROC_MOUNTINFO, encoding="utf-8", errors="replace") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             lines = f.read().splitlines()
     except OSError as e:
-        raise BeastError(f"cannot read {PROC_MOUNTINFO}: {e.strerror}") from None
+        raise BeastError(f"cannot read {path}: {e.strerror}") from None
     for line in lines:
         left, sep, right = line.partition(" - ")
         lf, rf = left.split(), right.split()

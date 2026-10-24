@@ -22,6 +22,17 @@ from .progress import ProgressState
 from .widgets import DOT, Dialog, PickCard, WrapLabel, button_row, card, icon_for_bus, set_text, \
     text_box
 
+# "Installed packs: ..." when they are not known, by FirmwareController.unknown_why
+UNKNOWN_TEXTS = {
+    "checking": "Installed packs: checking...",
+    "stale": "Installed packs: not known since the last run. Check installed packs reads them again.",
+    "no-rights": "Installed packs: its boot partition can't be read without administrator rights. "
+                 "Check installed packs asks for them.",
+    "unreadable": "The drive's list of installed packs could not be read. Check installed packs reads it again.",
+    "not-read": "Installed packs: not read yet. Check installed packs reads them (it asks for administrator rights).",
+    "image": "Installed packs: not checked yet.",
+}
+
 
 class FwConfirmDialog(Dialog):
     def __init__(self, app, req: FwRequest, on_answer):
@@ -296,9 +307,7 @@ class FirmwarePage(ttk.Frame):
         if f.target is None:
             text = "Choose the beast-booter drive, or an image file, to install the packs to."
         elif installed is None:
-            text = "Installed packs: not checked yet."
-            if f.target.kind == "device":
-                text += " Checking asks for administrator rights."
+            text = UNKNOWN_TEXTS.get(f.unknown_why or "", UNKNOWN_TEXTS["not-read"])
         elif installed:
             names = [(f.catalog.pack(p.id).title if f.catalog.pack(p.id) else p.id) for p in installed]
             text = "Installed: " + ", ".join(names) + "."
@@ -426,7 +435,8 @@ class FirmwarePage(ttk.Frame):
             self.r_stage.configure(text=f.stage_text().upper())
             st: ProgressState = job.state
             if not st.started:
-                self.r_step.configure(text="Waiting for administrator permission..." if job.elevated else "Starting...")
+                self.r_step.configure(text="Finishing a check of the drives first..." if f.waiting_for_probe else
+                                      "Waiting for administrator permission..." if job.elevated else "Starting...")
                 if str(self.r_bar.cget("mode")) != "indeterminate":
                     self.r_bar.configure(mode="indeterminate")
                     self.r_bar.start(15)

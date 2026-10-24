@@ -597,3 +597,148 @@ def test_window_shows_the_free_space_and_blocks_install(tmp_path, fw_dist):
     assert out["SUMMARY"] == "1 pack selected · 2 files, 2.9 KiB from git.kernel.org"
     assert out["BUTTON"] == "True"
     assert out["NONE"] == "12.0 KiB free on BEAST-EFI. | Muted.TLabel"
+
+
+# ---------------------------------------------------------------------------
+# installed packs from the unprivileged drive check (DriveRow.probe)
+# ---------------------------------------------------------------------------
+
+from beastbooter.installed import InstalledBoot, ProbeResult  # noqa: E402
+from test_x_gui_controller import ProbingBackend  # noqa: E402
+
+WIFI_ENTRY = {"id": "intel-wifi", "catalog_tag": "20261019", "cpio_sha256": "ab" * 32, "cpio_size": 9000,
+              "files": [{"path": "iwlwifi-x.ucode", "sha256": "cd" * 32, "size": 8000}]}
+
+
+def probed(firmware) -> ProbeResult:
+    return ProbeResult(InstalledBoot("0.1.0", "", 2, firmware=firmware))
+
+
+def test_checked_drive_shows_its_packs_without_a_job(make):
+    b = ProbingBackend({STICK.id: probed(space_info(1 << 20, [WIFI_ENTRY], 400)["installed"])})
+    c, f, _ = make(b)
+    f.set_target_drive(STICK.id)  # chosen before the check is done
+    assert f.installed_on_target is None and f.checking_installed  # the page says "checking..."
+    c.poll()
+    f.sync_target()  # the window does this whenever it draws the page
+    assert f.is_installed("intel-wifi") and [p.id for p in f.installed_on_target] == ["intel-wifi"]
+    assert f.space_text() == "1.0 MiB free on BEAST-EFI." and f.phase is FwPhase.IDLE and not b.procs
+    assert f.list_blocker() is None  # Check installed packs stays as a manual re-check
+    f.set_target_drive(None)
+    f.set_target_drive(STICK.id)  # chosen after the check: known at once
+    assert f.is_installed("intel-wifi")
+
+
+def test_drive_without_packs_says_so(make):
+    b = ProbingBackend({STICK.id: probed(space_info(1 << 20)["installed"])})
+    c, f, _ = make(b)
+    c.poll()
+    f.set_target_drive(STICK.id)
+    assert f.installed_on_target == () and f.space_on_target.free == 1 << 20
+
+
+@pytest.mark.parametrize("result, why", [
+    (None, "not-read"), (ProbeResult(None, "no rights"), "no-rights"), (probed(None), "unreadable"),
+    (probed({"v": 1}), "unreadable"),
+])
+def test_unreadable_check_falls_back_to_the_elevated_list(make, result, why):
+    b = ProbingBackend({STICK.id: result})
+    c, f, _ = make(b)
+    c.poll()
+    f.set_target_drive(STICK.id)
+    assert f.installed_on_target is None and f.space_on_target is None and not f.checking_installed
+    assert f.unknown_why == why
+    assert f.list_blocker() is None
+    read_back(f, b, space_info(1 << 20, [WIFI_ENTRY]))
+    assert f.is_installed("intel-wifi")
+
+
+def test_checking_installed_while_the_check_runs(make):
+    c, f, _ = make(ProbingBackend())
+    f.set_target_drive(STICK.id)
+    c.probing = True
+    assert f.checking_installed
+    f.set_target_image(__file__)
+    assert not f.checking_installed
+
+
+def test_a_run_wins_over_an_older_check(make):
+    b = ProbingBackend({STICK.id: probed(space_info(1 << 20, [WIFI_ENTRY])["installed"])})
+    c, f, _ = make(b)
+    c.poll()
+    f.set_target_drive(STICK.id)
+    assert f.is_installed("intel-wifi")
+    read_back(f, b, space_info(2 << 20))  # the elevated list: no packs (removed elsewhere)
+    f.sync_target()
+    assert f.installed_on_target == () and f.space_on_target.free == 2 << 20
+    c.refresh_drives(), c.poll(), c.poll()  # a newer check: what the run said still stands
+    f.sync_target()
+    assert f.installed_on_target == ()
+    read_back(f, b, {})  # a run that didn't say: unknown now ...
+    f.sync_target()
+    assert f.installed_on_target is None  # ... and the check from before that run is not taken again
+    assert f.unknown_why == "stale"
+    b.found[STICK.id] = probed(space_info(3 << 20)["installed"])
+    c.refresh_drives(), c.poll(), c.poll()
+    f.sync_target()
+    assert f.installed_on_target == () and f.space_on_target.free == 3 << 20  # a check after it is
+
+
+def test_demo_drive_has_a_pack_and_the_fake_cli_agrees(fake):
+    c, f = fake
+    c.poll()
+    old = drive(c, demo.OLD_BEAST)
+    f.set_target_drive(old)
+    assert f.is_installed("intel-wifi") and f.space_on_target is not None
+    f.refresh_installed()  # the (fake) elevated list reads the same packs
+    run(f)
+    assert f.phase is FwPhase.DONE and f.is_installed("intel-wifi")
+    f.dismiss()
+    f.set_target_drive(drive(c, "SanDisk"))  # not a beast-booter drive: nothing known without a run
+    assert f.installed_on_target is None
+
+
+def test_a_main_install_forgets_the_drives_packs(make):
+    b = ProbingBackend({STICK.id: probed(space_info(1 << 20, [WIFI_ENTRY])["installed"])})
+    c, f, _ = make(b)
+    c.poll()
+    f.set_target_drive(STICK.id)
+    assert f.is_installed("intel-wifi")
+    assert c.select_drive(STICK.id) is None
+    c.request_install()
+    c.confirm(True)
+    p = b.procs[-1]
+    p.event(event="done", ok=True, info={})
+    p.rc = 0
+    c.poll()
+    assert c.phase is ctl.Phase.DONE
+    f.sync_target()
+    assert f.installed_on_target is None and f.space_on_target is None  # erased: not known any more
+    b.found[STICK.id] = probed(space_info(2 << 20)["installed"])
+    c.dismiss()  # lists and checks again
+    c.poll(), c.poll()
+    f.sync_target()
+    assert f.installed_on_target == () and f.space_on_target.free == 2 << 20
+
+
+def test_a_firmware_run_waits_for_a_running_check(fw_dist, tmp_path):
+    b = ProbingBackend({STICK.id: probed(space_info(1 << 20)["installed"])})
+    tasks = []
+    launcher = tmp_path / "beast_booter_launch.py"
+    launcher.write_text("# stand-in\n")
+    c = Controller(backend_factory=lambda: b, dist=distinfo.DistLocation(fw_dist, "--dist"), launcher=launcher,
+                   python=sys.executable, tmp_root=str(tmp_path), spawn=tasks.append)
+    f = FirmwareController(c)
+    c.refresh_drives()
+    tasks.pop(0).run()
+    c.poll()  # listed; the check is queued
+    f.set_target_drive(STICK.id)
+    assert f.unknown_why == "checking"
+    f.refresh_installed()
+    assert f.phase is FwPhase.RUNNING and f.waiting_for_probe and f.can_cancel and not b.procs
+    f.poll()
+    assert not b.procs
+    tasks.pop(0).run()  # stopped before its first drive
+    assert b.probed == []
+    f.poll()
+    assert len(b.procs) == 1 and b.procs[0].argv[5:7] == ["firmware", "list"] and not f.waiting_for_probe

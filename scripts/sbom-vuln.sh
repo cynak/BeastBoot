@@ -17,7 +17,31 @@ step_gen() {
   [ -f "$ROOT/dist/manifest.json" ] || { echo "sbom-vuln: dist/manifest.json missing - run 'make build' first" >&2; exit 2; }
   python3 -I "$HERE/gen_sbom.py" --root "$ROOT"
 }
-step_validate() { python3 -I "$HERE/validate_sbom.py" --root "$ROOT"; }
+# validate_sbom.py needs the jsonschema and referencing packages. They are not
+# in .venv (requirements-dev.txt), and an activated .venv (VS Code does that in
+# its terminals) puts its python3 first on PATH. So use the first python3 that
+# has them: PATH's, then the system's (python3-jsonschema on Debian/Ubuntu).
+validate_python() {
+  local py
+  for py in python3 /usr/bin/python3 /usr/local/bin/python3; do
+    command -v "$py" >/dev/null 2>&1 || continue
+    if "$py" -I -c 'import jsonschema, referencing' 2>/dev/null; then
+      command -v "$py"
+      return 0
+    fi
+  done
+  return 1
+}
+step_validate() {
+  local py
+  if ! py="$(validate_python)"; then
+    echo "sbom-vuln: validating the SBOM needs the Python packages jsonschema and referencing," >&2
+    echo "  and no python3 here has them (checked: $(command -v python3 || echo 'no python3'), /usr/bin/python3)." >&2
+    echo "  Install them: sudo apt install python3-jsonschema   (Fedora: sudo dnf install python3-jsonschema)" >&2
+    return 2
+  fi
+  "$py" -I "$HERE/validate_sbom.py" --root "$ROOT"
+}
 step_sbom() { step_gen; step_validate; }
 step_scan() { python3 -I "$HERE/scan_vulns.py" --root "$ROOT" "$@"; }
 # all: a failed validation (e.g. a shipped file that is not its package's file) still gets a

@@ -30,7 +30,7 @@ Design (0.1 portable):
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 # ---------------------------------------------------------------------------
 # Block I/O  (blockio.py implements ImageTarget; backends implement raw devices)
@@ -99,6 +99,9 @@ class BlockTarget(Protocol):
 #   class ExfatVolume: same read/write API as FatVolume (write_file may be limited
 #       to small files, e.g. /beast-booter/config.cfg), plus label and volume_serial.
 
+if TYPE_CHECKING:
+    from .installed import ProbeResult
+
 
 @dataclass(frozen=True)
 class DirEntry:
@@ -145,6 +148,12 @@ class PlatformBackend(Protocol):
     def partition_path(self, disk: DiskInfo, index: int) -> str: ...  # for native formatters
     def format_ntfs(self, disk: DiskInfo, index: int, label: str) -> None: ...  # BeastError if unsupported
     def is_elevated(self) -> bool: ...
+    # Which beast-booter the drive already has (installed.py), WITHOUT administrator
+    # rights; may mount the boot partition read-only for a moment (Linux: udisks)
+    # and always leaves it as it found it. None: not a beast-booter drive as far
+    # as can be seen. Never raises (problems become ProbeResult(None, note)).
+    # should_stop: optional callable; when it returns True the probe stops before mounting.
+    def probe_installed(self, disk: DiskInfo, *, should_stop=None) -> ProbeResult | None: ...
     def run_elevated(self, argv: list[str]) -> ElevatedProcess: ...  # prompts the user (UAC/polkit/macOS auth)
 
 
@@ -178,7 +187,10 @@ class ElevatedProcess(Protocol):
 #   {"v":1,"event":"done","ok":true,"info":{...same object as `info --json`...}}
 #   {"v":1,"event":"error","code":"<short id>","message":"<human text>"}
 #        e.g. "busy": a volume of the drive could not be unmounted because a program
-#        still uses it (the message names the mountpoint)
+#        still uses it (the message names the mountpoint and, on Linux, the programs);
+#        "device-vanished": the drive stopped responding (no medium, unplugged) while
+#        it was prepared or written; the message says to replug it and run the same
+#        command again (an interrupted update is finished by the next one)
 
 PROGRESS_SCHEMA_VERSION = 1
 PROGRESS_STEPS = (

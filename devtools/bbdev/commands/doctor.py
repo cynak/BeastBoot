@@ -260,6 +260,7 @@ def _tool(ctx, name, names, apt, status=FAIL, action=TOOLS, why="", group="tools
 
 def check_mtools(ctx): return _tool(ctx, "mtools", ("mcopy", "mformat", "mmd", "mdir"), "mtools", why="ESP")
 def check_xorriso(ctx): return _tool(ctx, "xorriso", ("xorriso",), "xorriso", why="fixture ISOs")
+def check_mksquashfs(ctx): return _tool(ctx, "mksquashfs", ("mksquashfs",), "squashfs-tools", why="fixture ISOs")
 def check_sfdisk(ctx): return _tool(ctx, "sfdisk", ("sfdisk",), "fdisk", action=SYSTEM, fix="sudo apt install fdisk")
 def check_mkfs_fat(ctx): return _tool(ctx, "mkfs.fat", ("mkfs.fat",), "dosfstools", why="ESP and FAT32")
 def check_mkfs_exfat(ctx): return _tool(ctx, "mkfs.exfat", ("mkfs.exfat",), "exfatprogs", why="default data fs")
@@ -513,7 +514,7 @@ def check_disk(ctx: Ctx, usage=shutil.disk_usage) -> Check:
 
 CHECKS = (
     check_python, check_grub_efi, check_grub_bios, check_grub_signed, check_shim, check_ovmf, check_seabios,
-    check_qemu, check_kvm, check_mtools, check_xorriso, check_sfdisk, check_mkfs_fat, check_mkfs_exfat,
+    check_qemu, check_kvm, check_mtools, check_xorriso, check_mksquashfs, check_sfdisk, check_mkfs_fat, check_mkfs_exfat,
     check_mkfs_ntfs, check_sbsign, check_openssl, check_virt_fw_vars, check_udisks, check_socat, check_gdb,
     check_grub_dbg, check_venv, check_keys, check_dist, check_dev_image, check_disk,
 )

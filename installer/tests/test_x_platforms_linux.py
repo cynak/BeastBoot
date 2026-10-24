@@ -2,8 +2,9 @@
 
 device.SYS, DEV, PROC_MOUNTINFO and PROC_SWAPS point into tmp_path,
 device._stat_block is a dict lookup, device._exclusive_probe and settle are
-recorded, and commands (umount, partx, mkfs.ntfs) are faked. Nothing opens a
-real block device; raw I/O is tested on a regular file.
+recorded, and commands (umount, udisksctl, partx, mkfs.ntfs) are faked; linux.PROC
+is a fake /proc (no processes unless a test adds them) and the busy retries do
+not sleep. Nothing opens a real block device; raw I/O is tested on a regular file.
 """
 
 from __future__ import annotations
@@ -54,13 +55,39 @@ class FakeLinux:
         monkeypatch.setattr(devmod, "PROC_SWAPS", str(self.swaps))
         monkeypatch.setattr(devmod, "_stat_block", lambda p: self.blockmap.get(os.path.realpath(p)))
         monkeypatch.setattr(devmod, "_exclusive_probe", self.probed.append)
+        monkeypatch.setattr(devmod, "_exclusive_open", self._exclusive_open)
         monkeypatch.setattr(devmod, "settle", self._settle)
         monkeypatch.setattr(common, "program_paths", lambda: ["/opt/beast-booter/app"])
         self.files: dict[str, str] = {}  # path -> st_dev "major:minor" (others: found by mount prefix)
         monkeypatch.setattr(linux, "_file_devnum", self.files.get)
+        self.proc = root / "proc"
+        (self.proc / "self" / "ns").mkdir(parents=True)
+        (self.proc / "self" / "ns" / "mnt").symlink_to("mnt:[4026531841]")
+        monkeypatch.setattr(linux, "PROC", str(self.proc))
+        monkeypatch.setattr(linux, "BUSY_RETRY_DELAYS", (0, 0))
+        monkeypatch.setattr(linux, "_which", lambda tool: None)  # no udisksctl unless a test says so
 
     def _settle(self):
         self.settled += 1
+
+    def _exclusive_open(self, node):
+        self.probed.append(node)
+        return os.open(os.devnull, os.O_RDONLY)
+
+    def add_process(self, pid, comm, *, cwd="/home/user", fds=(), ns="mnt:[4026531841]", mountinfo=""):
+        """A fake /proc/<pid>: comm, cwd, fd/N links, its mount namespace and mountinfo."""
+        d = self.proc / str(pid)
+        (d / "fd").mkdir(parents=True)
+        (d / "ns").mkdir()
+        (d / "comm").write_text(comm + "\n")
+        (d / "cwd").symlink_to(cwd)
+        (d / "ns" / "mnt").symlink_to(ns)
+        (d / "mountinfo").write_text(mountinfo)
+        for i, target in enumerate(fds, 3):
+            (d / "fd" / str(i)).symlink_to(target)
+
+    def set_size(self, name, size_bytes):
+        (self.sysdirs[name] / "size").write_text(f"{size_bytes // 512}\n")
 
     def node(self, name):
         return str(self.dev / name)
@@ -436,6 +463,7 @@ def fake_run(fake, monkeypatch):
         return subprocess.CompletedProcess(cmd, 0, "", "")
 
     monkeypatch.setattr(linux, "run", run)
+    monkeypatch.setattr(linux, "_run_quiet", lambda cmd, timeout: run(cmd))
     return results
 
 
@@ -640,3 +668,426 @@ def test_blkrrpart_on_a_non_disk_fails(tmp_path):
     with pytest.raises(OSError) as e:
         linux._blkrrpart(str(f))
     assert e.value.errno == errno.ENOTTY
+
+
+# --------------------------------------------------------------------------- busy drives: retries, holders
+
+
+def test_prepare_busy_retries_then_names_the_holders(fake, backend, fake_run):
+    fake.unmount("/media/user/MY STICK")
+    fake.mount("8:17", fake.node("sdb1"), "/mnt/stick")
+    fake.add_process(4321, "bash", cwd="/mnt/stick/photos")
+    fake.add_process(999, "vlc", fds=["/dev/null", "/mnt/stick/movie.mkv"])
+    fake.add_process(55, "sshd", fds=["/var/log/auth.log"])  # not ours
+    fake_run["umount"] = subprocess.CompletedProcess([], 32, "", "umount: /mnt/stick: target is busy.\n")
+    with pytest.raises(BeastError) as e:
+        backend.prepare(backend.get_disk("sdb"))
+    msg = str(e.value)
+    assert e.value.code == "busy" and msg.startswith("cannot unmount /mnt/stick: it is busy")
+    assert "process 999 (vlc) has /mnt/stick/movie.mkv open" in msg
+    assert "process 4321 (bash) has its current folder in /mnt/stick/photos" in msg
+    assert "sshd" not in msg and "close the programs" in msg
+    assert fake.commands == [["umount", "/mnt/stick"]] * (len(linux.BUSY_RETRY_DELAYS) + 1)
+    assert fake.probed == []
+
+
+def test_prepare_busy_once_then_unmounted(fake, backend, fake_run, monkeypatch):
+    attempts = []
+
+    def run(cmd, **kw):
+        fake.commands.append(list(cmd))
+        attempts.append(cmd)
+        if len(attempts) == 1:
+            return subprocess.CompletedProcess(cmd, 32, "", "umount: target is busy.\n")
+        fake.unmount(cmd[1])
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(linux, "run", run)
+    assert backend.prepare(backend.get_disk("sdb")) == ["/media/user/MY STICK"]
+    assert len(attempts) == 2 and fake.probed == [fake.node("sdb")]
+
+
+def test_exclusive_probe_retried_then_ok(fake, backend, fake_run, monkeypatch):
+    tries = []
+
+    def probe(node):
+        tries.append(node)
+        if len(tries) < 3:
+            raise BeastError(f"{node} is in use", code="busy")
+        return os.open(os.devnull, os.O_RDONLY)
+
+    monkeypatch.setattr(devmod, "_exclusive_open", probe)
+    assert backend.prepare(backend.get_disk("sdb")) == ["/media/user/MY STICK"]
+    assert tries == [fake.node("sdb")] * 3
+
+
+def busy_probe(node):
+    raise BeastError(f"{node} is in use by the system or a program", code="busy")
+
+
+def test_exclusive_probe_busy_names_loop_and_other_namespace(fake, backend, fake_run, monkeypatch):
+    """Unmounted here, but a loop device still uses an ISO on it (it was lazily unmounted)
+    and a snap's own mount namespace still has the stick mounted."""
+    fake.add_disk("loop5", "7:5", "virtual/block/loop5", size=6 << 30, ro=True)
+    real_run = linux.run
+
+    def umount_and_attach(cmd, **kw):
+        proc = real_run(cmd, **kw)
+        fake.attach_loop("loop5", "/media/user/MY STICK/debian-12.iso")
+        return proc
+
+    monkeypatch.setattr(linux, "run", umount_and_attach)
+    fake.add_process(777, "snap-app", ns="mnt:[4026532999]",
+                     mountinfo="40 30 8:17 / /media/user/MY\\040STICK rw - vfat /dev/sdb1 rw\n")
+    monkeypatch.setattr(devmod, "_exclusive_open", busy_probe)
+    with pytest.raises(BeastError) as e:
+        backend.prepare(backend.get_disk("sdb"))
+    msg = str(e.value)
+    assert e.value.code == "busy" and "is still in use after unmounting its volumes" in msg
+    assert "loop5 uses /media/user/MY STICK/debian-12.iso" in msg and "udisksctl loop-delete -b" in msg
+    assert "process 777 (snap-app) still has it mounted at /media/user/MY STICK in its own mount namespace" in msg
+
+
+def test_exclusive_probe_busy_device_node_open(fake, backend, fake_run, monkeypatch):
+    fake.add_process(3141, "gparted", fds=[fake.node("sdb")])
+    monkeypatch.setattr(devmod, "_exclusive_open", busy_probe)
+    with pytest.raises(BeastError, match=r"process 3141 \(gparted\) has .*/sdb open; close the programs"):
+        backend.prepare(backend.get_disk("sdb"))
+
+
+def test_exclusive_probe_busy_nobody_named(fake, backend, fake_run, monkeypatch):
+    monkeypatch.setattr(devmod, "_exclusive_open", busy_probe)
+    with pytest.raises(BeastError, match="no program could be named") as e:
+        backend.prepare(backend.get_disk("sdb"))
+    assert e.value.code == "busy"
+
+
+def test_exclusive_probe_errors(monkeypatch):
+    def fail(no):
+        def open_(*a):
+            raise OSError(no, os.strerror(no))
+        return open_
+
+    monkeypatch.setattr(os, "open", fail(errno.EBUSY))
+    with pytest.raises(BeastError, match="in use by the system or a program") as e:
+        devmod._exclusive_probe("/nonexistent/sdx")
+    assert e.value.code == "busy"
+    monkeypatch.setattr(os, "open", fail(errno.ENOMEDIUM))
+    with pytest.raises(BeastError, match="stopped responding") as e:
+        devmod._exclusive_probe("/nonexistent/sdx")
+    assert e.value.code == "device-vanished"
+
+
+def test_udisksctl_unmounts_automounts(fake, backend, fake_run, monkeypatch):
+    monkeypatch.setattr(linux, "_which", lambda tool: "/usr/bin/" + tool)
+    fake.mount("8:17", fake.node("sdb1"), "/mnt/stick")  # by hand: umount
+    real_run = linux.run
+
+    def run(cmd, **kw):
+        if cmd[0].endswith("udisksctl"):
+            fake.commands.append(list(cmd))
+            fake.unmount("/media/user/MY STICK")
+            return subprocess.CompletedProcess(cmd, 0, "Unmounted /dev/sdb1.\n", "")
+        return real_run(cmd, **kw)
+
+    monkeypatch.setattr(linux, "_run_quiet", lambda cmd, timeout: run(cmd))
+    assert backend.prepare(backend.get_disk("sdb")) == ["/media/user/MY STICK", "/mnt/stick"]
+    assert fake.commands == [["/usr/bin/udisksctl", "unmount", "-b", fake.node("sdb1"), "--no-user-interaction"],
+                             ["umount", "/mnt/stick"]]
+
+
+def test_udisksctl_refusal_falls_back_to_umount(fake, backend, fake_run, monkeypatch):
+    monkeypatch.setattr(linux, "_which", lambda tool: "/usr/bin/" + tool)
+    fake_run["/usr/bin/udisksctl"] = subprocess.CompletedProcess([], 1, "", "Error connecting to the udisks daemon")
+    assert backend.prepare(backend.get_disk("sdb")) == ["/media/user/MY STICK"]
+    assert [c[0] for c in fake.commands] == ["/usr/bin/udisksctl", "umount"]
+
+
+# --------------------------------------------------------------------------- a drive that stops responding
+
+
+def test_medium_vanishes_after_unmount_and_comes_back(fake, backend, fake_run, monkeypatch):
+    sdb = backend.get_disk("sdb")
+    rescans = []
+
+    def unmount_then_vanish(cmd, **kw):  # the stick says "no medium" right after the unmount
+        fake.commands.append(list(cmd))
+        fake.unmount(cmd[1])
+        fake.set_size("sdb", 0)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    def rescan(name):
+        rescans.append(name)
+        fake.set_size("sdb", sdb.size)  # the kernel's second look finds it again
+        return True
+
+    monkeypatch.setattr(linux, "run", unmount_then_vanish)
+    monkeypatch.setattr(devmod, "request_rescan", rescan)
+    monkeypatch.setattr(linux, "MEDIUM_TIMEOUT", 2.0)
+    assert backend.prepare(sdb) == ["/media/user/MY STICK"]
+    assert rescans == ["sdb"] and fake.probed == [fake.node("sdb")]
+    assert "stopped responding" in backend.notes[0] and "is back" in backend.notes[1] and backend.medium_returned
+
+
+def test_medium_vanishes_and_stays_gone(fake, backend, fake_run, monkeypatch):
+    sdb = backend.get_disk("sdb")
+    fake.set_size("sdb", 0)
+    monkeypatch.setattr(devmod, "request_rescan", lambda name: True)
+    monkeypatch.setattr(linux, "MEDIUM_TIMEOUT", 0.05)
+    with pytest.raises(BeastError, match="stopped responding") as e:
+        backend.prepare(sdb)
+    assert e.value.code == "device-vanished" and fake.probed == []
+
+
+def test_medium_comes_back_with_another_size(fake, backend, fake_run, monkeypatch):
+    sdb = backend.get_disk("sdb")
+    fake.set_size("sdb", 0)
+    monkeypatch.setattr(devmod, "request_rescan", lambda name: fake.set_size("sdb", 8 * GIB) or True)
+    with pytest.raises(BeastError, match="came back with another size") as e:
+        backend.prepare(sdb)
+    assert e.value.code == "device-vanished" and fake.probed == []
+
+
+def test_size_changed_without_vanishing(fake, backend, fake_run):
+    sdb = backend.get_disk("sdb")
+    fake.set_size("sdb", 8 * GIB)  # another card in the reader
+    with pytest.raises(BeastError, match="size changed") as e:
+        backend.prepare(sdb)
+    assert e.value.code is None
+
+
+def test_medium_gone(fake, backend):
+    sdb = backend.get_disk("sdb")
+    assert not backend.medium_gone(sdb)
+    fake.set_size("sdb", 0)
+    assert backend.medium_gone(sdb)
+    assert backend.medium_gone(DiskInfo(**{**sdb.__dict__, "extra": {"name": "sdq"}}))  # unplugged: no sysfs
+
+
+def test_medium_sysfs_helpers(fake, monkeypatch):
+    assert devmod.medium_sectors("sdb") == 16 * GIB // 512 and devmod.medium_sectors("sdq") is None
+    assert devmod.request_rescan("sdb")  # writes "1" to .../device/rescan
+    assert (fake.sysdirs["sdb"] / "device" / "rescan").read_text() == "1"
+    assert not devmod.request_rescan("sdq")
+    fake.set_size("sdb", 0)
+    ident = devmod.disk_identity("sdb")
+    assert ident["model"] == "SanDisk Cruzer Blade" and ident["dev"] == "8:16"
+    assert devmod.wait_for_medium("sdb", ident, timeout=0.05, poll=0.01) == 0
+    fake.set_size("sdb", 16 * GIB)
+    assert devmod.wait_for_medium("sdb", ident, timeout=0.05, poll=0.01) == 16 * GIB // 512
+    assert devmod.wait_for_medium("sdb", {**ident, "serial": "other"}, timeout=5, poll=0.01) is None
+    assert devmod.disk_identity("sdq") is None
+
+
+def test_check_safe_probe_retries_and_names(fake, backend, monkeypatch):
+    monkeypatch.setattr(backend, "is_elevated", lambda: True)
+    monkeypatch.setattr(devmod, "_exclusive_open", busy_probe)
+    with pytest.raises(BeastError, match="is still in use: .*no program could be named") as e:
+        backend.check_safe(backend.get_disk("sdc"), allow_fixed=False)
+    assert e.value.code == "busy"
+
+
+# --------------------------------------------------------------------------- kernel log (evidence)
+
+
+SDB_SYSDIR = "/sys/devices/pci0000:00/0000:00:14.0/usb2/2-1/2-1:1.0/host6/target6:0:0/6:0:0:0/block/sdb"
+
+
+def test_kernel_patterns_and_log_filter():
+    pats = linux.kernel_patterns("sdb", SDB_SYSDIR)
+    r, w = os.pipe()
+    os.set_blocking(r, False)
+    records = [
+        "6,1001,5000000,-;sd 6:0:0:0: [sdb] 240253440 512-byte logical blocks",
+        " SUBSYSTEM=scsi",
+        " DEVICE=+scsi:6:0:0:0",
+        "6,1002,5100000,-;sdb: detected capacity change from 240253440 to 0",
+        "6,1003,5200000,-;sda: detected capacity change from 100 to 0",  # another disk
+        "6,1004,5300000,-;usb 2-1: USB disconnect, device number 7",
+        "6,1005,5400000,-;usb 2-1.4: new high-speed USB device number 8",  # a device behind a hub on 2-1
+        "6,1006,5500000,-;scsi host6: usb-storage 2-1:1.0",
+        "6,1007,5600000,-;sdb: sdb1 sdb2 sdb3",
+        "4,1008,5700000,-;EXT4-fs (sdbb1): mounted",  # another disk whose name starts the same
+    ]
+    os.write(w, ("\n".join(records) + "\n").encode())
+    log = linux.KernelLog(r, pats)
+    assert log.lines() == [
+        "[5.0] sd 6:0:0:0: [sdb] 240253440 512-byte logical blocks",
+        "[5.1] sdb: detected capacity change from 240253440 to 0",
+        "[5.3] usb 2-1: USB disconnect, device number 7",
+        "[5.5] scsi host6: usb-storage 2-1:1.0",
+        "[5.6] sdb: sdb1 sdb2 sdb3",
+    ]
+    assert len(log.lines()) == 5  # kept, nothing new
+    log.close()
+    os.close(w)
+    assert len(log.lines()) == 5
+
+
+def test_kernel_log_open_is_best_effort(tmp_path, backend, monkeypatch):
+    assert linux.KernelLog.open(["x"], str(tmp_path / "no-kmsg")) is None
+    monkeypatch.setattr(backend, "is_elevated", lambda: False)
+    assert backend.kernel_log(file_disk(tmp_path)) is None
+
+
+def test_kernel_log_for_disk(fake, backend, monkeypatch, tmp_path):
+    kmsg = tmp_path / "kmsg"
+    kmsg.write_text("6,1,1,-;sdb: old message\n")
+    monkeypatch.setattr(linux, "KMSG", str(kmsg))
+    monkeypatch.setattr(backend, "is_elevated", lambda: True)
+    log = backend.kernel_log(backend.get_disk("sdb"))
+    assert log is not None and log.lines() == []  # starts at the end: only what comes after
+    log.close()
+
+
+def test_state_dir(backend, monkeypatch, tmp_path):
+    monkeypatch.setattr(backend, "is_elevated", lambda: True)
+    assert backend.state_dir() == "/var/lib/beast-booter"
+    monkeypatch.setattr(backend, "is_elevated", lambda: False)
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    assert backend.state_dir() == str(tmp_path / "beast-booter")
+
+
+def test_mounted_again_while_probing_is_unmounted(fake, backend, fake_run, monkeypatch):
+    """The desktop mounts the stick again (it does after a drive comes back): prepare unmounts that too."""
+    tries = []
+
+    def probe(node):
+        tries.append(node)
+        if len(tries) == 1:
+            fake.mount("8:17", fake.node("sdb1"), "/media/user/MY STICK1")
+            raise BeastError(f"{node} is in use", code="busy")
+        return os.open(os.devnull, os.O_RDONLY)
+
+    monkeypatch.setattr(devmod, "_exclusive_open", probe)
+    assert backend.prepare(backend.get_disk("sdb")) == ["/media/user/MY STICK", "/media/user/MY STICK1"]
+    assert fake.commands == [["umount", "/media/user/MY STICK"], ["umount", "/media/user/MY STICK1"]]
+    assert len(tries) == 2
+
+
+# --------------------------------------------------------------------------- review: identity, exclusive hold
+
+
+def vanish_after_unmount(fake, monkeypatch):
+    def run(cmd, **kw):
+        fake.commands.append(list(cmd))
+        fake.unmount(cmd[1])
+        fake.set_size("sdb", 0)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(linux, "run", run)
+    monkeypatch.setattr(linux, "MEDIUM_TIMEOUT", 2.0)
+
+
+@pytest.mark.parametrize("swap", ["model", "serial", "devnum", "unplugged"])
+def test_another_drive_under_the_same_name_is_never_written(fake, backend, fake_run, monkeypatch, swap):
+    """Unplugged and another stick of the same size plugged in while we wait: refused at once."""
+    usb = fake.sysdirs["sdb"].parents[5]  # .../usb2/2-1, the USB device
+    (usb / "idVendor").write_text("0781\n")
+    (usb / "serial").write_text("4C530001\n")
+    sdb = backend.get_disk("sdb")
+    vanish_after_unmount(fake, monkeypatch)
+
+    def replaced(name):
+        if swap == "model":
+            (fake.sysdirs["sdb"] / "device" / "model").write_text("Ultra Fit\n")
+        elif swap == "serial":
+            (usb / "serial").write_text("4C530002\n")
+        elif swap == "devnum":
+            (fake.sysdirs["sdb"] / "dev").write_text("8:48\n")
+        else:
+            (fake.sys / "block" / "sdb").unlink()
+        fake.set_size("sdb", sdb.size)
+        return True
+
+    monkeypatch.setattr(devmod, "request_rescan", replaced)
+    with pytest.raises(BeastError, match="disconnected or replaced") as e:
+        backend.prepare(sdb)
+    assert e.value.code == "device-vanished" and fake.probed == [] and backend._held is None
+
+
+def test_prepare_holds_the_disk_until_rescan(fake, backend, fake_run, monkeypatch):
+    sdb = backend.get_disk("sdb")
+    backend.prepare(sdb)
+    held = backend._held
+    assert held is not None and os.fstat(held)  # O_EXCL fd kept: nothing can mount a partition meanwhile
+    seen = []
+    monkeypatch.setattr(linux, "_blkrrpart", lambda path: seen.append(backend._held))
+    backend.rescan(sdb)
+    assert seen == [None] and backend._held is None  # released before BLKRRPART
+    with pytest.raises(OSError):
+        os.fstat(held)
+    backend.prepare(sdb)  # install's second prepare (NTFS) takes it again
+    assert backend._held is not None
+    monkeypatch.setattr(linux, "make_data_fs", lambda *a, **kw: seen.append(backend._held))
+    monkeypatch.setattr(backend, "wait_partitions", lambda disk, idx, timeout=15.0: {1: fake.node("sdb1")})
+    backend.format_ntfs(sdb, 1, "DATA")
+    assert seen[-1] is None
+    backend.prepare(sdb)
+    backend.prepare(sdb)  # a new prepare lets go of the old hold first
+    backend.release()
+    backend.release()
+    assert backend._held is None
+
+
+def test_check_safe_does_not_keep_the_disk(fake, backend, monkeypatch):
+    monkeypatch.setattr(backend, "is_elevated", lambda: True)
+    backend.check_safe(backend.get_disk("sdc"), allow_fixed=False)
+    assert fake.probed == [fake.node("sdc")] and backend._held is None
+
+
+def test_no_medium_at_the_exclusive_open_is_checked_again(fake, backend, fake_run, monkeypatch):
+    sdb = backend.get_disk("sdb")
+    tries = []
+
+    def probe(node):
+        tries.append(node)
+        if len(tries) == 1:
+            fake.set_size("sdb", 0)
+            raise BeastError(f"{node} stopped responding (No medium found)", code="device-vanished")
+        return os.open(os.devnull, os.O_RDONLY)
+
+    monkeypatch.setattr(devmod, "_exclusive_open", probe)
+    monkeypatch.setattr(devmod, "request_rescan", lambda name: fake.set_size("sdb", sdb.size) or True)
+    assert backend.prepare(sdb) == ["/media/user/MY STICK"]
+    assert len(tries) == 2 and backend.medium_returned and backend._held is not None
+
+
+def test_no_medium_at_the_exclusive_open_twice_fails(fake, backend, fake_run, monkeypatch):
+    sdb = backend.get_disk("sdb")
+
+    def probe(node):
+        raise BeastError(f"{node} stopped responding (No medium found)", code="device-vanished")
+
+    monkeypatch.setattr(devmod, "_exclusive_open", probe)
+    monkeypatch.setattr(devmod, "request_rescan", lambda name: True)
+    with pytest.raises(BeastError, match="stopped responding") as e:
+        backend.prepare(sdb)
+    assert e.value.code == "device-vanished"
+
+
+def test_remount_found_on_the_last_pass_is_probed_again(fake, backend, fake_run, monkeypatch):
+    monkeypatch.setattr(linux, "BUSY_RETRY_DELAYS", ())
+    tries = []
+
+    def probe(node):
+        tries.append(node)
+        if len(tries) == 1:
+            fake.mount("8:17", fake.node("sdb1"), "/media/user/MY STICK")
+            raise BeastError(f"{node} is in use", code="busy")
+        return os.open(os.devnull, os.O_RDONLY)
+
+    monkeypatch.setattr(devmod, "_exclusive_open", probe)
+    assert backend.prepare(backend.get_disk("sdb")) == ["/media/user/MY STICK"]
+    assert len(tries) == 2
+
+
+def test_prepare_refuses_a_drive_swapped_since_check_safe(fake, backend, fake_run, monkeypatch):
+    monkeypatch.setattr(backend, "is_elevated", lambda: True)
+    fake.unmount("/media/user/MY STICK")
+    sdb = backend.get_disk("sdb")
+    backend.check_safe(sdb, allow_fixed=False)
+    (fake.sysdirs["sdb"] / "dev").write_text("8:48\n")  # unplugged; another stick got the name
+    with pytest.raises(BeastError, match="another device than the drive that was selected") as e:
+        backend.prepare(sdb)
+    assert e.value.code == "device-vanished" and backend._held is None

@@ -3,15 +3,15 @@
 <desc id="d">Banner for beast-booter, an open-source, fully transparent multi-boot USB tool. It boots ISO files from a drive that stays normal exFAT storage, on legacy BIOS, UEFI, and UEFI with Secure Boot via a MOK key the user enrolls. Illustration: a USB stick with a shield and check mark next to a stack of discs.</desc>
 <defs>
 <style>text{font-family:system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Helvetica, Arial, 'Noto Sans', 'Liberation Sans', sans-serif}</style>
-<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#EEF2FF"/></linearGradient>
-<radialGradient id="glow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#C7D2FE" stop-opacity="0.75"/><stop offset="1" stop-color="#C7D2FE" stop-opacity="0"/></radialGradient>
-<linearGradient id="face" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F8FAFC"/><stop offset="0.35" stop-color="#E0E7FF"/><stop offset="0.65" stop-color="#FCE7F3"/><stop offset="1" stop-color="#CFFAFE"/></linearGradient>
-<linearGradient id="tint0" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#5EEAD4"/><stop offset="0.5" stop-color="#F8FAFC"/><stop offset="1" stop-color="#5EEAD4"/></linearGradient>
-<linearGradient id="tint1" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FCD34D"/><stop offset="0.5" stop-color="#F8FAFC"/><stop offset="1" stop-color="#FCD34D"/></linearGradient>
-<linearGradient id="tint2" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#C4B5FD"/><stop offset="0.5" stop-color="#F8FAFC"/><stop offset="1" stop-color="#C4B5FD"/></linearGradient>
-<linearGradient id="body" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6366F1"/><stop offset="1" stop-color="#3730A3"/></linearGradient>
-<linearGradient id="metal" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#94A3B8"/><stop offset="0.45" stop-color="#F1F5F9"/><stop offset="1" stop-color="#94A3B8"/></linearGradient>
-<pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.6" fill="#A5B4FC"/></pattern>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#F5F5F6"/></linearGradient>
+<radialGradient id="glow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#F9D2D7" stop-opacity="0.75"/><stop offset="1" stop-color="#F9D2D7" stop-opacity="0"/></radialGradient>
+<linearGradient id="face" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="0.35" stop-color="#E1E1E4"/><stop offset="0.65" stop-color="#FDECEE"/><stop offset="1" stop-color="#E1E1E4"/></linearGradient>
+<linearGradient id="tint0" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FF8A93"/><stop offset="0.5" stop-color="#FFFFFF"/><stop offset="1" stop-color="#FF8A93"/></linearGradient>
+<linearGradient id="tint1" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#C6C6CC"/><stop offset="0.5" stop-color="#FFFFFF"/><stop offset="1" stop-color="#C6C6CC"/></linearGradient>
+<linearGradient id="tint2" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#F9D2D7"/><stop offset="0.5" stop-color="#FFFFFF"/><stop offset="1" stop-color="#F9D2D7"/></linearGradient>
+<linearGradient id="body" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E0384A"/><stop offset="1" stop-color="#B01E2E"/></linearGradient>
+<linearGradient id="metal" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#A1A1AA"/><stop offset="0.45" stop-color="#F5F5F6"/><stop offset="1" stop-color="#A1A1AA"/></linearGradient>
+<pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.6" fill="#C6C6CC"/></pattern>
 <clipPath id="card"><rect width="1280" height="420" rx="24"/></clipPath>
 </defs>
 <g clip-path="url(#card)">
@@ -19,41 +19,41 @@
 <rect x="760" y="0" width="520" height="420" fill="url(#dots)" opacity="0.5"/>
 <circle cx="1030" cy="215" r="250" fill="url(#glow)"/>
 </g>
-<rect x="0.75" y="0.75" width="1278.5" height="418.5" rx="23.5" fill="none" stroke="#DDE3F0" stroke-width="1.5"/>
-<text x="74" y="96" font-size="17" font-weight="700" letter-spacing="3" fill="#4338CA">OPEN-SOURCE MULTI-BOOT USB</text>
-<text x="70" y="178" font-size="84" font-weight="800" letter-spacing="-2" fill="#0F172A">beast<tspan fill="#4F46E5">-</tspan>booter</text>
-<text x="73" y="228" font-size="28" font-weight="500" fill="#334155">One USB drive. Many ISOs. Secure Boot intact.</text>
-<rect x="72" y="262" width="150" height="40" rx="20" fill="#FFFFFF" fill-opacity="0.9" stroke="#C7D2FE" stroke-width="1.5"/>
-<text x="147" y="288.5" font-size="18" font-weight="600" text-anchor="middle" fill="#1E1B4B">Legacy BIOS</text>
-<rect x="236" y="262" width="90" height="40" rx="20" fill="#FFFFFF" fill-opacity="0.9" stroke="#C7D2FE" stroke-width="1.5"/>
-<text x="281" y="288.5" font-size="18" font-weight="600" text-anchor="middle" fill="#1E1B4B">UEFI</text>
-<rect x="340" y="262" width="246" height="40" rx="20" fill="#FFFFFF" fill-opacity="0.9" stroke="#C7D2FE" stroke-width="1.5"/>
-<text x="463" y="288.5" font-size="18" font-weight="600" text-anchor="middle" fill="#1E1B4B">Secure Boot via MOK</text>
-<rect x="72" y="314" width="264" height="40" rx="20" fill="#FFFFFF" fill-opacity="0.9" stroke="#C7D2FE" stroke-width="1.5"/>
-<text x="204" y="340.5" font-size="18" font-weight="600" text-anchor="middle" fill="#1E1B4B">Normal exFAT storage</text>
-<rect x="350" y="314" width="222" height="40" rx="20" fill="#FFFFFF" fill-opacity="0.9" stroke="#C7D2FE" stroke-width="1.5"/>
-<text x="461" y="340.5" font-size="18" font-weight="600" text-anchor="middle" fill="#1E1B4B">Fully transparent</text>
-<ellipse cx="995" cy="352" rx="190" ry="22" fill="#1E1B4B" opacity="0.16"/>
-<ellipse cx="955" cy="324" rx="118" ry="38" fill="#0F766E"/><ellipse cx="955" cy="318" rx="118" ry="38" fill="url(#tint0)" stroke="#94A3B8" stroke-opacity="0.55" stroke-width="1"/>
-<ellipse cx="955" cy="300" rx="118" ry="38" fill="#B45309"/><ellipse cx="955" cy="294" rx="118" ry="38" fill="url(#tint1)" stroke="#94A3B8" stroke-opacity="0.55" stroke-width="1"/>
-<ellipse cx="955" cy="276" rx="118" ry="38" fill="#6D28D9"/><ellipse cx="955" cy="270" rx="118" ry="38" fill="url(#tint2)" stroke="#94A3B8" stroke-opacity="0.55" stroke-width="1"/>
-<ellipse cx="955" cy="252" rx="118" ry="38" fill="#64748B"/><ellipse cx="955" cy="246" rx="118" ry="38" fill="url(#face)" stroke="#94A3B8" stroke-opacity="0.55" stroke-width="1"/>
+<rect x="0.75" y="0.75" width="1278.5" height="418.5" rx="23.5" fill="none" stroke="#E1E1E4" stroke-width="1.5"/>
+<text x="74" y="96" font-size="17" font-weight="700" letter-spacing="3" fill="#B01E2E">OPEN-SOURCE MULTI-BOOT USB</text>
+<text x="70" y="178" font-size="84" font-weight="800" letter-spacing="-2" fill="#18181B">beast<tspan fill="#D62839">-</tspan>booter</text>
+<text x="73" y="228" font-size="28" font-weight="500" fill="#3F3F46">One USB drive. Many ISOs. Secure Boot intact.</text>
+<rect x="72" y="262" width="150" height="40" rx="20" fill="#FFFFFF" fill-opacity="0.9" stroke="#F9D2D7" stroke-width="1.5"/>
+<text x="147" y="288.5" font-size="18" font-weight="600" text-anchor="middle" fill="#18181B">Legacy BIOS</text>
+<rect x="236" y="262" width="90" height="40" rx="20" fill="#FFFFFF" fill-opacity="0.9" stroke="#F9D2D7" stroke-width="1.5"/>
+<text x="281" y="288.5" font-size="18" font-weight="600" text-anchor="middle" fill="#18181B">UEFI</text>
+<rect x="340" y="262" width="246" height="40" rx="20" fill="#FFFFFF" fill-opacity="0.9" stroke="#F9D2D7" stroke-width="1.5"/>
+<text x="463" y="288.5" font-size="18" font-weight="600" text-anchor="middle" fill="#18181B">Secure Boot via MOK</text>
+<rect x="72" y="314" width="264" height="40" rx="20" fill="#FFFFFF" fill-opacity="0.9" stroke="#F9D2D7" stroke-width="1.5"/>
+<text x="204" y="340.5" font-size="18" font-weight="600" text-anchor="middle" fill="#18181B">Normal exFAT storage</text>
+<rect x="350" y="314" width="222" height="40" rx="20" fill="#FFFFFF" fill-opacity="0.9" stroke="#F9D2D7" stroke-width="1.5"/>
+<text x="461" y="340.5" font-size="18" font-weight="600" text-anchor="middle" fill="#18181B">Fully transparent</text>
+<ellipse cx="995" cy="352" rx="190" ry="22" fill="#18181B" opacity="0.16"/>
+<ellipse cx="955" cy="324" rx="118" ry="38" fill="#B01E2E"/><ellipse cx="955" cy="318" rx="118" ry="38" fill="url(#tint0)" stroke="#A1A1AA" stroke-opacity="0.55" stroke-width="1"/>
+<ellipse cx="955" cy="300" rx="118" ry="38" fill="#63636B"/><ellipse cx="955" cy="294" rx="118" ry="38" fill="url(#tint1)" stroke="#A1A1AA" stroke-opacity="0.55" stroke-width="1"/>
+<ellipse cx="955" cy="276" rx="118" ry="38" fill="#D62839"/><ellipse cx="955" cy="270" rx="118" ry="38" fill="url(#tint2)" stroke="#A1A1AA" stroke-opacity="0.55" stroke-width="1"/>
+<ellipse cx="955" cy="252" rx="118" ry="38" fill="#63636B"/><ellipse cx="955" cy="246" rx="118" ry="38" fill="url(#face)" stroke="#A1A1AA" stroke-opacity="0.55" stroke-width="1"/>
 <ellipse cx="955" cy="246" rx="108" ry="34.8" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="1"/>
 <ellipse cx="955" cy="246" rx="88" ry="28.3" fill="none" stroke="#FFFFFF" stroke-opacity="0.45" stroke-width="1"/>
 <path d="M955 246 L885 216 A118 38 0 0 1 937 208.4 Z" fill="#FFFFFF" opacity="0.55"/>
 <path d="M955 246 L1025 276 A118 38 0 0 1 973 283.6 Z" fill="#FFFFFF" opacity="0.35"/>
-<ellipse cx="955" cy="246" rx="30" ry="9.7" fill="#FFFFFF" stroke="#64748B" stroke-opacity="0.5" stroke-width="1"/>
-<ellipse cx="955" cy="246" rx="11" ry="3.6" fill="#EEF2FF" stroke="#64748B" stroke-opacity="0.6" stroke-width="1"/>
+<ellipse cx="955" cy="246" rx="30" ry="9.7" fill="#FFFFFF" stroke="#63636B" stroke-opacity="0.5" stroke-width="1"/>
+<ellipse cx="955" cy="246" rx="11" ry="3.6" fill="#F5F5F6" stroke="#63636B" stroke-opacity="0.6" stroke-width="1"/>
 <g transform="translate(-4 8) rotate(12 1135 215)">
-<rect x="1104" y="54" width="66" height="70" rx="6" fill="url(#metal)" stroke="#94A3B8" stroke-width="1.5"/>
-<rect x="1117" y="74" width="14" height="12" rx="2" fill="#475569"/>
-<rect x="1143" y="74" width="14" height="12" rx="2" fill="#475569"/>
+<rect x="1104" y="54" width="66" height="70" rx="6" fill="url(#metal)" stroke="#A1A1AA" stroke-width="1.5"/>
+<rect x="1117" y="74" width="14" height="12" rx="2" fill="#3F3F46"/>
+<rect x="1143" y="74" width="14" height="12" rx="2" fill="#3F3F46"/>
 <rect x="1080" y="116" width="114" height="232" rx="22" fill="url(#body)"/>
-<rect x="1088" y="124" width="10" height="200" rx="5" fill="#A5B4FC" opacity="0.35"/>
+<rect x="1088" y="124" width="10" height="200" rx="5" fill="#F9D2D7" opacity="0.35"/>
 <path d="M1137 156 L1167 168 V194 C1167 214 1154 228 1137 236 C1120 228 1107 214 1107 194 V168 Z" fill="#FFFFFF" opacity="0.95"/>
-<path d="M1123 196 L1133 207 L1153 184" fill="none" stroke="#3730A3" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1123 196 L1133 207 L1153 184" fill="none" stroke="#B01E2E" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
 <rect x="1102" y="266" width="54" height="12" rx="4" fill="#FFFFFF" opacity="0.85"/>
-<rect x="1160" y="266" width="12" height="12" rx="4" fill="#A5B4FC"/>
-<circle cx="1137" cy="320" r="8" fill="#3730A3" stroke="#A5B4FC" stroke-opacity="0.6" stroke-width="2"/>
+<rect x="1160" y="266" width="12" height="12" rx="4" fill="#F9D2D7"/>
+<circle cx="1137" cy="320" r="8" fill="#B01E2E" stroke="#F9D2D7" stroke-opacity="0.6" stroke-width="2"/>
 </g>
 </svg>

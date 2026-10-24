@@ -117,7 +117,30 @@ Networking is QEMU user mode (slirp) with `-device virtio-net-pci,romfile=`: the
 guest is 10.0.2.15 and reaches the host's 127.0.0.1 as 10.0.2.2, so the test
 servers listen on 127.0.0.1 only. The helper reboots or powers off at the end
 of a plan; with `-no-reboot` QEMU exits, and the test boots the same image
-again. Real WiFi and a real public HTTPS download are not covered.
+again. Real WiFi is not covered; real public HTTPS downloads are covered by
+the opt-in live tests below.
+
+## Live downloads (`test_e2e_beastnet_live.py`, marker `live`)
+
+Skipped unless `BB_LIVE_NET=1` (`make e2e-live` sets it): each test downloads
+a real ISO over the internet, several GB. The helper boots on UEFI with QEMU
+user networking, downloads the official link from
+[live_sources.json](live_sources.json) onto a fresh exFAT image
+(`BB_LIVE_IMAGE_SIZE`, default 16G), checks the vendor's SHA-256 when there is
+a checksum file, hands off, and the menu then opens the ISO once (dry run) and
+must detect the catalog's `recipe` (Ubuntu: `casper` with `fsmod exfat`;
+Windows: `unsupported-windows`). The file on the drive is hashed again on the
+host and must match what the helper reported.
+
+| Variable | Meaning |
+|---|---|
+| `BB_LIVE_NET` | `1` = run the live tests |
+| `BB_LIVE_SOURCE` | comma-separated catalog ids (default: entries with `"vm": true`) |
+| `BB_LIVE_URL` | test this link instead (`BB_LIVE_SHA256_URL` or `BB_LIVE_SHA256`, `BB_LIVE_RECIPE` optional) |
+| `BB_LIVE_TIMEOUT` | seconds for one download (default 5400) |
+
+The quick check without a VM is `make net-sources`
+([docs/BEASTNET.md](../../docs/BEASTNET.md#7-downloading-from-official-sources)).
 
 ## QEMU flags that matter
 

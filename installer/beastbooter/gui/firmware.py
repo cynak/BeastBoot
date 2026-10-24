@@ -39,6 +39,7 @@ import shutil
 import tempfile
 import time
 import urllib.parse
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -50,6 +51,8 @@ from ..util import human_size
 from .controller import (
     ELEVATION_CANCELLED,
     ELEVATION_FAILED,
+    PROBE_BUSY,
+    PROBE_LIMIT,
     Controller,
     DriveRow,
     Phase,
@@ -79,6 +82,8 @@ CODE_HINTS = {
     "no-space": "The boot partition is full. Remove a pack you don't need, then try again.",
     "busy": "A program is still using the drive (an open file, or a file manager or terminal showing it). "
             "Close it, then try again. Nothing was changed.",
+    "device-vanished": "The drive stopped responding (the drive did this, not beast-booter). Unplug it, plug it "
+                       "back in and try again.",
     "download-failed": "Check the internet connection, then try again. Nothing was installed.",
     "checksum-mismatch": "A downloaded file did not match the catalog, so it was discarded. Nothing was installed.",
     "insecure-url": "The catalog names a download that is not https://, so it was refused.",
@@ -449,6 +454,7 @@ class _FwJob:
     started_at: float
     log: list[LogLine] = field(default_factory=list)  # all stages
     cancel_requested: bool = False
+    start_proc: Callable[[], object] | None = None  # set while proc is None: waits for a drive check
 
 
 class FirmwareController:
@@ -461,12 +467,15 @@ class FirmwareController:
         self.main = main
         self._clock = clock
         main.other_job_running = lambda: self.phase is FwPhase.RUNNING
+        main.drive_written = self._drive_written
         self.catalog: Catalog | None = None
         self.catalog_error: str | None = None
         self.selected: set[str] = set()
         self.target: FwTarget | None = None
         self.installed: dict[str, tuple[InstalledPack, ...]] = {}  # target key -> packs (when known)
         self.space: dict[str, EspSpace] = {}  # target key -> its boot partition (when known)
+        # target key -> the drive check (DriveRow.probe) that a run on it made out of date
+        self._stale_probe: dict[str, object] = {}
         self.phase = FwPhase.IDLE
         self.request: FwRequest | None = None
         self.job: _FwJob | None = None
@@ -525,6 +534,7 @@ class FirmwareController:
             return
         row = next((r for r in self.target_choices() if r.id == drive_id), None)
         self.target = FwTarget("device", row.id, row.disk) if row else None
+        self._take_probe()
 
     def set_target_image(self, path: str) -> None:
         if self.phase is not FwPhase.IDLE:
@@ -544,6 +554,61 @@ class FirmwareController:
             if row is not None and (row.disk.size, row.disk.model) != (t.disk.size, t.disk.model):
                 self._forget(t.key)  # another drive under the same name
             self.target = FwTarget("device", row.id, row.disk) if row else None
+        self._take_probe()
+
+    def _row(self, t: FwTarget) -> DriveRow | None:
+        return next((r for r in self.main.rows if r.id == t.target and r.disk == t.disk), None)
+
+    def _take_probe(self) -> None:
+        """Installed packs and free space without administrator rights: from the drive
+        check (backend.probe_installed), when nothing is known about the target yet.
+        A list/install/remove run always wins; a check older than such a run is ignored."""
+        t = self.target
+        if t is None or t.kind != "device" or t.key in self.installed:
+            return
+        row = self._row(t)
+        probe = row.probe if row is not None else None
+        if probe is None or probe is self._stale_probe.get(t.key) or probe.installed is None:
+            return
+        info = probe.installed.firmware
+        if info is not None and parse_installed(info) is not None:
+            self._remember(t, info)
+
+    @property
+    def checking_installed(self) -> bool:
+        """The drive check that may tell the target's installed packs is still running."""
+        return self.unknown_why == "checking"
+
+    @property
+    def unknown_why(self) -> str | None:
+        """Why the target's installed packs are not known (None: they are, or no target):
+        "checking" (a drive check is on its way), "stale" (a run changed them since the
+        last check), "no-rights" (its boot partition can't be read without administrator
+        rights), "unreadable" (it was read, but not its list of packs), "not-read" (no
+        check could tell: not a beast-booter drive as far as it can see, or no way to check),
+        "image" (an image file: only a list run reads it)."""
+        t = self.target
+        if t is None or t.key in self.installed:
+            return None
+        if t.kind != "device":
+            return "image"
+        row = self._row(t)
+        probe = row.probe if row is not None else None
+        stale = probe is not None and probe is self._stale_probe.get(t.key)
+        if (probe is None or stale) and self.main.checking:
+            return "checking"
+        if stale:
+            return "stale"
+        if probe is None:
+            return "not-read"
+        if probe.installed is None:
+            return "no-rights"
+        return "unreadable"  # installed.json missing from the probe's answer, or not valid
+
+    def _mark_probe_stale(self, t: FwTarget | None) -> None:
+        if t is not None and t.kind == "device":
+            row = self._row(t)
+            self._stale_probe[t.key] = row.probe if row is not None else None
 
     @property
     def installed_on_target(self) -> tuple[InstalledPack, ...] | None:
@@ -564,6 +629,13 @@ class FirmwareController:
             self.space[target.key] = space
         else:
             self.space.pop(target.key, None)
+
+    def _drive_written(self, drive_id: str) -> None:
+        """Erase and install or Update ran on this drive: what was known about its packs
+        and free space may be wrong now; the next drive check (or a list run) tells again."""
+        key = FwTarget("device", drive_id).key
+        self._forget(key)
+        self._stale_probe.pop(key, None)
 
     def _forget(self, key: str) -> None:
         self.installed.pop(key, None)
@@ -752,13 +824,22 @@ class FirmwareController:
         # Downloading never needs rights; writing to (or reading) a drive does.
         elevated = job_stage != "fetch" and target.kind == "device" and not main.backend().is_elevated()
         state.note("running: " + " ".join(_quote(a) for a in argv), "debug")
-        if elevated:
-            state.note("asking for administrator rights")
-            proc = main.backend().run_elevated(argv)
+
+        def start_proc():
+            if elevated:
+                state.note("asking for administrator rights")
+                return main.backend().run_elevated(argv)
+            return LocalProcess(argv, os.path.join(tmp, f"{job_stage}-output.txt"))
+
+        proc = None
+        if target.kind == "device":
+            main.hold_probes()
+        if job_stage != "fetch" and target.kind == "device" and main.probe_busy():
+            state.note("waiting for a drive check to finish before using the drive")
         else:
-            proc = LocalProcess(argv, os.path.join(tmp, f"{job_stage}-output.txt"))
+            proc = start_proc()
         self.job = _FwJob(job_stage, action, target, packs, argv, proc, ProgressReader(progress_file), state,
-                          tmp, elevated, self._clock(), log)
+                          tmp, elevated, self._clock(), log, start_proc=None if proc else start_proc)
         self.phase = FwPhase.RUNNING
 
     def _start(self, stage: str, action: str, target: FwTarget, packs: tuple[FwPack, ...]) -> None:
@@ -806,6 +887,8 @@ class FirmwareController:
         job = self.job
         if self.phase is not FwPhase.RUNNING or job is None:
             return False
+        if job.proc is None:
+            return self._poll_waiting(job)
         events = job.reader.read_new()
         for ev in events:
             job.state.apply(ev)
@@ -820,6 +903,32 @@ class FirmwareController:
             job.state.apply(ev)
         self._stage_done(job, rc)
         return True
+
+    def _poll_waiting(self, job: _FwJob) -> bool:
+        """A stage that waits for a drive check: start it when the check is over."""
+        if job.cancel_requested:
+            job.state.note("stopped before it started", "warning")
+            self._finish(job, FwOutcome(False, job.action, "Stopped", "You stopped it before it started.",
+                                        job.target, "cancelled", None, (), True))
+        elif not self.main.probe_busy():
+            assert job.start_proc is not None
+            try:
+                job.proc, job.start_proc = job.start_proc(), None
+            except Exception as e:  # noqa: BLE001 - shown in the window
+                job.state.note(_error_text(e), "error")
+                self._finish(job, FwOutcome(False, job.action, self._fail_title(job.action), _error_text(e),
+                                            job.target, "start-failed", None))
+        elif self._clock() - job.started_at > PROBE_LIMIT:
+            job.state.note(PROBE_BUSY, "error")
+            self._finish(job, FwOutcome(False, job.action, self._fail_title(job.action), PROBE_BUSY, job.target,
+                                        "probe-busy", None))
+        else:
+            return False
+        return True
+
+    @property
+    def waiting_for_probe(self) -> bool:
+        return self.phase is FwPhase.RUNNING and self.job is not None and self.job.proc is None
 
     def _stage_done(self, job: _FwJob, rc: int) -> None:
         st = job.state
@@ -908,12 +1017,14 @@ class FirmwareController:
         self._finish(job, FwOutcome(False, job.action, title, msg, job.target, code, rc, tuple(tail), cancelled))
 
     def _finish(self, job: _FwJob, outcome: FwOutcome) -> None:
+        self._mark_probe_stale(job.target)
         self.outcome, self.final_log = outcome, job.log
         self.phase = FwPhase.DONE if outcome.ok else FwPhase.FAILED
         self.job = None
         shutil.rmtree(job.tmpdir, ignore_errors=True)  # downloaded packs and progress files
 
     def _fail(self, action, target, msg, code, rc, tail, log) -> None:
+        self._mark_probe_stale(target)
         self.final_log = log
         self.outcome = FwOutcome(False, action, self._fail_title(action), msg, target, code, rc, tuple(tail))
         self.phase = FwPhase.FAILED
@@ -923,7 +1034,8 @@ class FirmwareController:
         """Downloads run without rights and stop by signal; an elevated write can't be
         reached from here (the firmware commands have no --cancel-file) and is short."""
         job = self.job
-        return bool(job and self.phase is FwPhase.RUNNING and not job.elevated and not job.cancel_requested)
+        return bool(job and self.phase is FwPhase.RUNNING and (job.proc is None or not job.elevated)
+                    and not job.cancel_requested)
 
     def cancel(self) -> None:
         self._require(FwPhase.RUNNING)
@@ -934,6 +1046,8 @@ class FirmwareController:
                              "It takes only a moment.")
         job.cancel_requested = True
         job.state.note("stop requested", "warning")
+        if job.proc is None:
+            return  # not started yet: poll() ends it
         try:
             job.proc.cancel()
         except Exception as e:  # noqa: BLE001

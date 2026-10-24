@@ -110,6 +110,18 @@ def test_loopback_dryrun(mode, make_drive, vm_factory):
 
 
 @pytest.mark.parametrize("mode", BOTH)
+def test_layered_ubuntu_on_fat32_keeps_loopback(mode, make_drive, vm_factory):
+    """The exFAT add-on is for exFAT only: on FAT32 the ISO's initramfs can
+    mount the data partition, so its own loopback.cfg runs unchanged."""
+    path = trees.recipe_path("ubuntu-layered")
+    _, vm = boot_iso(make_drive, vm_factory, mode, path, dryrun=True)
+    boot = vm.wait_record("boot", rf"^boot {re.escape(path)} recipe=", timeout=120)
+    assert checks.recipe_of(boot) == "loopback", str(boot)
+    vm.wait_record("dryrun", r"^dryrun configfile (\(loop\))?/boot/grub/loopback\.cfg$", after=boot.start)
+    assert not vm.records("fsmod", after=boot.start)
+
+
+@pytest.mark.parametrize("mode", BOTH)
 def test_loopback_runs_iso_config(mode, make_drive, vm_factory):
     path = trees.recipe_path("loopback")
     _, vm = boot_iso(make_drive, vm_factory, mode, path, dryrun=False)

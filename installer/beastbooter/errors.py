@@ -25,3 +25,11 @@ class Cancelled(BeastError):
     """The user asked the CLI to stop (--cancel-file appeared)."""
 
     code = "cancelled"
+
+
+class DeviceVanished(BeastError):
+    """The drive stopped responding while it was being prepared or written:
+    the kernel / OS no longer sees a medium (a USB stick that reports "no
+    medium", a drive unplugged too early). The message says what to do."""
+
+    code = "device-vanished"

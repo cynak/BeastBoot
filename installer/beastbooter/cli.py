@@ -93,6 +93,9 @@ def build_parser(on_error=None) -> argparse.ArgumentParser:
     sp = sub.add_parser("list-devices", help="list the drives beast-booter can write to", on_error=on_error)
     sp.add_argument("--json", action="store_true", help="machine-readable output")
     sp.add_argument("--all", action="store_true", help="also list fixed and system disks (not eligible)")
+    sp.add_argument("--check-installed", action="store_true",
+                    help="also show which beast-booter version each drive has (may mount its boot "
+                         "partition read-only for a moment)")
 
     fw = sub.add_parser("firmware", help="optional firmware packs for beast-net (docs/BEASTNET.md section 6)",
                         on_error=on_error)
@@ -283,7 +286,7 @@ def _dispatch(parser: argparse.ArgumentParser, args: argparse.Namespace, rep: Re
             print(format_info(d, args.image or args.device))
         return 0
     if args.command == "list-devices":
-        d = list_devices(args.all)
+        d = list_devices(args.all, args.check_installed)
         if args.json:
             print(json.dumps(d, default=str))
         else:

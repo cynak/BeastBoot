@@ -7,7 +7,7 @@ SIZE   ?= 2G
 LAYOUT ?= msdos
 FS     ?= exfat
 
-.PHONY: help tools keys build test image e2e clean dev doctor dev-image vm vm-sb menu-sync \
+.PHONY: help tools keys build test image e2e net-sources e2e-live clean dev doctor dev-image vm vm-sb menu-sync \
 	sbom vulns portable lint release
 
 help:
@@ -17,6 +17,8 @@ help:
 	@echo "make test    run installer unit tests"
 	@echo "make image   build a drive image: $(IMAGE) ($(SIZE), $(LAYOUT), $(FS))"
 	@echo "make e2e     boot test images in QEMU (BIOS, UEFI, UEFI + Secure Boot)"
+	@echo "make net-sources  internet: check beast-net against official ISO links (seconds)"
+	@echo "make e2e-live     internet: download real ISOs in the QEMU lab and boot them (GBs)"
 	@echo ""
 	@echo "make dev        set up a complete dev environment (bin/bb-dev setup)"
 	@echo "make doctor     check the dev environment and explain fixes"
@@ -42,6 +44,7 @@ build:
 
 test:
 	$(ENV) pytest -q installer/tests
+	$(ENV) pytest -q tests/menu
 
 image:
 	@mkdir -p $(dir $(IMAGE))
@@ -50,6 +53,15 @@ image:
 
 e2e:
 	$(ENV) pytest -q tests/e2e
+
+# Uses the internet: can beast-net download from the official ISO links
+# (tests/e2e/live_sources.json)? net-sources: headers, redirects, TLS, Range
+# and checksum files in seconds; e2e-live: full downloads in the QEMU lab.
+net-sources:
+	$(ENV) python3 -I scripts/check_iso_sources.py $(ARGS)
+
+e2e-live:
+	$(ENV) BB_LIVE_NET=1 pytest -q -rs tests/e2e/test_e2e_beastnet_live.py $(ARGS)
 
 MODE ?= uefi
 

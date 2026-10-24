@@ -60,6 +60,11 @@ def scratch_root(real: Path, base: Path, name: str) -> Path:
     manifest = json.loads((r / "dist/manifest.json").read_text())
     for meta in manifest["files"].values():
         m = re.fullmatch(r"(?:repo|key):([^\s,]+)", meta["origin"].strip())
+        # Only repo-relative origins belong in the scratch copy. In CI the signing
+        # certificate's origin is an absolute temp path (BB_KEY_DIR); joining it
+        # onto r would point back at the original file.
+        if m and Path(m.group(1)).is_absolute():
+            continue
         if m and not m.group(1).endswith(".key") and (real / m.group(1)).is_file():
             (r / m.group(1)).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(real / m.group(1), r / m.group(1))

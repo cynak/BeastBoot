@@ -199,7 +199,7 @@ In the folder with the downloaded files:
 
 ```sh
 sha256sum -c SHA256SUMS --ignore-missing     # macOS: shasum -a 256 -c SHA256SUMS --ignore-missing
-gh attestation verify beast-booter-<v>-linux-x86_64.tar.gz -R <owner>/<repo>
+gh attestation verify beast-booter-<v>-linux-x86_64.tar.gz -R cynak/BeastBoot
 ```
 
 On Windows: `Get-FileHash .\beast-booter-<v>-windows-x86_64.zip -Algorithm SHA256`

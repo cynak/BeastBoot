@@ -30,3 +30,9 @@ __pycache__/
 /sbom/*
 !/sbom/README.md
 !/sbom/vex.openvex.json
+
+# Top-level hidden folders are local only, except the CI and release workflows
+/.*/
+!/.github/
+/.github/*
+!/.github/workflows/

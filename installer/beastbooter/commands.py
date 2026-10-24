@@ -20,12 +20,23 @@ carrying over grub/grubenv and the installed firmware packs
 (beast-net/firmware/), and refuses a drive of another layout version (the ESP
 size changed: a reinstall is needed).
 
+An interrupted update (Stop pressed, the drive stopped responding or was
+unplugged while the ESP was written) is finished by running update again:
+the ESP's boot sector is zeroed first and written last (_write_esp_and_boot),
+so a half-written ESP is recognisable, and the files update carries over are
+kept on the host meanwhile (_UpdateRecords; Linux: /var/lib/beast-booter).
+_watch_device turns errors of a drive that vanished into one clear
+"device-vanished" error and shows what the kernel said about the drive.
+
 The `firmware` commands live in firmware.py.
 """
 
 from __future__ import annotations
 
+import base64
 import dataclasses
+import hashlib
+import io
 import json
 import os
 import re
@@ -33,6 +44,7 @@ import secrets
 import stat
 import sys
 import tempfile
+import time
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
@@ -41,8 +53,9 @@ from .blockio import ImageTarget
 from .bootcode import boot_writes, read_core_lba
 from .disk import PartTable, read_partition_table
 from .dist import Dist, load_dist
+from .device import MEDIUM_ERRNOS
 from .distsource import prepare_dist_dir
-from .errors import BeastError
+from .errors import BeastError, Cancelled, DeviceVanished
 from .esp import (
     DeviceConfig,
     esp_files,
@@ -114,11 +127,19 @@ STEP_ERROR_CODES = {
     "write-firmware": "write-failed",
 }
 
-def prepare_device(backend, disk, rep: Reporter, pct: float) -> list[str]:
+def prepare_device(backend, disk, rep: Reporter, pct: float, *, written: bool = False) -> list[str]:
     """backend.prepare() as a progress step: unmount (Linux, macOS) or lock and dismount
-    (Windows) every volume of the drive, then say which mountpoints were unmounted."""
+    (Windows) every volume of the drive, then say which mountpoints were unmounted.
+    `written`: this run has written to the drive already (install's second prepare)."""
     rep.step(f"Unmounting the volumes on {disk.id}", "prepare", pct)
-    unmounted = list(backend.prepare(disk) or ())
+    try:
+        unmounted = list(backend.prepare(disk) or ())
+    finally:
+        for note in getattr(backend, "notes", None) or ():  # Linux: a drive that stopped responding came back
+            rep.warn(note)
+    if getattr(backend, "medium_returned", False):
+        rep.warn("continuing: what was written before it stopped is checked first" if written
+                 else "continuing: nothing had been written to it yet")
     if unmounted:
         rep.step(f"Unmounted {', '.join(unmounted)} (on {disk.id})", "prepare", pct)
     return unmounted
@@ -248,7 +269,20 @@ def _write_esp_and_boot(t, plan: DiskPlan, mem: MemoryTarget, writes, rep: Repor
             rep.progress("write-esp", f"Writing the boot partition: {human_size(done)} of {human_size(total)}",
                          start + (end - start) * done / max(total, 1))
 
-    copy_written(mem, t, plan.esp.offset, on_progress=progress, flush_every=flush_every)
+    # The ESP's boot sector goes first as zeros and last for real, each flushed: until
+    # all of the new ESP is on the drive it has no valid boot sector, so an
+    # interrupted write is recognisable (_interrupted_state) and the next update
+    # finishes it, instead of reading a half-old, half-new ESP.
+    boot_sector = bytes(mem.buf[0:SECTOR_SIZE])
+    t.write(plan.esp.offset, bytes(SECTOR_SIZE))
+    t.flush()
+    mem.buf[0:SECTOR_SIZE] = bytes(SECTOR_SIZE)
+    try:
+        copy_written(mem, t, plan.esp.offset, on_progress=progress, flush_every=flush_every)
+    finally:
+        mem.buf[0:SECTOR_SIZE] = boot_sector
+    t.flush()
+    t.write(plan.esp.offset, boot_sector)
     rep.step("Writing the BIOS boot code", "boot-code", boot_pct)
     for offset, data in writes:
         t.write(offset, data)
@@ -385,6 +419,27 @@ def _confirm_device(disk, action: str) -> None:
         raise BeastError("aborted (device name not confirmed)", code="aborted")
 
 
+def _prepare_and_open(backend, disk, rep: Reporter, pct: float, allowed, watch: _DeviceWatch, *,
+                      check=None):
+    """prepare_device, _open_device and `check(t)` (what is read before writing).
+    If the drive stops responding in between and nothing has been written yet,
+    once more: prepare() asks the kernel to check the drive again and waits for
+    it. Returns (target, check's result)."""
+    for attempt in (1, 2):
+        prepare_device(backend, disk, rep, pct, written=watch.phase != "before")
+        t = None
+        try:
+            t = _open_device(backend, disk, allowed)
+            return t, (check(t) if check is not None else None)
+        except (BeastError, OSError) as e:
+            if t is not None:
+                t.close()
+            if attempt == 2 or watch.phase != "before" or not watch.vanished(e):
+                raise
+            rep.warn(f"{disk.id} stopped responding before anything was written ({e}); checking it again")
+    raise AssertionError("unreachable")
+
+
 def _open_device(backend, disk, allowed: list[tuple[int, int]] | None = None) -> GuardedTarget:
     t = backend.open_raw(disk, writable=True)
     if t.size != disk.size:
@@ -451,13 +506,117 @@ def _with_ntfs_uuid(cfg: DeviceConfig, boot_sector: bytes) -> DeviceConfig:
     return replace(cfg, data_uuid=grub_uuid(linux_uuid), data_uuid_linux=linux_uuid)
 
 
-def _rescan(backend, disk, rep: Reporter) -> None:
+def _rescan(backend, disk, rep: Reporter, watch: _DeviceWatch | None = None) -> None:
     """The OS re-reads the partition table. The drive is complete at this point,
-    so a failure is a warning (unplugging and reconnecting it does the same)."""
+    so a failure is a warning (unplugging and reconnecting it does the same),
+    unless the drive is gone: then the check that follows cannot work either."""
     try:
         backend.rescan(disk)
     except BeastError as e:
+        if watch is not None and watch.gone():
+            raise
         rep.warn(str(e))
+
+
+class _DeviceWatch:
+    """What _watch_device knows about a drive being written: how far it got
+    (`phase`: "before" anything was written, "writing", "written" = flushed)
+    and the kernel's messages about it (backend.kernel_log, Linux as root)."""
+
+    def __init__(self, backend, disk, action: str):
+        self.backend, self.disk, self.action = backend, disk, action
+        self.phase = "before"
+        self.log = None
+        start = getattr(backend, "kernel_log", None) if disk is not None else None
+        if start is not None:
+            try:
+                self.log = start(disk)
+            except Exception:  # evidence is best effort: never fail because of it
+                self.log = None
+
+    def gone(self) -> bool:
+        """The drive has no medium any more (backend.medium_gone; only Linux can tell)."""
+        check = getattr(self.backend, "medium_gone", None) if self.disk is not None else None
+        try:
+            return bool(check is not None and check(self.disk))
+        except Exception:
+            return False
+
+    def vanished(self, e: BaseException) -> bool:
+        if self.disk is None:
+            return False
+        if getattr(e, "code", None) == "device-vanished":
+            return True
+        if isinstance(e, OSError) and e.errno in MEDIUM_ERRNOS:
+            return True
+        return self.gone()  # EIO, ENOSPC (its size dropped to 0), short reads, "size changed", ...
+
+    def kernel_lines(self) -> list[str]:
+        try:
+            return self.log.lines() if self.log is not None else []
+        except Exception:
+            return []
+
+    def close(self) -> None:
+        if self.log is not None:
+            try:
+                self.log.close()
+            except Exception:
+                pass
+
+
+def vanished_message(where: str, action: str, phase: str) -> str:
+    """The "device-vanished" message: what happened, whose fault, what to do."""
+    when = {
+        "before": "before anything was written",
+        "writing": "while it was being written",
+    }.get(phase, "after it was written, before it could be checked")
+    if action == "update":
+        again = "Update"
+        result = "the update starts over and completes"
+        result += "; nothing was changed" if phase == "before" else "; partition 1 (your files) is not touched"
+    else:
+        again = "Install"
+        result = "the installation starts over and completes"
+        if phase == "before":
+            result += "; nothing was changed"
+    return (f"{where} stopped responding {when}: the system now sees it as empty (no medium). This is the drive, "
+            "not beast-booter: some USB sticks do this when they are warm or after long use. Unplug it, plug it "
+            f"back in and run {again} again; {result}.")
+
+
+KERNEL_LINES_SHOWN = 20
+
+
+@contextmanager
+def _watch_device(backend, disk, action: str, rep: Reporter):
+    """Around everything an install/update does to a drive (`disk` None: an image,
+    nothing to watch). On failure: an error of a drive that stopped responding
+    becomes one DeviceVanished with vanished_message, and the kernel's messages
+    about the drive since the start are shown as warnings (the evidence)."""
+    watch = _DeviceWatch(backend, disk, action)
+    try:
+        yield watch
+    except (Cancelled, KeyboardInterrupt):
+        raise
+    except Exception as e:
+        failure: BaseException = e
+        if isinstance(e, (BeastError, OSError)) and watch.vanished(e):
+            failure = DeviceVanished(vanished_message(disk.id, action, watch.phase))
+        lines = watch.kernel_lines()
+        if lines:
+            rep.warn(f"the kernel's messages about {disk.id} since this {action} started "
+                     f"(last {min(len(lines), KERNEL_LINES_SHOWN)}):")
+            for line in lines[-KERNEL_LINES_SHOWN:]:
+                rep.warn(f"kernel: {line}")
+        if failure is e:
+            raise
+        raise failure from e
+    finally:
+        watch.close()
+        release = getattr(backend, "release", None) if disk is not None else None
+        if release is not None:  # Linux: prepare()'s exclusive hold, if nothing ended it yet
+            release(disk)
 
 
 def _done_line(rep: Reporter, where: str, cfg: DeviceConfig, dist: Dist) -> None:
@@ -555,51 +714,59 @@ def install_device(device: str, opts: InstallOptions, rep: Reporter) -> dict:
         dist = _verify_dist(opts.dist_dir, tmp, rep, 2)
         rep.step(f"Checking that {device} is safe to erase", "check-target", 5)
         disk = backend.get_disk(device)
-        backend.check_safe(disk, allow_fixed=opts.allow_fixed)
-        plan = make_plan(disk.size // SECTOR_SIZE, opts.layout)
-        writes = boot_writes(plan, dist.boot_img, dist.core_img)
-        ntfs = opts.fs == "ntfs"
-        if ntfs:
-            _ntfs_supported(backend.name)
-        cfg, serial = _new_config(opts, label)
-        esp_id = _new_serial()
-        mem = _build_esp(plan, dist, cfg, esp_id)  # fails here, not half-way, if the files do not fit
-        if not opts.yes:
-            _confirm_device(disk, f"ALL DATA on {disk.id} will be destroyed.")
-        prepare_device(backend, disk, rep, 8)
-        with _open_device(backend, disk) as t:
-            rep.step(f"Writing the {opts.layout} partition table to {disk.id}", "partition", 12)
-            _wipe_old_tables(t)
-            write_partition_table(t, plan, opts.fs)
-            if not ntfs:
-                rep.step(f"Creating the {opts.fs} data partition (label {label})", "format-data", 18)
-                _format_data(t, plan, opts.fs, label, serial, _esp_timestamp(dist))
-                _write_esp_and_boot(t, plan, mem, writes, rep, (28, 80, 84), flush_every=DEVICE_FLUSH_EVERY)
-            rep.step("Flushing data to the drive", "flush", 14 if ntfs else 88)
-            t.flush()
-        if ntfs:
-            # NTFS is made by the OS's formatter on the partition, which must exist first.
-            rep.step("Letting the system re-read the drive", "rescan", 15)
-            backend.rescan(disk)
-            rep.step(f"Creating the ntfs data partition (label {label})", "format-data", 18)
-            backend.format_ntfs(disk, DATA_PART_INDEX, label)
-            prepare_device(backend, disk, rep, 26)
-            with _open_device(backend, disk, _boot_area_and_esp(plan)) as t:
-                _drop_cache(backend, t)
-                _check_table_matches(_read_table(t, disk.id), plan)
-                cfg = _with_ntfs_uuid(cfg, t.read(plan.data.offset, SECTOR_SIZE))
-                mem = _build_esp(plan, dist, cfg, esp_id)
-                _write_esp_and_boot(t, plan, mem, writes, rep, (28, 80, 84), flush_every=DEVICE_FLUSH_EVERY)
-                rep.step("Flushing data to the drive", "flush", 88)
-                t.flush()
-        rep.step("Letting the system re-read the drive", "rescan", 92)
-        _rescan(backend, disk, rep)
-        rep.step("Checking what was written", "verify-write", 96)
-        with backend.open_raw(disk, writable=False) as t:
-            _drop_cache(backend, t)
-            d = _verify_install(t, disk.id, cfg, plan)
+        with _watch_device(backend, disk, "install", rep) as watch:
+            d, cfg = _install_on(backend, disk, dist, opts, label, rep, watch)
     _done_line(rep, disk.id, cfg, dist)
     return d
+
+
+def _install_on(backend, disk, dist: Dist, opts: InstallOptions, label: str, rep: Reporter,
+                watch: _DeviceWatch) -> tuple[dict, DeviceConfig]:
+    backend.check_safe(disk, allow_fixed=opts.allow_fixed)
+    plan = make_plan(disk.size // SECTOR_SIZE, opts.layout)
+    writes = boot_writes(plan, dist.boot_img, dist.core_img)
+    ntfs = opts.fs == "ntfs"
+    if ntfs:
+        _ntfs_supported(backend.name)
+    cfg, serial = _new_config(opts, label)
+    esp_id = _new_serial()
+    mem = _build_esp(plan, dist, cfg, esp_id)  # fails here, not half-way, if the files do not fit
+    if not opts.yes:
+        _confirm_device(disk, f"ALL DATA on {disk.id} will be destroyed.")
+    t, _ = _prepare_and_open(backend, disk, rep, 8, None, watch)
+    with t:
+        watch.phase = "writing"
+        rep.step(f"Writing the {opts.layout} partition table to {disk.id}", "partition", 12)
+        _wipe_old_tables(t)
+        write_partition_table(t, plan, opts.fs)
+        if not ntfs:
+            rep.step(f"Creating the {opts.fs} data partition (label {label})", "format-data", 18)
+            _format_data(t, plan, opts.fs, label, serial, _esp_timestamp(dist))
+            _write_esp_and_boot(t, plan, mem, writes, rep, (28, 80, 84), flush_every=DEVICE_FLUSH_EVERY)
+        rep.step("Flushing data to the drive", "flush", 14 if ntfs else 88)
+        t.flush()
+    if ntfs:
+        # NTFS is made by the OS's formatter on the partition, which must exist first.
+        rep.step("Letting the system re-read the drive", "rescan", 15)
+        backend.rescan(disk)
+        rep.step(f"Creating the ntfs data partition (label {label})", "format-data", 18)
+        backend.format_ntfs(disk, DATA_PART_INDEX, label)
+        t, _ = _prepare_and_open(backend, disk, rep, 26, _boot_area_and_esp(plan), watch)
+        with t:
+            _drop_cache(backend, t)
+            _check_table_matches(_read_table(t, disk.id), plan)
+            cfg = _with_ntfs_uuid(cfg, t.read(plan.data.offset, SECTOR_SIZE))
+            mem = _build_esp(plan, dist, cfg, esp_id)
+            _write_esp_and_boot(t, plan, mem, writes, rep, (28, 80, 84), flush_every=DEVICE_FLUSH_EVERY)
+            rep.step("Flushing data to the drive", "flush", 88)
+            t.flush()
+    watch.phase = "written"
+    rep.step("Letting the system re-read the drive", "rescan", 92)
+    _rescan(backend, disk, rep, watch)
+    rep.step("Checking what was written", "verify-write", 96)
+    with backend.open_raw(disk, writable=False) as t:
+        _drop_cache(backend, t)
+        return _verify_install(t, disk.id, cfg, plan), cfg
 
 
 # ---------------------------------------------------------------------------
@@ -617,12 +784,193 @@ class _DriveState:
     keep: dict  # ESP path -> bytes: grub/grubenv and beast-net/firmware/**
 
 
-def _read_drive_state(t, where: str, rep: Reporter) -> _DriveState:
-    table, plan, vol, marker = read_drive_esp(t, where)
+def _read_drive_state(t, where: str, rep: Reporter, records: _UpdateRecords | None = None) -> _DriveState:
+    try:
+        table, plan, vol, marker = read_drive_esp(t, where)
+    except BeastError:
+        st = _interrupted_state(t, where, rep, records)
+        if st is None:
+            raise
+        return st
+    if records is not None:  # the ESP is complete: an update finished since any record was made
+        records.remove(table, plan, t.size)
     cfg_text = read_esp_text(vol, DEVICE_CFG_PATH)
     old_cfg = DeviceConfig.parse(cfg_text) if cfg_text else None
     cfg = _reconcile_config(old_cfg, probe_fs(t, plan.data.offset), marker, table.label, rep)
     return _DriveState(table, plan, marker, cfg, vol.volume_id, read_kept_files(vol, rep))
+
+
+def _interrupted_state(t, where: str, rep: Reporter, records: _UpdateRecords | None) -> _DriveState | None:
+    """The state of a drive whose last update stopped while the ESP was written
+    (our partition layout, an all-zero ESP boot sector: see _write_esp_and_boot),
+    or None if it is not one. With the record the update saved on this computer
+    (and nothing written to the drive since, as far as can be seen), everything
+    is carried over as planned; without, the ESP is rebuilt from partition 1
+    (grubenv and firmware packs are lost, with a warning)."""
+    try:
+        table = _read_table(t, where)
+        plan = make_plan(t.size // SECTOR_SIZE, table.label)
+        _check_table_matches(table, plan)
+        if any(t.read(plan.esp.offset, SECTOR_SIZE)):
+            return None
+    except BeastError:
+        return None
+    probe = probe_fs(t, plan.data.offset)
+    saved = records.load(table, plan, t.size) if records is not None else None
+    if saved is not None:
+        stale = saved.stale_for(t, probe.get("UUID"))
+        if stale:
+            rep.warn(f"the copy of {where}'s settings saved on this computer ({saved.when}) is not used: {stale}")
+            records.remove(table, plan, t.size)
+        else:
+            rep.warn(f"the last update of {where} ({saved.when}) did not finish; finishing it now with the settings "
+                     "and files it saved on this computer")
+            return _DriveState(table, plan, saved.marker, saved.cfg, saved.esp_volume_id, saved.keep)
+    install_id = str(uuid.uuid5(uuid.NAMESPACE_URL, "beast-booter:" + _UpdateRecords.key(table, plan, t.size)))
+    rep.warn(f"the boot partition of {where} is incomplete (an update did not finish); it is rebuilt. Its GRUB "
+             "settings and firmware packs could not be recovered on this computer: add the packs you need again")
+    if fs_name(probe) in FILESYSTEMS and probe.get("UUID"):
+        cfg = _reconcile_config(None, probe, {"install_id": install_id}, table.label, _quiet())
+    else:
+        rep.warn("the filesystem on partition 1 was not recognised, so the new device.cfg has placeholder values; "
+                 "the boot menu then looks for partition 1 itself")
+        cfg = DeviceConfig(install_id=install_id, layout=table.label, data_fs=FILESYSTEMS[0], data_uuid="unknown",
+                           data_uuid_linux="unknown", data_label="", serial=False)
+    return _DriveState(table, plan, {}, cfg, 0, {})
+
+
+BOOT_AREA = DATA_START_LBA * SECTOR_SIZE  # what update writes outside the ESP lies before partition 1
+RECORD_MAX_AGE = 30 * 24 * 3600
+
+
+def _sha(data) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+@dataclass
+class _Record:
+    marker: dict
+    cfg: DeviceConfig
+    esp_volume_id: int
+    keep: dict
+    when: str
+    data_uuid: str
+    boot_area: tuple  # sha256 of the boot area before and after the update's boot code
+
+    def stale_for(self, t, data_uuid: str | None) -> str | None:
+        """Why this record no longer fits the drive (None: it does)."""
+        if data_uuid and self.data_uuid not in (data_uuid, "unknown"):
+            return f"partition 1 changed since (UUID {self.data_uuid} -> {data_uuid})"
+        if _sha(t.read(0, BOOT_AREA)) not in self.boot_area:
+            return "the drive was written since (its boot code changed)"
+        return None
+
+
+class _UpdateRecords:
+    """While update writes a drive, a copy of what it carries over (marker,
+    device.cfg, ESP volume id, grub/grubenv, firmware packs) is kept on this
+    computer, in `directory` (backend.state_dir(); None: not kept), one JSON file
+    per drive, named after what identifies the drive while its ESP cannot be
+    read: the partition table's disk id, layout and geometry, and the disk size.
+    If the write is interrupted, the next update of that drive finds the record
+    (_interrupted_state). A record is removed once the drive's ESP is complete
+    again, and records older than RECORD_MAX_AGE are pruned."""
+
+    VERSION = 2
+
+    def __init__(self, directory: str | None):
+        self.dir = os.path.join(directory, "update-recovery") if directory else None
+
+    @classmethod
+    def for_backend(cls, backend) -> _UpdateRecords:
+        get = getattr(backend, "state_dir", None) if backend is not None else None
+        try:
+            return cls(get() if get is not None else None)
+        except Exception:
+            return cls(None)
+
+    @staticmethod
+    def key(table: PartTable, plan: DiskPlan, disk_size: int) -> str:
+        ident = f"{table.label}|{table.disk_id}|{disk_size}|{plan.esp.start}|{plan.esp.size}|{plan.data.start}"
+        return _sha(ident.encode("utf-8"))[:32]
+
+    def path(self, table: PartTable, plan: DiskPlan, disk_size: int) -> str | None:
+        return os.path.join(self.dir, f"update-{self.key(table, plan, disk_size)}.json") if self.dir else None
+
+    def save(self, st: _DriveState, t, writes, where: str, rep: Reporter) -> None:
+        path = self.path(st.table, st.plan, t.size)
+        if path is None:
+            return
+        assert self.dir is not None
+        boot = bytearray(t.read(0, BOOT_AREA))
+        before = _sha(boot)
+        for offset, data in writes:
+            if offset + len(data) <= BOOT_AREA:
+                boot[offset:offset + len(data)] = data
+        rec = {
+            "v": self.VERSION, "where": where, "saved": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "key": self.key(st.table, st.plan, t.size), "data_uuid": st.cfg.data_uuid_linux,
+            "boot_area": [before, _sha(boot)],
+            "marker": st.marker, "device_cfg": st.cfg.render(), "esp_volume_id": st.esp_volume_id,
+            "keep": {k: base64.b64encode(v).decode("ascii") for k, v in st.keep.items()},
+        }
+        tmp = path + ".tmp"
+        try:
+            os.makedirs(self.dir, mode=0o700, exist_ok=True)
+            self._prune()
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(rec, f)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, path)
+        except OSError as e:
+            for leftover in (tmp, path):  # an older record of this drive must not be used later either
+                try:
+                    os.unlink(leftover)
+                except OSError:
+                    pass
+            rep.warn(f"could not keep a copy of the drive's settings on this computer ({e.strerror or e}); "
+                     "if this update is interrupted, the next one cannot carry the firmware packs over")
+
+    def _prune(self) -> None:
+        assert self.dir is not None
+        cutoff = time.time() - RECORD_MAX_AGE
+        for name in os.listdir(self.dir):
+            p = os.path.join(self.dir, name)
+            try:
+                if name.startswith("update-") and os.stat(p).st_mtime < cutoff:
+                    os.unlink(p)
+            except OSError:
+                pass
+
+    def load(self, table: PartTable, plan: DiskPlan, disk_size: int) -> _Record | None:
+        path = self.path(table, plan, disk_size)
+        if path is None or not os.path.isfile(path):
+            return None
+        try:
+            with open(path, encoding="utf-8") as f:
+                rec = json.load(f)
+            if rec.get("v") != self.VERSION or rec.get("key") != self.key(table, plan, disk_size):
+                return None
+            if os.stat(path).st_mtime < time.time() - RECORD_MAX_AGE:
+                return None
+            return _Record(
+                marker=dict(rec.get("marker") or {}), cfg=DeviceConfig.parse(rec["device_cfg"]),
+                esp_volume_id=int(rec.get("esp_volume_id") or 0),
+                keep={k: base64.b64decode(v) for k, v in rec.get("keep", {}).items()},
+                when=str(rec.get("saved", "?")), data_uuid=str(rec.get("data_uuid") or ""),
+                boot_area=tuple(rec.get("boot_area") or ()),
+            )
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, BeastError):
+            return None
+
+    def remove(self, table: PartTable, plan: DiskPlan, disk_size: int) -> None:
+        path = self.path(table, plan, disk_size)
+        if path is not None:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
 
 
 def _warn_firmware_tag(keep: dict[str, bytes], dist: Dist, rep: Reporter) -> None:
@@ -657,54 +1005,85 @@ def update(image: str | None, device: str | None, dist_dir: str, *, yes: bool,
         if device is not None:
             backend = get_backend()
             disk = backend.get_disk(device)
-            backend.check_safe(disk, allow_fixed=allow_fixed)
             where = disk.id
-            reader = backend.open_raw(disk, writable=False)
         else:
             assert image is not None
             _existing_image(image)
-            reader = ImageTarget(image, writable=False)
-        with reader as t:
-            st = _read_drive_state(t, where, rep)
-        plan = st.plan
-        writes = boot_writes(plan, dist.boot_img, dist.core_img)
-        mem = _build_esp(plan, dist, st.cfg, st.esp_volume_id or _new_serial(), st.keep)  # ESP volume id kept
-        old_version = st.marker.get("version", "unknown")
-        rep.step(f"updating {where}: {old_version} -> {dist.version} ({plan.layout}, keeps partition 1)")
-        packs = sorted(k for k in st.keep if k.lower().endswith(".cpio"))
-        if packs:
-            rep.note(f"keeping {len(packs)} installed firmware pack(s) and grub/grubenv")
-            _warn_firmware_tag(st.keep, dist, rep)
-        if disk is not None and not yes:
-            _confirm_device(disk, "The boot files will be replaced; partition 1 (your files) is not touched.")
-        if disk is not None:
-            prepare_device(backend, disk, rep, 18)
-            writer = _open_device(backend, disk, _boot_area_and_esp(plan))
-        else:
-            writer = GuardedTarget(ImageTarget(image, writable=True), _boot_area_and_esp(plan))
-        with writer as t:
-            _drop_cache(backend, t)
-            if _read_table(t, where) != st.table:
-                raise BeastError(f"the partition table of {where} changed while it was being read; run update again")
-            _write_esp_and_boot(t, plan, mem, writes, rep, (25, 80, 84),
-                                flush_every=DEVICE_FLUSH_EVERY if disk is not None else None)
-            rep.step("Flushing data to the drive" if disk is not None else "Flushing the image file", "flush", 88)
-            t.flush()
-        if disk is not None:
-            rep.step("Letting the system re-read the drive", "rescan", 92)
-            _rescan(backend, disk, rep)
-        rep.step("Checking what was written", "verify-write", 96)
-        with (backend.open_raw(disk, writable=False) if disk is not None else ImageTarget(image, writable=False)) as t:
-            _drop_cache(backend, t)
-            d = _read_info(t, where)
-            vol = _open_esp(t, plan.esp.offset, where)
-            marker = _read_marker(vol, where)
-            if (d["install_id"], marker.get("version")) != (st.cfg.install_id, dist.version):
-                raise BeastError(f"{where}: the ESP read back is not the one just written", code="verify-failed")
-            for path, data in st.keep.items():
-                if not vol.exists(path) or vol.read_file(path) != data:
-                    raise BeastError(f"{where}: {path} was not carried over by the update", code="verify-failed")
+        with _watch_device(backend, disk, "update", rep) as watch:
+            d = _update_on(backend, disk, image, where, dist, yes=yes, allow_fixed=allow_fixed, rep=rep,
+                           watch=watch)
     rep.step(f"done: {where} updated to beast-booter {dist.version}")
+    return d
+
+
+def _quiet() -> Reporter:
+    """A Reporter that says nothing (a second read of what was reported already)."""
+    return Reporter(quiet=True, stream=io.StringIO())
+
+
+def _update_on(backend, disk, image: str | None, where: str, dist: Dist, *, yes: bool, allow_fixed: bool,
+               rep: Reporter, watch: _DeviceWatch) -> dict:
+    records = _UpdateRecords.for_backend(backend)
+    if disk is not None:
+        backend.check_safe(disk, allow_fixed=allow_fixed)
+        reader = backend.open_raw(disk, writable=False)
+    else:
+        assert image is not None
+        reader = ImageTarget(image, writable=False)
+    with reader as t:
+        _drop_cache(backend, t)  # nothing cached from before the drive was last written is used
+        st = _read_drive_state(t, where, rep, records)
+    plan = st.plan
+    writes = boot_writes(plan, dist.boot_img, dist.core_img)
+    mem = _build_esp(plan, dist, st.cfg, st.esp_volume_id or _new_serial(), st.keep)  # ESP volume id kept
+    old_version = st.marker.get("version", "unknown")
+    rep.step(f"updating {where}: {old_version} -> {dist.version} ({plan.layout}, keeps partition 1)")
+    packs = sorted(k for k in st.keep if k.lower().endswith(".cpio"))
+    if packs:
+        rep.note(f"keeping {len(packs)} installed firmware pack(s) and grub/grubenv")
+        _warn_firmware_tag(st.keep, dist, rep)
+    if disk is not None and not yes:
+        _confirm_device(disk, "The boot files will be replaced; partition 1 (your files) is not touched.")
+    def reread(t) -> _DriveState:
+        # Read the drive again now that nothing has it mounted, past the page cache:
+        # what is written is built from the drive as it is now.
+        _drop_cache(backend, t)
+        return _read_drive_state(t, where, _quiet(), records)
+
+    if disk is not None:
+        writer, fresh = _prepare_and_open(backend, disk, rep, 18, _boot_area_and_esp(plan), watch, check=reread)
+    else:
+        writer = GuardedTarget(ImageTarget(image, writable=True), _boot_area_and_esp(plan))
+        fresh = reread(writer)
+    with writer as t:
+        if (fresh.table, fresh.plan) != (st.table, st.plan):
+            raise BeastError(f"the partition table of {where} changed while it was being read; run update again")
+        if fresh != st:
+            rep.note("the boot partition changed since it was first read; using what is on it now")
+            st = fresh
+            mem = _build_esp(plan, dist, st.cfg, st.esp_volume_id or _new_serial(), st.keep)
+        records.save(st, t, writes, where, rep)
+        watch.phase = "writing"
+        _write_esp_and_boot(t, plan, mem, writes, rep, (25, 80, 84),
+                            flush_every=DEVICE_FLUSH_EVERY if disk is not None else None)
+        rep.step("Flushing data to the drive" if disk is not None else "Flushing the image file", "flush", 88)
+        t.flush()
+        watch.phase = "written"
+    if disk is not None:
+        rep.step("Letting the system re-read the drive", "rescan", 92)
+        _rescan(backend, disk, rep, watch)
+    rep.step("Checking what was written", "verify-write", 96)
+    with (backend.open_raw(disk, writable=False) if disk is not None else ImageTarget(image, writable=False)) as t:
+        _drop_cache(backend, t)
+        d = _read_info(t, where)
+        vol = _open_esp(t, plan.esp.offset, where)
+        marker = _read_marker(vol, where)
+        if (d["install_id"], marker.get("version")) != (st.cfg.install_id, dist.version):
+            raise BeastError(f"{where}: the ESP read back is not the one just written", code="verify-failed")
+        for path, data in st.keep.items():
+            if not vol.exists(path) or vol.read_file(path) != data:
+                raise BeastError(f"{where}: {path} was not carried over by the update", code="verify-failed")
+    records.remove(st.table, plan, d["disk_sectors"] * SECTOR_SIZE)
     return d
 
 
@@ -764,6 +1143,7 @@ def _read_info(t, where: str) -> dict:
         "layout": table.label,
         "layout_version": marker_layout_version(marker),
         "version": version_cfg.get("bb_version") or marker.get("version"),
+        "build_id": version_cfg.get("bb_build_id") or None,
         "install_id": cfg.get("bb_install_id") or marker.get("install_id"),
         "disk_sectors": t.size // SECTOR_SIZE,
         "bios_core_lba": read_core_lba(t.read(0, SECTOR_SIZE)),
@@ -792,6 +1172,7 @@ def format_info(d: dict, where: str) -> str:
     return "\n".join([
         f"beast-booter drive: {where}",
         f"  version:     {d['version']}",
+        f"  build:       {d.get('build_id') or 'unknown'}",
         f"  install id:  {d['install_id']}",
         f"  layout:      {d['layout']} (beast-booter layout version {d.get('layout_version')})",
         f"  disk:        {d['disk_sectors']} sectors ({human_size(d['disk_sectors'] * SECTOR_SIZE)})",
@@ -831,8 +1212,13 @@ def disk_problem(disk) -> str | None:
     return None
 
 
-def list_devices(include_all: bool = False) -> dict:
-    """The `list-devices --json` object (interfaces.py)."""
+def list_devices(include_all: bool = False, check_installed: bool = False) -> dict:
+    """The `list-devices --json` object (interfaces.py). check_installed: also
+    report which beast-booter each drive has (installed.py; no admin rights
+    needed, may mount a boot partition read-only for a moment)."""
+    from . import __version__
+    from .installed import assess
+
     backend = get_backend()
     disks = backend.list_disks(include_fixed=include_all)
     rows = []
@@ -843,6 +1229,14 @@ def list_devices(include_all: bool = False) -> dict:
         row["partitions"] = list(row["partitions"])
         row["eligible"] = reason is None
         row["reason"] = reason
+        if check_installed:
+            probe = backend.probe_installed(disk)
+            row["installed"] = None
+            if probe is not None:
+                f = assess(probe.installed, __version__)
+                row["installed"] = {"version": probe.installed.version if probe.installed else None,
+                                    "build_id": probe.installed.build_id if probe.installed else None,
+                                    "state": f.state, "summary": f.summary, "note": probe.note}
         rows.append(row)
     return {"v": 1, "platform": backend.name, "elevated": bool(backend.is_elevated()), "disks": rows}
 
@@ -855,6 +1249,8 @@ def format_devices(d: dict, include_all: bool) -> str:
     rows = [("DEVICE", "SIZE", "BUS", "TYPE", "MODEL", "STATUS")]
     for r in disks:
         status = "eligible" if r["eligible"] else f"not eligible: {r['reason']}"
+        if r.get("installed"):
+            status += f"; {r['installed']['summary']}"
         rows.append((r["id"], human_size(r["size"]), r["bus"], "removable" if r["removable"] else "fixed",
                      r["model"] or "-", status))
     widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]) - 1)]

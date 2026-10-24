@@ -97,6 +97,7 @@ set bb_serial=1
 | `bb_gfx=0` | no graphics: the plain text menu, exactly as on a console without graphics |
 | `bb_gfxmode=WxH` | screen mode(s) for the graphical menu, a GRUB `gfxmode` list such as `1280x720` or `1024x768,auto`. Default: `1920x1080,1280x720,1024x768,auto` (the first mode the firmware offers) |
 | `bb_theme=/path/theme.txt` | use your own GRUB theme file from the data partition instead of beast-booter's (see [Changing the look](#changing-the-look)) |
+| `bb_fs_addon=0` | do not use the [exFAT add-on](ISO_SUPPORT.md#the-exfat-add-on): casper and live-boot ISOs on an exFAT drive are started exactly as on FAT32 (with the ISO's own `loopback.cfg`). Default: on |
 | `bb_beastnet_script=/path/plan.json` | start the network helper in script mode with this JSON plan (a path on the data partition) instead of asking questions; see [BEASTNET.md](BEASTNET.md) §5 |
 
 The same `bb_*` settings may also be put in `grub/beast/device.cfg` on the
@@ -140,6 +141,14 @@ BEAST: error no-recipe /mystery.iso
 - `boot <iso path> recipe=<id>` is printed when an ISO is chosen, after
   detection. The id is one of the recipe ids in
   [ISO_SUPPORT.md](ISO_SUPPORT.md), or `none`.
+- `fsmod exfat <module path>` follows `boot` when the
+  [exFAT add-on](ISO_SUPPORT.md#the-exfat-add-on) is used; the module path is
+  inside the ISO's squashfs, for example
+  `(bbsq)/usr/lib/modules/7.0.0-30-generic/kernel/fs/exfat/exfat.ko.zst`.
+  `fsmod none <reason>` says why it is not used: `disabled` (`bb_fs_addon=0`),
+  `hook-missing`, `no-squashfs`, `squashfs-unreadable <squashfs>` (for example
+  zstd-compressed) or `no-exfat-module <squashfs>`. Nothing is printed when the
+  data partition is not exFAT or the ISO is not a casper / live-boot ISO.
 - `error <code> <text>` codes: `no-data-partition`, `iso-not-found`,
   `loopback-failed`, `no-recipe`, `unsupported-windows`, `sb-verify-failed`,
   `boot-failed`. The text after the code is for people, not parsers. Under
@@ -186,7 +195,8 @@ graphical terminal and theme (`bb_gfx_init` in `lib.cfg`) after reading the
 user configuration and after a `bb_autoboot` attempt, just before the menu
 is built:
 
-- dark background with a violet glow, the beast-booter logo, name and
+- dark grey background with a soft red glow (colours:
+  [assets/BRAND.md](assets/BRAND.md)), the beast-booter logo, name and
   version at the top, and badges for the firmware mode and Secure Boot
   state (`UEFI` + `Secure Boot on` / `off`, or `Legacy BIOS`). A theme file
   cannot show variables, so there is one theme per badge set

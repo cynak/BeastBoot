@@ -226,3 +226,58 @@ that a program keeps busy fails with error code `busy`, naming the mountpoint.
 Still refused, mounted or not: a disk holding the running system, /boot or
 the live-boot medium, active swap, device-mapper/LVM/LUKS/RAID holders, a
 loop device backed by a file on it, and the drive beast-booter runs from.
+
+## 7. Downloading from official sources
+
+### What beast-net sends
+
+Every request is a plain HTTP/1.1 `GET` with:
+
+```
+User-Agent: beast-net/<version> (beast-booter)
+Accept: */*
+Accept-Encoding: identity
+Connection: close
+```
+
+plus `Range` / `If-Range` when a download resumes. beast-net always says who
+it is; it never pretends to be a browser or another tool. Redirects are
+followed (at most 10, never from HTTPS back to plain HTTP), certificates are
+checked against the CA bundle in the helper (Ubuntu's `ca-certificates`), and
+checksum files in the usual formats are understood: `SHA256SUMS` (Ubuntu,
+Debian) and the BSD style `SHA256 (file) = ...` (Fedora `CHECKSUM`).
+
+### Checked sources
+
+[tests/e2e/live_sources.json](../tests/e2e/live_sources.json) lists official
+links: Ubuntu (releases.ubuntu.com and cdimage.ubuntu.com), Debian and Fedora
+(both redirect to a mirror), and Microsoft's Evaluation Center links for
+Windows 11 Enterprise and Windows Server 2025 (`go.microsoft.com/fwlink`,
+redirecting to `software-static.download.prss.microsoft.com`). Two checks use
+it; both need the internet and are not part of `make e2e`:
+
+| Check | Command | What it proves |
+|---|---|---|
+| quick, on this computer | `make net-sources` (`scripts/check_iso_sources.py`) | beast-net's own downloader code, headers and CA bundle (taken from the built initramfs) get a `200` from every link after its redirects, a `206` for a ranged request (resume works), bytes that start like an ISO 9660 image, and the ISO's SHA-256 from the vendor's checksum file. Seconds. |
+| full, in the QEMU lab | `make e2e-live` (`tests/e2e/test_e2e_beastnet_live.py`) | the helper boots in QEMU, gets an address from QEMU's user networking (which reaches the internet through this computer), downloads the whole ISO onto a 16 GiB exFAT drive, checks it, hands it to the menu, and the menu opens it and detects its recipe. Gigabytes; minutes per ISO. |
+
+When a server refuses beast-net (`401`, `403`, `406`, `429`), the quick check
+repeats the request with other `User-Agent` values and says whether the
+refusal is about the header or not, so a block shows up as exactly that
+instead of a vague download error. Check any other link, for example a
+personal Windows 11 link from microsoft.com/software-download/windows11 (valid
+for 24 hours), with:
+
+```sh
+make net-sources ARGS="--url 'https://...'"                    # add --sha256-url or --sha256 if there is one
+BB_LIVE_URL='https://...' BB_LIVE_RECIPE=windows make e2e-live    # the full download in the lab
+```
+
+`make e2e-live` downloads the entries marked `"vm": true` (Ubuntu Desktop and
+Windows 11 Enterprise); `BB_LIVE_SOURCE=id,id` picks others. The links name
+exact releases, so they go stale: a `gone (404)` result means the link in
+the catalog needs updating, not that beast-net is broken.
+
+Windows ISOs download fine but do not boot from beast-booter 0.1 (the menu
+says so, `unsupported-windows`); they are larger than 4 GiB, so the drive
+needs exFAT or NTFS for them.

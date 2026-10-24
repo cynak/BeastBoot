@@ -10,6 +10,7 @@ import socket
 import ssl
 import subprocess
 import threading
+import time
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -67,6 +68,8 @@ class Site:
     etags: dict[str, str] = field(default_factory=dict)  # override ETag
     fake_length: dict[str, int] = field(default_factory=dict)  # headers only, no body
     status: dict[str, int] = field(default_factory=dict)
+    refuse_agent: dict[str, str] = field(default_factory=dict)  # path -> User-Agent prefix answered 403
+    stall: dict[str, float] = field(default_factory=dict)  # path -> seconds to hang after the headers
     requests: list[tuple[str, dict[str, str]]] = field(default_factory=list)
 
     def add(self, path: str, data: bytes, **headers: str) -> str:
@@ -88,6 +91,18 @@ class _Handler(BaseHTTPRequestHandler):
         site.requests.append((path, {k: v for k, v in self.headers.items()}))
         if path in site.status:
             self._simple(site.status[path], b"nope")
+            return
+        if path in site.stall:
+            self.send_response(200)
+            self.send_header("Content-Length", str(10 ** 6))
+            self.end_headers()
+            self.wfile.flush()
+            time.sleep(site.stall[path])
+            self.close_connection = True
+            return
+        prefix = site.refuse_agent.get(path)
+        if prefix is not None and self.headers.get("User-Agent", "").startswith(prefix):
+            self._simple(403, b"not for you")
             return
         if path in site.redirects:
             self.send_response(302)

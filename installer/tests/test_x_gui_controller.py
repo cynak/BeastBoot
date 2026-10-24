@@ -139,7 +139,8 @@ def make(dist_loc, backend, tmp_path):
         kw.setdefault("launcher", launcher)
         kw.setdefault("python", sys.executable)
         kw.setdefault("tmp_root", str(tmp_path))
-        return Controller(spawn=ctl.inline_spawn, **kw)
+        kw.setdefault("spawn", ctl.inline_spawn)
+        return Controller(**kw)
 
     return _make
 
@@ -1048,3 +1049,294 @@ def test_verify_dist_ok_and_failed(make, dist_copy):
     c.poll()
     assert not c.verify_result.ok and "sha256 mismatch" in c.verify_result.message
     assert c.image_blocker() == "The boot files failed verification."
+
+
+# ---------------------------------------------------------------------------
+# which beast-booter a drive has: probe_installed + installed.assess
+# ---------------------------------------------------------------------------
+
+from beastbooter.installed import InstalledBoot, ProbeResult  # noqa: E402
+
+
+class ProbingBackend(FakeBackend):
+    """found: disk id -> what probe_installed returns (an exception is raised)."""
+
+    def __init__(self, found=None, **kw):
+        super().__init__(**kw)
+        self.found = dict(found or {})
+        self.probed: list[str] = []
+        self.on_probe = None  # called with each disk, before it is checked
+
+    def probe_installed(self, disk):
+        if self.on_probe:
+            self.on_probe(disk)
+        self.probed.append(disk.id)
+        r = self.found.get(disk.id)
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+
+def boot(version="0.0.9", build="0000demo0000", layout=2) -> ProbeResult:
+    return ProbeResult(InstalledBoot(version, build, layout, how="test"))
+
+
+def listed(c: Controller) -> dict:
+    c.refresh_drives()
+    c.poll()  # the listing; it starts the check
+    c.poll()  # the check
+    return {r.id: r for r in c.rows}
+
+
+@pytest.mark.parametrize("found, state, summary", [
+    (boot("0.0.9"), "outdated", "beast-booter 0.0.9 · update available (0.1.0)"),
+    (boot("0.1.0"), "current", "beast-booter 0.1.0 · up to date"),
+    (boot("0.2.0"), "newer", "beast-booter 0.2.0 · newer than this app"),
+    (boot("0.0.5", layout=1), "reinstall", "beast-booter 0.0.5 · needs a reinstall"),
+    (boot(""), "outdated", "beast-booter (unknown version) · update available (0.1.0)"),
+    (ProbeResult(None, "no rights"), "unknown", "beast-booter drive"),
+])
+def test_listed_drives_get_their_freshness(make, found, state, summary):
+    b = ProbingBackend({STICK2.id: found})
+    rows = listed(make(backend_factory=lambda: b))
+    f = rows[STICK2.id].freshness
+    assert f is not None and f.state == state and f.summary == summary
+    assert rows[STICK.id].freshness is None  # not a beast-booter drive (probe returned None)
+
+
+def test_only_usable_drives_are_probed(make):
+    b = ProbingBackend()
+    c = make(backend_factory=lambda: b)
+    c.set_show_all(True)
+    c.poll(), c.poll()
+    assert sorted(b.probed) == sorted(r.id for r in c.rows if r.eligible)
+    assert not {SYSTEM.id, SDCARD_RO.id, SATA.id, TINY.id, EMPTY_READER.id} & set(b.probed)
+
+
+def test_no_badges_without_probe_or_boot_files(make, backend, tmp_path):
+    rows = listed(make())  # FakeBackend has no probe_installed: fine, nothing to show
+    assert all(r.freshness is None for r in rows.values())
+    b = ProbingBackend({STICK.id: boot()})
+    c = make(backend_factory=lambda: b, dist=distinfo.DistLocation(tmp_path / "nothing", "--dist"))
+    assert all(r.freshness is None for r in listed(c).values())  # no version to compare with
+    assert b.probed == [] and c.update_notice is None
+
+
+def test_a_probe_that_raises_gives_no_badge(make):
+    b = ProbingBackend({STICK.id: OSError("udisks went away"), STICK2.id: boot()})
+    rows = listed(make(backend_factory=lambda: b))
+    assert rows[STICK.id].freshness is None and rows[STICK2.id].freshness.state == "outdated"
+
+
+def test_notice_and_update_become_the_suggestion(make):
+    b = ProbingBackend({STICK2.id: boot("0.0.9"), STICK.id: boot("0.1.0")})
+    c = make(backend_factory=lambda: b)
+    listed(c)
+    n = c.update_notice
+    assert n.drive_id == STICK2.id and n.title == "Boot files update available"
+    assert n.text == ("Kingston DataTraveler has beast-booter 0.0.9; this app has 0.1.0. "
+                      "Select it and click Update boot files.")
+    assert not c.suggest_update  # nothing selected yet
+    c.select_drive(STICK.id)
+    assert not c.suggest_update  # up to date
+    c.select_drive(STICK2.id)
+    assert c.suggest_update and c.update_notice == n  # same notice: the list does not move
+    assert "Update boot files" in c.selected_row.freshness.advice
+    upd = c.request_update()
+    assert "beast-booter 0.1.0 (it has 0.0.9 now)." in upd.details[0]
+    c.cancel_confirm()
+    inst = c.request_install()
+    assert any("already has beast-booter 0.0.9" in d and "Update boot files" in d for d in inst.details)
+    c.cancel_confirm()
+    c.other_job_running = lambda: True
+    assert not c.suggest_update  # busy: Update can't be clicked anyway
+
+
+def test_notice_names_several_drives(make):
+    b = ProbingBackend({STICK.id: boot("0.1.0", build="old"), STICK2.id: boot("0.0.8")})
+    c = make(backend_factory=lambda: b)
+    c.dist_summary = replace(c.dist_summary, build_id="new")
+    listed(c)
+    assert c.rows[0].freshness.state == "other-build"
+    n = c.update_notice
+    assert n.drive_id is None and n.title == "Boot files updates available"
+    assert "SanDisk Ultra (0.1.0, a different build)" in n.text and "Kingston DataTraveler (0.0.8)" in n.text
+    assert n.text.endswith("Select one and click Update boot files.")
+
+
+def test_newer_and_reinstall_are_not_update_suggestions(make):
+    b = ProbingBackend({STICK.id: boot("0.2.0"), STICK2.id: boot("0.0.1", layout=1)})
+    c = make(backend_factory=lambda: b)
+    listed(c)
+    assert c.update_notice is None
+    c.select_drive(STICK.id)
+    assert not c.suggest_update
+    assert "this downgrades it" in " ".join(c.request_update().details)
+    c.cancel_confirm()
+    assert not any("already has" in d for d in ready(c, STICK2.id).request_install().details)  # update can't help
+
+
+def test_no_probing_while_a_job_runs_then_again_after_it(make):
+    b = ProbingBackend({STICK.id: boot("0.0.9")})
+    c = ready(make(backend_factory=lambda: b))
+    c.poll()
+    assert c.selected_row.freshness.state == "outdated" and STICK.id in b.probed
+    b.probed.clear()
+    p = run_to_running(c, b)
+    c.refresh_drives()  # a listing while writing: no probing (the CLI owns the drive)
+    for _ in range(3):
+        c.poll()
+    assert b.probed == []
+    b.found[STICK.id] = boot("0.1.0")
+    p.event(event="done", ok=True, info={})
+    p.rc = 0
+    c.poll()
+    assert c.phase is Phase.DONE and b.probed == []
+    assert c.selected_row.freshness is None  # what it has now is not known yet
+    c.dismiss()  # lists and checks again
+    c.poll(), c.poll()
+    assert STICK.id in b.probed and c.selected_row.freshness.state == "current"
+    assert c.update_notice is None
+
+
+def test_probing_waits_for_a_firmware_job(make):
+    b = ProbingBackend({STICK.id: boot("0.0.9")})
+    c = make(backend_factory=lambda: b)
+    running = [True]
+    c.other_job_running = lambda: running[0]
+    listed(c)
+    assert b.probed == [] and c.rows[0].freshness is None
+    running[0] = False
+    c.poll()  # starts the deferred check
+    c.poll()
+    assert c.rows[0].freshness.state == "outdated"
+
+
+def test_stale_check_is_ignored_and_old_badges_stay_until_the_new_one(make):
+    tasks = []
+    b = ProbingBackend({STICK.id: boot("0.0.9")})
+    c = make(backend_factory=lambda: b, spawn=tasks.append)
+
+    def run_all():
+        while tasks:
+            tasks.pop(0).run()
+        c.poll()
+
+    c.refresh_drives()
+    run_all()  # listed; the check is queued
+    run_all()  # checked
+    assert c.rows[0].freshness.state == "outdated"
+    version = c.rows_version
+    c.refresh_drives()
+    b.found[STICK.id] = boot("0.1.0")
+    run_all()  # listed again: the old badge is kept while the new check runs
+    assert c.rows[0].freshness.state == "outdated" and c.probing
+    c.refresh_drives()  # and once more, while that check is still queued
+    first_check = tasks.pop(0)
+    b.found[STICK.id] = None  # the drive was reformatted meanwhile
+    first_check.run()
+    run_all()  # the first check's result is stale and ignored; a new check starts
+    run_all()
+    assert c.rows[0].freshness is None and not c.probing and c.rows_version > version
+
+
+def test_unchanged_check_does_not_rebuild_the_list(make):
+    b = ProbingBackend()
+    c = make(backend_factory=lambda: b)
+    c.refresh_drives()
+    c.poll()
+    version = c.rows_version
+    c.poll()  # the check found nothing: the rows (and the window's cards) stay
+    assert c.rows_version == version and b.probed
+
+
+def queued(b, **kw):
+    """A controller whose background work runs only when the test says so."""
+    tasks = []
+    return tasks, dict(backend_factory=lambda: b, spawn=tasks.append, **kw)
+
+
+def listed_check_queued(c: Controller, tasks: list) -> None:
+    c.refresh_drives()
+    tasks.pop(0).run()
+    c.poll()  # listed; the drive check is queued, not run
+    assert c.probe_busy() and len(tasks) == 1
+
+
+def test_a_job_requested_during_a_check_waits_for_it(make):
+    b = ProbingBackend({STICK.id: boot()})
+    tasks, kw = queued(b)
+    c = make(**kw)
+    listed_check_queued(c, tasks)
+    assert c.select_drive(STICK.id) is None
+    c.request_install()
+    c.confirm(True)  # does not block: the job waits
+    assert c.phase is Phase.RUNNING and c.waiting_for_probe and c.can_cancel and not b.procs
+    c.poll()
+    assert c.waiting_for_probe and not b.procs
+    tasks.pop(0).run()  # the check ends: it was told to stop before its first drive
+    assert b.probed == []
+    c.poll()
+    assert not c.waiting_for_probe and len(b.procs) == 1 and c.phase is Phase.RUNNING
+    assert any("waiting for a drive check" in line.text for line in c.log)
+
+
+def test_a_job_request_stops_the_check_before_its_next_drive(make):
+    b = ProbingBackend({STICK.id: boot(), STICK2.id: boot()})
+    tasks, kw = queued(b)
+    c = make(**kw)
+    listed_check_queued(c, tasks)
+    b.on_probe = lambda d: c.hold_probes()  # a job is requested while the first drive is checked
+    tasks.pop(0).run()
+    assert len(b.probed) == 1
+    c.poll()  # what it found is kept; the rest is checked again later
+    assert sum(r.freshness is not None for r in c.rows) == 1 and c.checking
+
+
+def test_a_check_that_does_not_end_refuses_the_job(make):
+    now = [0.0]
+    b = ProbingBackend()
+    tasks, kw = queued(b, clock=lambda: now[0])
+    c = make(**kw)
+    listed_check_queued(c, tasks)
+    c.select_drive(STICK.id)
+    c.request_update()
+    c.confirm()
+    now[0] = ctl.PROBE_LIMIT - 1
+    c.poll()
+    assert c.phase is Phase.RUNNING
+    now[0] = ctl.PROBE_LIMIT + 1
+    c.poll()
+    o = c.outcome
+    assert c.phase is Phase.FAILED and o.code == "probe-busy" and not b.procs
+    assert o.message == ctl.PROBE_BUSY and o.target_state == "Nothing was written."
+
+
+def test_a_waiting_job_can_be_cancelled(make):
+    b = ProbingBackend()
+    tasks, kw = queued(b)
+    c = make(**kw)
+    listed_check_queued(c, tasks)
+    c.select_drive(STICK.id)
+    c.request_install()
+    c.confirm(True)
+    c.cancel()
+    c.poll()
+    assert c.phase is Phase.FAILED and c.outcome.cancelled and c.outcome.code == "cancelled" and not b.procs
+
+
+class StoppableBackend(ProbingBackend):
+    def probe_installed(self, disk, *, should_stop=None):
+        self.stops = getattr(self, "stops", []) + [should_stop]
+        return super().probe_installed(disk)
+
+
+def test_the_probe_gets_the_stop_flag_when_it_takes_one(make):
+    b = StoppableBackend({STICK.id: boot()})
+    tasks, kw = queued(b)
+    c = make(**kw)
+    listed_check_queued(c, tasks)
+    b.on_probe = lambda d: c.hold_probes()
+    tasks.pop(0).run()
+    assert len(b.stops) == 1 and b.stops[0]() is True  # asked again before mounting: stop
+    assert ctl._takes_should_stop(b.probe_installed) and not ctl._takes_should_stop(ProbingBackend().probe_installed)

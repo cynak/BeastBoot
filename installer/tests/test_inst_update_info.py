@@ -155,7 +155,7 @@ def test_device_cfg_roundtrip_escaping():
 def test_info_json_schema(installed, layout, fs):
     img = installed(layout, fs)
     j = info_json(img)
-    assert list(j) == ["layout", "layout_version", "version", "install_id", "disk_sectors", "bios_core_lba", "data", "esp"]
+    assert list(j) == ["layout", "layout_version", "version", "build_id", "install_id", "disk_sectors", "bios_core_lba", "data", "esp"]
     assert list(j["data"]) == ["index", "start_lba", "size_lba", "fs", "uuid", "label"]
     assert list(j["esp"]) == ["index", "start_lba", "size_lba"]
     plan = make_plan(j["disk_sectors"], layout)

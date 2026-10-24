@@ -1,0 +1,9 @@
+# Environment for scripts/screenshots/app_screens.py (used by scripts/make_screenshots.sh):
+# Tk, a virtual X display and fonts, so the desktop app can be photographed
+# without opening windows on anyone's desktop. Nothing from here ships.
+FROM ubuntu:26.04
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      python3 python3-tk python3-pil xvfb xauth \
+      fonts-ubuntu fonts-noto-core fonts-dejavu-core \
+ && rm -rf /var/lib/apt/lists/*

@@ -177,6 +177,26 @@ revoked.
 beast-booter never works around a failed check. The menu explains what failed
 and what you can do (enroll that distribution's key, or turn Secure Boot off).
 
+**Ubuntu on an exFAT drive with Secure Boot on.** For Ubuntu desktop (and
+other casper or Debian live) ISOs on an exFAT drive the menu adds two files to
+the ISO's initramfs (the
+[exFAT add-on](ISO_SUPPORT.md#the-exfat-add-on)): the ISO's own `exfat`
+kernel module and a small script that loads it. This does not touch the chain
+of trust. shim still verifies the ISO's kernel; the initramfs is not covered
+by Secure Boot signatures in any GRUB boot (the same is true when Ubuntu's own
+`loopback.cfg` loads it); and the kernel, locked down by Secure Boot, still
+checks the module's signature. It accepts the module because the ISO's kernel
+build signed it. beast-booter ships no kernel modules and signs none: the
+module is exactly what the distribution built for that kernel. Tested with
+Ubuntu 26.04.1 under OVMF with Secure Boot on: lockdown `integrity`, module
+loaded, not tainted.
+
+Note that a locked-down Ubuntu kernel trusts more than its own build key: it
+also accepts kernels and modules signed by keys enrolled in MOK, and that
+includes the beast-booter key you enrolled. This is how DKMS modules work
+under Secure Boot, and it is one more reason to check the key before you
+enroll it (§3) and to remove it when you no longer need it (§4).
+
 ## 7. SBAT and revocation, in plain words
 
 Signatures prove *who* made a boot program, not that it is free of known
@@ -195,7 +215,7 @@ grub,5,Free Software Foundation,grub,2.14,https://www.gnu.org/software/grub/
 grub.ubuntu,2,Ubuntu,grub2,2.14-2ubuntu1,https://www.ubuntu.com/
 grub.ubuntu26,1,Ubuntu,grub2,2.14-2ubuntu1,https://www.ubuntu.com/
 grub.peimage,2,Canonical,grub2,2.14-2ubuntu1,https://salsa.debian.org/grub-team/grub/-/blob/master/debian/patches/secure-boot/efi-use-peimage-shim.patch
-grub.beastbooter,1,beast-booter,grub2,2.14-2ubuntu1+bb0.1.0,<project URL>
+grub.beastbooter,1,beast-booter,grub2,2.14-2ubuntu1+bb0.1.0,https://github.com/cynak/BeastBoot
 ```
 
 - The first five lines are copied **verbatim** from Ubuntu's signed GRUB of

@@ -91,13 +91,53 @@ support the data partition's filesystem:
 | Data filesystem | GRUB can read it | ISO initramfs can mount it |
 |---|---|---|
 | FAT32 | yes | yes, every Linux initramfs supports vfat (expected) |
-| exFAT (default) | yes | needs Linux 5.7 or later with the `exfat` module in the initramfs. Expected for current Ubuntu, Debian, Fedora, Arch and openSUSE releases; older releases (for example Ubuntu 18.04, Debian 10) cannot. Unverified per distribution. |
+| exFAT (default) | yes | **Ubuntu desktop: tested** with Ubuntu 26.04.1 (UEFI, UEFI with Secure Boot, legacy BIOS), through the [exFAT add-on](#the-exfat-add-on). Other casper ISOs with a `minimal.squashfs` or `filesystem.squashfs` (official flavours, Linux Mint) and Debian live-boot ISOs: expected through the same add-on, unverified. **Ubuntu Server ISOs are not covered** (their layers are named `ubuntu-server-*.squashfs`): use FAT32 for them if they fit. Other distributions need the `exfat` module in their own initramfs (Linux 5.7 or later); unverified per distribution. |
 | NTFS | yes, **but not under Secure Boot**: GRUB 2.14 switches its NTFS driver off in lockdown mode, so with Secure Boot on the menu cannot see an NTFS data partition at all | needs `ntfs3` (Linux 5.15+) in the initramfs; many distributions do not include it there. Unverified. |
 
-If you are unsure, use FAT32 for the data partition (`--fs fat32`). Its 4 GiB
-per-file limit is the catch: larger ISOs (some Windows and DVD images) do not
-fit. A filesystem-independent mapping (a small initramfs add-on that maps the
-ISO's sectors as a block device) is planned for 0.2.
+If an ISO is not covered by the add-on below and you are unsure, use FAT32
+for the data partition (`--fs fat32`). Its 4 GiB per-file limit is the catch:
+larger ISOs (current Ubuntu desktop, some Windows and DVD images) do not fit.
+A filesystem-independent mapping (a small initramfs add-on that maps the ISO's
+sectors as a block device) is planned for later.
+
+### The exFAT add-on
+
+Ubuntu's initramfs has no exFAT driver, and casper (Ubuntu's live-boot
+scripts) only searches partitions of a fixed list of filesystem types. Without
+help, an Ubuntu ISO on an exFAT drive stops in an initramfs shell with
+"Could not find the ISO". The driver is on the ISO, though: its squashfs
+contains `exfat.ko` for exactly the ISO's kernel, signed with that kernel's
+key. So, on an exFAT data partition, the menu:
+
+1. reads the exfat module out of the ISO's squashfs (`/casper/minimal.squashfs`
+   on Ubuntu 24.04 and later, `/casper/filesystem.squashfs` before that,
+   `/live/filesystem.squashfs` on Debian live);
+2. adds it, plus a small script from the boot partition
+   ([`grub/beast/hooks/initramfs-tools.sh`](../grub/beast/hooks/initramfs-tools.sh)),
+   to the ISO's initramfs as extra files when it starts the kernel. An ISO
+   with its own `loopback.cfg` (Ubuntu has one) is started with the `casper`
+   recipe instead, because `loopback.cfg` would start it without them;
+3. the script loads the module and lets casper search exFAT partitions too.
+
+Nothing on the drive or in the ISO changes. The kernel checks the module's
+signature as usual: with Secure Boot on it is accepted because it is the ISO's
+own. You can see it worked in the live system with
+`sudo dmesg | grep beast-booter`:
+
+```
+beast-booter: exfat support loaded (exfat.ko.zst from the ISO)
+beast-booter: casper may now search exfat partitions for the ISO
+```
+
+With `bb_debug=1` the menu prints `BEAST: fsmod exfat <module>` when it uses
+the add-on, or `BEAST: fsmod none <reason>` when it cannot (see
+[MENU.md](MENU.md#debug-output-bb_debug1)). Limits: only the three squashfs
+names above are looked at, so Ubuntu Server ISOs (`ubuntu-server-*.squashfs`)
+boot as before (`fsmod none no-squashfs`); GRUB cannot read zstd-compressed
+squashfs images, so such ISOs boot as before too; the safe-graphics
+and other extra entries of the ISO's own `loopback.cfg` are not offered while
+the add-on is used. To turn it off, put `set bb_fs_addon=0` in
+`/beast-booter/config.cfg`.
 
 The kernel command lines use the data partition's UUID as Linux shows it
 (`bb_data_uuid_linux` from the installer's `device.cfg`). If `device.cfg` is

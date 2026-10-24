@@ -246,6 +246,9 @@ BEAST: item dir <path>
 BEAST: item iso <path>
 BEAST: oneshot <iso path>
 BEAST: boot <iso path> recipe=<recipe id>
+BEAST: fsmod exfat <module path>          (exFAT add-on used, §6)
+BEAST: fsmod none <reason> [<squashfs>]   (exFAT add-on not used: disabled, hook-missing,
+                                           no-squashfs, squashfs-unreadable, no-exfat-module)
 BEAST: boot beast-net recipe=beast-net
 BEAST: dryrun linux <kernel path> <cmdline...>
 BEAST: dryrun initrd <path> [<path>...]
@@ -282,7 +285,34 @@ Recipes 2–7 need the ISO's own initramfs to be able to mount the data
 partition's filesystem in order to find the ISO file. FAT32 is universally
 supported; exFAT and NTFS depend on the distribution. docs/ISO_SUPPORT.md
 tracks what is known. A filesystem-independent mapping (a small initramfs
-add-on that maps the ISO's sectors as a block device) is planned for 0.2.
+add-on that maps the ISO's sectors as a block device) is planned for later.
+
+**exFAT add-on** (`bb_addon_prepare` in `grub/beast/lib.cfg`). When the data
+partition is exFAT and the ISO is a casper ISO (`/casper/vmlinuz`) or a
+live-boot ISO (`/live/vmlinuz` and `/live/initrd.img`), detected as that
+recipe or as `loopback`:
+
+1. The first of `/casper/minimal.squashfs`, `/casper/filesystem.squashfs`,
+   `/live/filesystem.squashfs` is attached as `loopback bbsq`.
+2. The first `(bbsq)/usr/lib/modules/*/kernel/fs/exfat/exfat.ko{.zst,.xz,.gz,}`
+   (else under `/lib/modules`) is the module. It is the ISO's own, built and
+   signed for the ISO's kernel.
+3. The initrd line becomes `initrd <iso initrd>
+   newc:beast-booter/modules/<module file>:<module path>
+   newc:conf/conf.d/zz-beastbooter.conf:$bb_cfg/hooks/initramfs-tools.sh`.
+   A `loopback` ISO switches to the casper / live-boot recipe for this,
+   because its `loopback.cfg` would load the initrd without the add-on.
+4. initramfs-tools' `/init` sources every `/conf/conf.d/*` file before the
+   boot scripts. The hook loads the module with kmod (klibc's `insmod`
+   cannot load compressed modules) and, when exfat is then in
+   `/proc/filesystems`, appends a wider `is_supported_fs` to casper's
+   `/scripts/casper-helpers` (casper only mounts types from a fixed list;
+   live-boot already accepts anything in `/proc/filesystems`).
+
+GRUB's squash4 reads gzip, lzo and xz squashfs, not zstd; such ISOs keep the
+old behaviour (`fsmod none squashfs-unreadable`). `bb_fs_addon=0` turns the
+add-on off. Nothing on the drive or in the ISO is modified, and the kernel
+still checks the module signature (lockdown under Secure Boot).
 
 ## 7. Installer CLI
 
@@ -299,7 +329,7 @@ beast-booter install (--device DEV | --image PATH --size SIZE)
 beast-booter update  (--device DEV | --image PATH) [--dist DIR|ZIP] [--yes]
                      [--allow-fixed-disk] [--quiet] [--progress-file PATH] [--cancel-file PATH]
 beast-booter info    (--device DEV | --image PATH) [--json]
-beast-booter list-devices [--json] [--all]
+beast-booter list-devices [--json] [--all] [--check-installed]
 beast-booter firmware catalog [--dist DIR|ZIP] [--catalog FILE] [--json]
 beast-booter firmware fetch   --pack ID [--pack ID ...] --out DIR [--catalog FILE] [--dist DIR|ZIP]
 beast-booter firmware install (--device DEV | --image PATH) --from DIR [--dist DIR|ZIP]
@@ -325,7 +355,19 @@ beast-booter firmware list    (--device DEV | --image PATH) [--json]
   `reinstall-needed` (older) or `layout-too-new` (newer).
 - `list-devices --json` prints `{"v": 1, "platform": ..., "elevated": ...,
   "disks": [{...DiskInfo..., "eligible": true|false, "reason": ...}]}`; without
-  `--all` only eligible (removable, non-system) disks are listed.
+  `--all` only eligible (removable, non-system) disks are listed. With
+  `--check-installed` each disk also gets `"installed"`: `null` (not a
+  beast-booter drive) or `{"version", "build_id", "state", "summary", "note"}`,
+  read without administrator rights by `PlatformBackend.probe_installed`
+  (`installed.py`, `installed_probe.py`; Linux mounts partition 2 read-only
+  with udisks for a moment and unmounts it again). `state` is one of
+  `current`, `outdated`, `other-build`, `newer`, `reinstall`, `unknown`.
+- `info --json` includes `build_id` (from `grub/beast/version.cfg`).
+- An `update` that the drive interrupts (Linux: the stick reports "no medium",
+  `device-vanished`) can be re-run: the ESP's boot sector is written zeroed
+  first and for real last, and a copy of what update carries over (marker,
+  `device.cfg`, `grubenv`, firmware packs) is kept on the computer
+  (`state_dir()`, `update-recovery/`) until the update is verified.
 - `firmware fetch` needs no administrator rights: it downloads each file of a
   pack from the catalog's pinned source, checks its SHA-256 and writes
   `DIR/<id>.cpio` and `DIR/<id>.json`. `firmware install` re-verifies every

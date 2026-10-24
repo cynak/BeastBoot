@@ -164,6 +164,19 @@ system = drive("990 PRO")
 a.drives.click(system)
 root.update()
 assert c.selected_id != system and "running operating system" in a.drive_hint.cget("text"), a.drive_hint.cget("text")
+# a drive with older boot files: a notice above the list, a badge on its card, Update as the main action
+old = drive(demo.OLD_BEAST)
+wait(lambda: a.drives.version == c.rows_version and c.update_notice
+     and (a.notice.winfo_manager() or a.head_notice.winfo_manager()))  # a card, or one line in a short window
+shown = a.notice_text if a.notice.winfo_manager() else a.head_notice
+assert "has beast-booter 0.0.9" in shown.cget("text"), shown.cget("text")
+badges = [w.cget("text") for w in a.drives.cards[old].winfo_children() if w.winfo_class() == "TLabel"]
+assert any("0.0.9" in t and "update available" in t for t in badges), badges
+a.notice_button.invoke() if a.notice.winfo_manager() else a._select_notice_drive()
+root.update()
+assert c.selected_id == old and (a.notice_button.instate(["disabled"]) or not a.notice.winfo_manager())
+assert "Click Update boot files" in a.drive_hint.cget("text"), a.drive_hint.cget("text")
+assert "Accent" in str(a.update_button.cget("style")) and "Accent" not in str(a.next_button.cget("style"))
 install("SanDisk")
 install("fails while writing")
 for r in results:
@@ -295,6 +308,8 @@ SMALL_SCREEN = textwrap.dedent(r"""
     shown = sum(1 for card in a.drives.cards.values() if box(card)[1] >= cy0 - 1 and box(card)[3] <= cy1 + 1)
     if shown < 3:
         problems.append(f"only {shown} drive cards visible")
+    if c.update_notice and not (a.notice.winfo_ismapped() or a.head_notice.winfo_ismapped()):
+        problems.append("the update notice is not shown")  # demo.OLD_BEAST has older boot files
     a.next_step()
     pump()
     walk(root, "options")

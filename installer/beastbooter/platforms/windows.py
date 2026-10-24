@@ -964,6 +964,12 @@ $v | Select-Object FileSystem, FileSystemLabel, Size | ConvertTo-Json -Depth 4
             raise BeastError(f"Format-Volume did not create NTFS on partition {index} of disk {n}")
 
     # -- elevation ---------------------------------------------------------------
+    def probe_installed(self, disk: DiskInfo, *, should_stop=None):
+        """interfaces.PlatformBackend.probe_installed (installed_probe.py)."""
+        from ..installed_probe import probe_windows
+
+        return probe_windows(self, disk, should_stop=should_stop)
+
     def is_elevated(self) -> bool:
         return self.api.is_admin()
 

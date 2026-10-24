@@ -1,11 +1,12 @@
 """The window's look: a dark (default) or light ttk theme built on 'clam'.
 
-Colours follow docs/assets/hero-dark.svg / hero-light.svg (near-black slate
-with indigo/violet accents). Rounded cards, buttons, fields, check boxes, the
-progress bar and scroll bars are ttk image elements whose images are drawn
-in code at start-up (raster.py) at the current display scaling: no image
-files, no third-party theme package. Every interactive element has hover,
-pressed, disabled and a visible keyboard-focus ring.
+Colours follow docs/assets/BRAND.md (dark grey surfaces, one red accent: the
+same palette as the boot menu and the README hero cards). Rounded cards,
+buttons, fields, check boxes, the progress bar and scroll bars are ttk image
+elements whose images are drawn in code at start-up (raster.py) at the
+current display scaling: no image files, no third-party theme package.
+Every interactive element has hover, pressed, disabled and a visible
+keyboard-focus ring.
 
 Widgets sit on one of a few backgrounds ("contexts"): the page, a card, a
 selectable card (drive / firmware pack: "Pick", its colour follows its state),
@@ -27,42 +28,42 @@ from .raster import Gradient, box
 
 PALETTES: dict[str, dict[str, str]] = {
     "dark": {
-        "bg": "#0B1120", "bar": "#0E1528", "card": "#131B30", "card_border": "#252D48",
-        "pick_hover": "#182139", "pick_sel": "#1E1B4B", "pick_sel_border": "#6366F1", "pick_dis": "#0F1628",
-        "field": "#0A1020", "field_border": "#334066", "field_focus": "#818CF8",
-        "fg": "#F1F5F9", "fg2": "#CBD5E1", "muted": "#94A3B8", "disabled": "#5B667E",
-        "accent": "#4F46E5", "accent_hover": "#5F57F2", "accent_pressed": "#4338CA", "accent_fg": "#FFFFFF",
-        "accent_text": "#A5B4FC", "accent_hi": "#818CF8", "ring": "#A5B4FC",
-        "danger": "#DC2626", "danger_hover": "#E83A3A", "danger_pressed": "#B91C1C", "danger_text": "#F87171",
-        "danger_bg": "#24101C", "danger_border": "#7F1D1D",
+        "bg": "#141415", "bar": "#1A1A1C", "card": "#1F1F22", "card_border": "#2F2F33",
+        "pick_hover": "#26262A", "pick_sel": "#2A1215", "pick_sel_border": "#D62839", "pick_dis": "#19191B",
+        "field": "#0F0F10", "field_border": "#3D3D42", "field_focus": "#F0505E",
+        "fg": "#F2F2F3", "fg2": "#CFCFD4", "muted": "#9A9AA2", "disabled": "#5C5C63",
+        "accent": "#D62839", "accent_hover": "#DD3344", "accent_pressed": "#B01E2E", "accent_fg": "#FFFFFF",
+        "accent_text": "#FF8A93", "accent_hi": "#F0505E", "ring": "#FF8A93",
+        "danger": "#B42318", "danger_hover": "#C6362A", "danger_pressed": "#8F1C13", "danger_text": "#FF8A80",
+        "danger_bg": "#2B1311", "danger_border": "#7A1F1A",
         "ok": "#10B981", "ok_text": "#34D399", "warn": "#F59E0B", "warn_text": "#FBBF24",
         "warn_bg": "#261D0E", "warn_border": "#92400E",
-        "info_bg": "#15183A", "info_border": "#3730A3",
-        "btn": "#1A2340", "btn_hover": "#222D50", "btn_pressed": "#2A3760", "btn_border": "#334066",
-        "btn_dis": "#121A2E", "btn_dis_fg": "#556079",
-        "seg_sel": "#262364", "seg_sel_border": "#6366F1",
-        "trough": "#1A2340", "thumb": "#334066", "thumb_hover": "#4B5B8C",
-        "select_bg": "#3730A3", "select_fg": "#FFFFFF", "log_bg": "#0A0F1D",
-        "metal": "#CBD5E1", "metal_dark": "#64748B", "body": "#6366F1", "body_dark": "#312E81",
+        "info_bg": "#231A1C", "info_border": "#42282C",
+        "btn": "#26262A", "btn_hover": "#2E2E33", "btn_pressed": "#37373C", "btn_border": "#3D3D42",
+        "btn_dis": "#1C1C1F", "btn_dis_fg": "#5C5C63",
+        "seg_sel": "#3A151B", "seg_sel_border": "#D62839",
+        "trough": "#26262A", "thumb": "#3D3D42", "thumb_hover": "#56565D",
+        "select_bg": "#7A1622", "select_fg": "#FFFFFF", "log_bg": "#0F0F10",
+        "metal": "#CFCFD4", "metal_dark": "#6B6B73", "body": "#D62839", "body_dark": "#7A1622",
     },
     "light": {
-        "bg": "#F3F5FA", "bar": "#FFFFFF", "card": "#FFFFFF", "card_border": "#DCE2EE",
-        "pick_hover": "#F7F8FD", "pick_sel": "#EEF2FF", "pick_sel_border": "#6366F1", "pick_dis": "#F3F5FA",
-        "field": "#FFFFFF", "field_border": "#B9C2D4", "field_focus": "#4F46E5",
-        "fg": "#0F172A", "fg2": "#334155", "muted": "#5B6B82", "disabled": "#9AA5B8",
-        "accent": "#4F46E5", "accent_hover": "#4338CA", "accent_pressed": "#3730A3", "accent_fg": "#FFFFFF",
-        "accent_text": "#4338CA", "accent_hi": "#6366F1", "ring": "#818CF8",
-        "danger": "#DC2626", "danger_hover": "#C81E1E", "danger_pressed": "#B91C1C", "danger_text": "#B91C1C",
-        "danger_bg": "#FEF2F2", "danger_border": "#FCA5A5",
+        "bg": "#F5F5F6", "bar": "#FFFFFF", "card": "#FFFFFF", "card_border": "#E1E1E4",
+        "pick_hover": "#FAFAFB", "pick_sel": "#FEF1F2", "pick_sel_border": "#D62839", "pick_dis": "#F5F5F6",
+        "field": "#FFFFFF", "field_border": "#C6C6CC", "field_focus": "#D62839",
+        "fg": "#18181B", "fg2": "#3F3F46", "muted": "#63636B", "disabled": "#A1A1AA",
+        "accent": "#D62839", "accent_hover": "#B01E2E", "accent_pressed": "#951927", "accent_fg": "#FFFFFF",
+        "accent_text": "#B01E2E", "accent_hi": "#F0505E", "ring": "#F0505E",
+        "danger": "#B42318", "danger_hover": "#9F1F15", "danger_pressed": "#8F1C13", "danger_text": "#B42318",
+        "danger_bg": "#FEF3F2", "danger_border": "#FDA29B",
         "ok": "#059669", "ok_text": "#047857", "warn": "#D97706", "warn_text": "#B45309",
         "warn_bg": "#FFFBEB", "warn_border": "#FCD34D",
-        "info_bg": "#EEF2FF", "info_border": "#C7D2FE",
-        "btn": "#FFFFFF", "btn_hover": "#F0F3FA", "btn_pressed": "#E3E8F2", "btn_border": "#B9C2D4",
-        "btn_dis": "#F3F5FA", "btn_dis_fg": "#A3ACBD",
-        "seg_sel": "#EEF2FF", "seg_sel_border": "#6366F1",
-        "trough": "#E2E7F0", "thumb": "#C3CBDB", "thumb_hover": "#9AA5B8",
-        "select_bg": "#C7D2FE", "select_fg": "#0F172A", "log_bg": "#FAFBFE",
-        "metal": "#CBD5E1", "metal_dark": "#64748B", "body": "#6366F1", "body_dark": "#3730A3",
+        "info_bg": "#FCF4F5", "info_border": "#F3D9DC",
+        "btn": "#FFFFFF", "btn_hover": "#F4F4F5", "btn_pressed": "#E6E6E9", "btn_border": "#C6C6CC",
+        "btn_dis": "#F5F5F6", "btn_dis_fg": "#A1A1AA",
+        "seg_sel": "#FDECEE", "seg_sel_border": "#D62839",
+        "trough": "#E6E6E9", "thumb": "#C6C6CC", "thumb_hover": "#A1A1AA",
+        "select_bg": "#F9D2D7", "select_fg": "#18181B", "log_bg": "#FAFAFB",
+        "metal": "#D4D4D8", "metal_dark": "#71717A", "body": "#D62839", "body_dark": "#7A1622",
     },
 }
 
@@ -545,42 +546,42 @@ def draw_icon(kind: str, s: int, p: dict, disabled: bool = False) -> raster.Canv
 
     if kind in ("usb", "logo"):  # a USB stick, plug up
         fill(rr(s * 0.35, s * 0.03, s * 0.65, s * 0.34, s * 0.04), Gradient(p["metal"], p["metal_dark"]))
-        fill(rr(s * 0.41, s * 0.11, s * 0.48, s * 0.19, s * 0.01), "#1E293B")
-        fill(rr(s * 0.52, s * 0.11, s * 0.59, s * 0.19, s * 0.01), "#1E293B")
+        fill(rr(s * 0.41, s * 0.11, s * 0.48, s * 0.19, s * 0.01), "#1F1F22")
+        fill(rr(s * 0.52, s * 0.11, s * 0.59, s * 0.19, s * 0.01), "#1F1F22")
         fill(rr(s * 0.22, s * 0.30, s * 0.78, s * 0.97, s * 0.12), Gradient(p["body"], p["body_dark"], True))
         if kind == "logo":  # the hero's shield with a check mark
             shield = poly([(s * 0.5, s * 0.42), (s * 0.67, s * 0.49), (s * 0.65, s * 0.72), (s * 0.5, s * 0.86),
                            (s * 0.35, s * 0.72), (s * 0.33, s * 0.49)], s * 0.015)
-            fill(shield, "#E0E7FF")
+            fill(shield, "#F2F2F3")
             fill(seg([(s * 0.42, s * 0.64), (s * 0.48, s * 0.71), (s * 0.59, s * 0.56)], max(0.7, s * 0.032)),
                  p["body_dark"])
         else:
-            fill(rr(s * 0.34, s * 0.80, s * 0.66, s * 0.86, s * 0.03), "#E0E7FF", 0.85)
+            fill(rr(s * 0.34, s * 0.80, s * 0.66, s * 0.86, s * 0.03), "#F2F2F3", 0.85)
     elif kind == "sd":  # an SD card with a cut corner
         fill(poly([(s * 0.22, s * 0.05), (s * 0.62, s * 0.05), (s * 0.80, s * 0.23), (s * 0.80, s * 0.95),
                    (s * 0.22, s * 0.95)], s * 0.04), Gradient(p["body"], p["body_dark"], True))
         for i in range(4):
             x = s * (0.30 + i * 0.11)
-            fill(rr(x, s * 0.12, x + s * 0.06, s * 0.30, s * 0.015), "#E0E7FF", 0.9)
+            fill(rr(x, s * 0.12, x + s * 0.06, s * 0.30, s * 0.015), "#F2F2F3", 0.9)
     elif kind == "disk":  # an internal disk with its platter
         fill(rr(s * 0.14, s * 0.08, s * 0.86, s * 0.92, s * 0.10), Gradient(p["metal"], p["metal_dark"], True))
-        fill(circle(s * 0.5, s * 0.43, s * 0.25), "#E2E8F0")
+        fill(circle(s * 0.5, s * 0.43, s * 0.25), "#E4E4E7")
         fill(circle(s * 0.5, s * 0.43, s * 0.07), p["metal_dark"])
-        fill(seg([(s * 0.5, s * 0.43), (s * 0.69, s * 0.76)], s * 0.04), "#334155")
+        fill(seg([(s * 0.5, s * 0.43), (s * 0.69, s * 0.76)], s * 0.04), "#3F3F46")
         fill(circle(s * 0.76, s * 0.83, s * 0.035), p["ok"])
     elif kind == "nvme":  # an M.2 module with chips
         fill(rr(s * 0.04, s * 0.30, s * 0.96, s * 0.70, s * 0.05), Gradient("#1F7A5C", "#0F4C3A", True))
         for i in range(3):
             x = s * (0.12 + i * 0.25)
-            fill(rr(x, s * 0.38, x + s * 0.19, s * 0.62, s * 0.02), "#1E293B")
+            fill(rr(x, s * 0.38, x + s * 0.19, s * 0.62, s * 0.02), "#1F1F22")
         fill(rr(s * 0.88, s * 0.38, s * 0.96, s * 0.62, 0), "#FBBF24")
     elif kind in ("ok", "error", "warning", "info"):
         color = {"ok": p["ok"], "error": p["danger"], "warning": p["warn"], "info": p["accent"]}[kind]
         w = s * 0.085
         if kind == "warning":
             fill(poly([(s * 0.5, s * 0.08), (s * 0.95, s * 0.88), (s * 0.05, s * 0.88)], s * 0.05), color)
-            fill(seg([(s * 0.5, s * 0.36), (s * 0.5, s * 0.6)], w * 0.8), "#1F2937")
-            fill(circle(s * 0.5, s * 0.74, w * 0.85), "#1F2937")
+            fill(seg([(s * 0.5, s * 0.36), (s * 0.5, s * 0.6)], w * 0.8), "#1F1F22")
+            fill(circle(s * 0.5, s * 0.74, w * 0.85), "#1F1F22")
         else:
             fill(circle(s / 2, s / 2, s * 0.46), color)
             if kind == "ok":
@@ -597,11 +598,11 @@ def draw_icon(kind: str, s: int, p: dict, disabled: bool = False) -> raster.Canv
             fill(rr(s * 0.08, t, s * 0.92, t + s * 0.06, s * 0.02), p["metal_dark"])
             fill(rr(t, s * 0.08, t + s * 0.06, s * 0.92, s * 0.02), p["metal_dark"])
         fill(rr(s * 0.2, s * 0.2, s * 0.8, s * 0.8, s * 0.08), Gradient(p["body"], p["body_dark"], True))
-        fill(rr(s * 0.36, s * 0.36, s * 0.64, s * 0.64, s * 0.04), "#E0E7FF", 0.9)
+        fill(rr(s * 0.36, s * 0.36, s * 0.64, s * 0.64, s * 0.04), "#F2F2F3", 0.9)
     elif kind == "image":  # a disk image file: a page with a folded corner
         fill(poly([(s * 0.2, s * 0.05), (s * 0.62, s * 0.05), (s * 0.82, s * 0.25), (s * 0.82, s * 0.95),
                    (s * 0.2, s * 0.95)], s * 0.03), Gradient(p["metal"], p["metal_dark"], True))
-        fill(poly([(s * 0.62, s * 0.05), (s * 0.82, s * 0.25), (s * 0.62, s * 0.25)], s * 0.01), "#E2E8F0")
+        fill(poly([(s * 0.62, s * 0.05), (s * 0.82, s * 0.25), (s * 0.62, s * 0.25)], s * 0.01), "#E4E4E7")
         fill(rr(s * 0.32, s * 0.52, s * 0.70, s * 0.80, s * 0.05), Gradient(p["body"], p["body_dark"], True))
     else:
         raise ValueError(f"unknown icon {kind!r}")

@@ -297,3 +297,22 @@ def test_fake_cli_requires_yes(tmp_path):
     pf = tmp_path / "p.jsonl"
     assert fake_cli.main(["install", "--image", "/x.img", "--progress-file", str(pf), "--dist", "/d"]) == 2
     assert not pf.exists()
+
+
+def test_demo_drive_with_old_boot_files_is_current_after_an_update(fake_dist, tmp_path):
+    c = make(fake_dist, tmp_path)
+    select(c, demo.OLD_BEAST)
+    c.poll()  # the drive check
+    rows = {r.title: r for r in c.rows}
+    f = rows[demo.OLD_BEAST].freshness
+    assert f.state == "outdated" and f.installed.version == "0.0.9" and f.installed.build_id == "0000demo0000"
+    assert all(r.freshness is None for r in c.rows if r.title != demo.OLD_BEAST)
+    assert c.update_notice.text.startswith(f"{demo.OLD_BEAST} has beast-booter 0.0.9; this app has 0.1.0.")
+    assert c.suggest_update
+    c.request_update()
+    c.confirm()
+    run_until_finished(c)
+    assert c.phase is Phase.DONE, c.outcome
+    c.dismiss()
+    c.poll(), c.poll()
+    assert c.selected_row.freshness.state == "current" and c.update_notice is None

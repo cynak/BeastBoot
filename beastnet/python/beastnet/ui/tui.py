@@ -71,14 +71,16 @@ class TUI(UI):
                 bg = -1
             except curses.error:
                 bg = curses.COLOR_BLACK
-            pairs = [(curses.COLOR_WHITE, curses.COLOR_BLUE), (curses.COLOR_CYAN, bg),
+            # beast-booter's grey and red (docs/assets/BRAND.md) in the console's 8 colours:
+            # white on red for the title bar and the selection, red accents, light grey text.
+            pairs = [(curses.COLOR_WHITE, curses.COLOR_RED), (curses.COLOR_RED, bg),
                      (curses.COLOR_GREEN, bg), (curses.COLOR_YELLOW, bg), (curses.COLOR_RED, bg),
-                     (curses.COLOR_BLACK, curses.COLOR_CYAN), (curses.COLOR_WHITE, bg)]
+                     (curses.COLOR_WHITE, curses.COLOR_RED), (curses.COLOR_WHITE, bg)]
             for i, (fg, b) in enumerate(pairs, 1):
                 curses.init_pair(i, fg, b)
             cp, B = curses.color_pair, curses.A_BOLD
             self.a = {"header": cp(1) | B, "accent": cp(2) | B, "ok": cp(3) | B, "warn": cp(4) | B,
-                      "error": cp(5) | B, "sel": cp(6), "bar": cp(6), "dim": cp(2), "title": cp(7) | B}
+                      "error": cp(5) | B, "sel": cp(6) | B, "bar": cp(6), "dim": cp(7), "title": cp(7) | B}
         except curses.error:
             pass
 
@@ -157,7 +159,7 @@ class TUI(UI):
         self._put(0, 0, " " * w, a["header"])
         self._put(0, 1, "beast-booter", a["header"])
         self._put(0, 14, "| beast-net: download an ISO from a link"[: max(0, w - 16 - len(self.brand_right))],
-                  a["header"] & ~curses.A_BOLD)
+                  a["header"])  # bright white on red: readable on the console
         if self.brand_right:
             self._put(0, w - len(self.brand_right) - 1, self.brand_right, a["header"])
         x = 2

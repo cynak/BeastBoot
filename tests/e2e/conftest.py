@@ -28,6 +28,7 @@ MARKERS = {
     "ntfs": "uses an NTFS data partition (needs udisksctl; run outside the sandbox)",
     "selftest": "harness self-test (needs no dist/ or installer)",
     "beastnet": "beast-net download helper (docs/BEASTNET.md)",
+    "live": "downloads real ISOs from the internet (opt-in: BB_LIVE_NET=1)",
     "slow": "boots QEMU (seconds per test with KVM)",
 }
 
@@ -76,7 +77,7 @@ def secureboot_ok(qemu_ok):
 
 @pytest.fixture(scope="session")
 def fixture_tools_ok():
-    missing = [t for t in ("xorriso", "grub-mkimage", "mcopy", "mmd") if not env.which(t)]
+    missing = [t for t in ("xorriso", "mksquashfs", "grub-mkimage", "mcopy", "mmd") if not env.which(t)]
     if missing:
         pytest.skip("fixture tools missing (source scripts/dev-env.sh): " + ", ".join(missing))
     return True
@@ -190,7 +191,7 @@ BASES = {
     "main": ("msdos", "fat32", trees.main_tree),
     "browse": ("msdos", "fat32", trees.browse_tree),
     "gpt": ("gpt", "fat32", trees.browse_tree),
-    "exfat": ("msdos", "exfat", trees.browse_tree),
+    "exfat": ("msdos", "exfat", trees.exfat_tree),
     "ntfs": ("msdos", "ntfs", trees.browse_tree),
 }
 

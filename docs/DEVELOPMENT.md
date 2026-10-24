@@ -365,16 +365,18 @@ Elevation (UAC, `osascript`, `pkexec`) is only exercised on a real desktop;
 | installer unit tests | `make test` | seconds |
 | bb-dev unit tests | `pytest -q devtools/tests` | seconds |
 | beast-net app unit tests | `pytest -q beastnet/tests` | seconds |
-| e2e, everything | `make e2e` | about 3 minutes with KVM (84 tests) |
+| e2e, everything | `make e2e` | about 3 minutes with KVM (89 tests; the live ones skip) |
 | e2e, beast-net only | `pytest -q tests/e2e -m beastnet` | about 1.5 minutes with KVM |
 | e2e, no VM boots | `source scripts/dev-env.sh && pytest -q tests/e2e -m "not slow"` | seconds |
 | e2e, one firmware | `pytest -q tests/e2e -m "bios and not secureboot"` | |
 | e2e, one file / test | `pytest -q tests/e2e/test_e2e_smoke.py -k uefi` | |
 | harness self-test | `pytest -q tests/e2e -m selftest` (needs no `dist/`) | |
+| official ISO links, quick (internet) | `make net-sources` | seconds |
+| official ISO downloads in the QEMU lab (internet) | `make e2e-live` | minutes per ISO, several GB each |
 
 `pytest` here means the one in `.venv/bin/` (or `python3-pytest`); for the
 e2e tests source `scripts/dev-env.sh` first. E2E markers: `bios`, `uefi`,
-`secureboot`, `exfat`, `ntfs`, `beastnet`, `selftest`, `slow` (boots QEMU). Useful variables: `BB_E2E_KVM=0|1`,
+`secureboot`, `exfat`, `ntfs`, `beastnet`, `live` (internet, opt-in), `selftest`, `slow` (boots QEMU). Useful variables: `BB_E2E_KVM=0|1`,
 `BB_E2E_TIMEOUT_SCALE`, `BB_E2E_DISK_IF=usb|ide|virtio`, `BB_E2E_KEYS=serial|qmp`,
 `BB_E2E_KEEP=1` (keep the per-test disk copies and vars). The full list,
 the outputs (`out/e2e/logs/<test>.log`, `.qemu.txt`, `.screen.txt`, `.png`

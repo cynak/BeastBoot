@@ -171,6 +171,18 @@ ISOs and other files on partition 1 are never written.
 - **App:** choose the drive and click **Update boot files...**.
 - **Command line:** `sudo ./beast-booter update --device /dev/sdX`.
 
+**The app tells you when a drive is out of date.** For every beast-booter
+drive in the list it reads which version the drive has, without asking for
+administrator rights, and shows it on the drive's card: *update available*,
+*up to date*, *different build*, *newer than this app* (don't update with an
+older app) or *needs a reinstall*. A notice above the list names drives
+with older boot files; select one and **Update boot files...** becomes the
+main button. On Linux the app reads the version by mounting the drive's
+boot partition read-only for a moment (udisks, no password); on Windows and
+macOS it can read it only where the system shows that partition, otherwise
+the card just says *beast-booter drive*. From the command line:
+`./beast-booter list-devices --check-installed`.
+
 Installed firmware packs and a pending one-time download boot are carried
 over. If the new boot files are signed with a different key (for example,
 you move from boot files you built yourself to a release), enroll the new
@@ -179,6 +191,16 @@ key once more as in [section 6](#6-first-boot-with-secure-boot-on).
 A drive made by beast-booter before layout 2 (512 MiB boot partition) cannot
 be updated: `update` stops with `reinstall-needed`. Copy your files off,
 run `install` again, and copy them back.
+
+**If an update stops because the drive stopped responding**
+(`device-vanished`): some USB sticks report "no medium" right after their
+files are unmounted, especially when they are warm or have been plugged in
+for a long time. That is the stick, not beast-booter. Unplug it, plug it
+back in and click **Update boot files...** again. An update that was
+interrupted this way is finished by the next one, including your firmware
+packs and a pending one-time boot (the app keeps a copy of them on this
+computer while it writes). Your ISOs and files are never written by an
+update.
 
 ## 8. Download an ISO from a link
 
@@ -215,7 +237,11 @@ Every file must match its SHA-256 or it is discarded. The packs go on the
 drive's boot partition (BEAST-EFI): the app shows how much room the selected
 packs take ("Selected: X of Y free") and keeps **Download and install...**
 disabled while they don't fit; deselect packs, or remove installed ones you
-don't need. Re-installing a pack counts the room its old copy frees. If the
+don't need. Re-installing a pack counts the room its old copy frees. When you
+choose a drive, the app shows the packs already installed on it and its free
+space straight away (read without administrator rights, as for the version
+check in [section 7](#7-update-the-boot-files)); **Check installed packs**
+reads them again, with administrator rights, where that is not possible. If the
 drive is mounted, it is unmounted first; close any program that still uses
 it. Command line:
 
@@ -267,8 +293,13 @@ With `set bb_debug=1` in `config.cfg`, the menu also prints a `BEAST: error
 
 **The ISO starts, then stops looking for its files** (an initramfs shell,
 "unable to find a medium"): the ISO's own Linux must mount the storage
-partition to find the ISO. Old releases (for example Ubuntu 18.04, Debian 10)
-cannot mount exFAT. Make the drive with **FAT32** for them
+partition to find the ISO. On exFAT, beast-booter gives Ubuntu desktop ISOs
+(and, untested, other casper and Debian live ISOs) the exFAT driver from the
+ISO itself ([the exFAT add-on](ISO_SUPPORT.md#the-exfat-add-on)); if Ubuntu
+desktop still says "Could not find the ISO", update the drive's boot files and
+send the `BEAST: fsmod` line (with `bb_debug=1`). Ubuntu Server ISOs, other
+distributions, and old releases (for example Ubuntu 18.04, Debian 10) may not
+mount exFAT. Make the drive with **FAT32** for them
 ([ISO_SUPPORT.md](ISO_SUPPORT.md#the-data-partitions-filesystem)).
 
 ### NTFS and Secure Boot
@@ -337,8 +368,10 @@ More: [PORTABLE.md](PORTABLE.md#run-it).
 | `reinstall-needed` | the drive has an older layout; `update` cannot convert it ([section 7](#7-update-the-boot-files)) |
 | `layout-too-new` | the drive was made by a newer beast-booter; use that version |
 | `cancelled` | you stopped it (Cancel, Ctrl+C); after a cancelled `install`, run it again before using the drive |
+| `busy` | a program still uses the drive; on Linux the message names it (an open file, a terminal in a folder on it, an ISO attached as a disk image). Close it and try again |
+| `device-vanished` | the drive stopped responding while it was prepared or written (it reported "no medium" or was unplugged). Unplug it, plug it back in and run the same command again ([section 7](#7-update-the-boot-files)) |
 
-Still stuck? Open an issue with the beast-booter version (`bb_version` on the
+Still stuck? [Open an issue](https://github.com/cynak/BeastBoot/issues) with the beast-booter version (`bb_version` on the
 System information page), the computer model, the boot mode and the
 `BEAST:` lines. Security problems go privately, see
 [SECURITY.md](../SECURITY.md).

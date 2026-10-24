@@ -10,6 +10,10 @@ except:
   efi-chainload  /EFI/BOOT/BOOTX64.EFI is a small *unsigned* GRUB (x86_64-efi) whose embedded
                  config prints `BEAST_FIXTURE chainload`, then halts. It must run under UEFI
                  without Secure Boot and must be refused with Secure Boot on.
+  ubuntu-layered /casper/minimal.squashfs is a real (xz) squashfs holding a dummy
+                 usr/lib/modules/<FIXTURE_KVER>/kernel/fs/exfat/exfat.ko.zst, like
+                 Ubuntu 24.04+ media: on an exFAT data partition the menu adds that
+                 module to the initrd (bb_addon_prepare in grub/beast/lib.cfg).
 
 Outputs are cached in out/e2e/fixtures/<name>.iso; a fixture is rebuilt only
 when its definition (or the tool versions) change.
@@ -37,6 +41,12 @@ DEFAULT_OUT = Path(os.environ.get("BB_E2E_OUT", BB_ROOT / "out" / "e2e")) / "fix
 GRUB_EFI_DIR = Path(os.environ.get("BB_GRUB_EFI_DIR", "/usr/lib/grub/x86_64-efi"))
 
 EFI_PAYLOAD = "@efi-payload"  # placeholder: the unsigned chainload test binary
+SQUASHFS_EXFAT = "@squashfs-exfat"  # placeholder: squashfs with a dummy exfat module
+FIXTURE_KVER = "0.0.0-beast-fixture"
+SQUASHFS_EXFAT_FILES = {
+    f"usr/lib/modules/{FIXTURE_KVER}/kernel/fs/exfat/exfat.ko.zst": b"beast-booter e2e fixture: dummy exfat module\n",
+    f"usr/lib/modules/{FIXTURE_KVER}/kernel/fs/isofs/isofs.ko.zst": b"beast-booter e2e fixture: dummy isofs module\n",
+}
 
 # The chainloaded payload: rescue-mode embedded config, no normal.mod needed.
 # It prints on the EFI console only; OVMF mirrors that to the serial port.
@@ -73,6 +83,17 @@ FIXTURES: dict[str, dict] = {
     "casper": {
         "label": "BB_CASPER",
         "files": {"/casper/vmlinuz": dummy("casper kernel"), "/casper/initrd": dummy("casper initrd")},
+    },
+    "ubuntu-layered": {
+        # Like Ubuntu 24.04+ desktop media: loopback.cfg, casper and a layered
+        # squashfs that carries the kernel modules (exfat among them).
+        "label": "BB_UBUNTU_LAYERED",
+        "files": {
+            "/boot/grub/loopback.cfg": LOOPBACK_CFG.encode(),
+            "/casper/vmlinuz": dummy("casper kernel"),
+            "/casper/initrd": dummy("casper initrd"),
+            "/casper/minimal.squashfs": SQUASHFS_EXFAT,
+        },
     },
     "casper-lz": {
         # Only the later initrd names: the first existing one (initrd.lz) must be used.
@@ -195,10 +216,34 @@ def build_efi_payload(out_dir: Path = DEFAULT_OUT, force: bool = False) -> Path:
     return target
 
 
+def _squashfs_key() -> str:
+    blob = json.dumps([{k: hashlib.sha256(v).hexdigest() for k, v in SQUASHFS_EXFAT_FILES.items()},
+                       _tool_version(["mksquashfs", "-version"])], sort_keys=True)
+    return hashlib.sha256(blob.encode()).hexdigest()
+
+
+def build_squashfs_exfat(dest: Path) -> None:
+    """xz squashfs (as on Ubuntu media) with SQUASHFS_EXFAT_FILES, reproducible."""
+    with tempfile.TemporaryDirectory(dir=dest.parent) as tmp:
+        tree = Path(tmp) / "tree"
+        for rel, data in SQUASHFS_EXFAT_FILES.items():
+            f = tree / rel
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_bytes(data)
+        subprocess.run([_need("mksquashfs"), str(tree), str(dest), "-noappend", "-quiet", "-no-progress",
+                        "-comp", "xz", "-all-root", "-mkfs-time", "1760000000", "-all-time", "1760000000"],
+                       check=True, capture_output=True, text=True)
+
+
 def _spec_key(name: str, spec: dict, payload_hash: str) -> str:
     files = {}
     for path, content in sorted(spec["files"].items()):
-        files[path] = payload_hash if content == EFI_PAYLOAD else hashlib.sha256(content).hexdigest()
+        if content == EFI_PAYLOAD:
+            files[path] = payload_hash
+        elif content == SQUASHFS_EXFAT:
+            files[path] = _squashfs_key()
+        else:
+            files[path] = hashlib.sha256(content).hexdigest()
     blob = json.dumps(
         [BUILDER_VERSION, name, spec["label"], spec.get("rockridge", True), files,
          _tool_version(["xorriso", "-version"])],
@@ -234,6 +279,8 @@ def build_fixture(name: str, out_dir: Path = DEFAULT_OUT, force: bool = False) -
             dest.parent.mkdir(parents=True, exist_ok=True)
             if content == EFI_PAYLOAD:
                 shutil.copyfile(payload, dest)
+            elif content == SQUASHFS_EXFAT:
+                build_squashfs_exfat(dest)
             else:
                 dest.write_bytes(content)
         tmp_iso = Path(tmp) / f"{name}.iso"

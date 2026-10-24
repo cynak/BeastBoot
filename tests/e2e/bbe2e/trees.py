@@ -55,6 +55,17 @@ def browse_tree(isos: dict[str, Path]) -> dict:
     }
 
 
+EXFAT_ADDON_PATH = "/linux/ubuntu-layered.iso"
+
+
+def exfat_tree(isos: dict[str, Path]) -> dict:
+    """browse_tree plus an Ubuntu-style ISO whose squashfs carries exfat.ko
+    (the root listing stays exactly `linux/` and `top.iso`)."""
+    tree = browse_tree(isos)
+    tree[EXFAT_ADDON_PATH] = isos["ubuntu-layered"]
+    return tree
+
+
 BROWSE_DIR_TITLE = "linux/"
 BROWSE_ROOT_ISO = "top.iso"
 BROWSE_NESTED_ISO = "nested.iso"

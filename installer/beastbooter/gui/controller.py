@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import dataclasses
 import enum
+import inspect
 import os
 import shutil
 import sys
@@ -33,6 +34,7 @@ from pathlib import Path
 
 from ..errors import BeastError
 from ..fs import normalize_label
+from ..installed import NEWER, OTHER_BUILD, REINSTALL, Freshness, ProbeResult, assess
 from ..interfaces import DiskInfo, ElevatedProcess, PlatformBackend
 from ..layout import (
     DATA_LABEL_DEFAULT,
@@ -139,6 +141,10 @@ def problem_detail(problem: str) -> str:
 class DriveRow:
     disk: DiskInfo
     problem: str | None
+    # Which beast-booter the drive has, compared with this app's boot files
+    # (installed.assess); None: not a beast-booter drive, or not checked (yet).
+    freshness: Freshness | None = None
+    probe: ProbeResult | None = None  # what backend.probe_installed said (firmware packs: probe.installed.firmware)
 
     @property
     def id(self) -> str:
@@ -180,6 +186,40 @@ def drive_rows(disks: list[DiskInfo], *, show_all: bool) -> list[DriveRow]:
         rows = [r for r in rows if (r.disk.removable or r.disk.bus in EXTERNAL_BUSES) and not r.disk.system]
     # Usable first, virtual devices (loop, snaps, ...) last; otherwise the backend's order.
     return sorted(rows, key=lambda r: (not r.eligible, r.disk.bus == "virtual"))
+
+
+@dataclass(frozen=True)
+class UpdateNotice:
+    """Shown above the drive list when listed drives have older (or other) boot files."""
+
+    title: str
+    text: str
+    drive_id: str | None  # the one drive it is about, None when it names several
+    short: str = ""  # one line, for a short window
+
+
+def _probe(probe: Callable[..., ProbeResult | None], disk: DiskInfo, kw: dict) -> tuple[str, ProbeResult | None]:
+    try:
+        return disk.id, probe(disk, **kw)
+    except Exception:  # noqa: BLE001 - probes never raise; if one does, the drive just gets no badge
+        return disk.id, None
+
+
+def _takes_should_stop(fn: Callable) -> bool:
+    """probe_installed(disk, *, should_stop=None): backends and test fakes without it exist."""
+    try:
+        params = inspect.signature(fn).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(p.name == "should_stop" or p.kind is p.VAR_KEYWORD for p in params)
+
+
+# A job that writes to a drive does not start while a drive check runs (it may have
+# the boot partition mounted read-only for a moment). The check stops before its
+# next drive once a job is requested, so this limit only covers one stuck drive.
+PROBE_LIMIT = 120.0
+PROBE_BUSY = ("A check of the drives is still running, so nothing was started: writing while it may have "
+              "the drive's boot partition mounted is not safe. Unplug the drive, plug it in again, then try again.")
 
 
 # ---------------------------------------------------------------------------
@@ -366,7 +406,7 @@ class Outcome:
 class _Job:
     spec: JobSpec
     argv: list[str]
-    proc: ElevatedProcess
+    proc: ElevatedProcess | None  # None while it waits for a drive check to finish
     reader: ProgressReader
     state: ProgressState
     tmpdir: str
@@ -466,12 +506,20 @@ class Controller:
         self.list_error: str | None = None
         self._list_gen = 0
         self.selected_id: str | None = None
+        # Which beast-booter the listed drives have (backend.probe_installed, in a worker thread)
+        self.probing = False
+        self._probe_pending = False  # the rows still need a check (deferred while a job runs)
+        self._probe_gen = 0  # bumped when the rows' results would be stale
+        self._probe_task: _Task | None = None
+        self._probe_cancel: threading.Event | None = None
         self.confirm_request: ConfirmRequest | None = None
         self.job: _Job | None = None
         self.outcome: Outcome | None = None
         self.final_log: list[LogLine] = []
         # Set by firmware.FirmwareController: a firmware job is running (installs wait).
         self.other_job_running: Callable[[], bool] = lambda: False
+        # Set by FirmwareController: install/update ran on this drive (its packs may be gone).
+        self.drive_written: Callable[[str], None] = lambda drive_id: None
 
     # -- backend ------------------------------------------------------------
 
@@ -494,10 +542,11 @@ class Controller:
 
     # -- background work ----------------------------------------------------
 
-    def _start_task(self, fn: Callable, done: Callable) -> None:
+    def _start_task(self, fn: Callable, done: Callable) -> _Task:
         task = _Task(fn, done)
         self._tasks.append(task)
         self._spawn(task)
+        return task
 
     def _poll_tasks(self) -> bool:
         finished = [t for t in self._tasks if t.finished.is_set()]
@@ -534,14 +583,124 @@ class Controller:
             disks = []
         else:
             self.list_error = None
-        self.rows = drive_rows(list(disks), show_all=self.show_all)
+        old = {r.id: r for r in self.rows}
+        rows = drive_rows(list(disks), show_all=self.show_all)
+        # Keep what the last check found until the new one is done (no badge flicker on Refresh)
+        self.rows = [dataclasses.replace(r, freshness=o.freshness, probe=o.probe)
+                     if (o := old.get(r.id)) is not None and o.disk == r.disk and r.eligible else r for r in rows]
         self.rows_version += 1
+        self._probe_gen += 1
+        self._probe_pending = True
+        self._start_probe()
         current = self.selected_row
         if current is None or not current.eligible:
             self.selected_id = None
             usable = [r for r in self.rows if r.eligible]
             if len(usable) == 1:  # one candidate: preselect it (the confirmation names it)
                 self.selected_id = usable[0].id
+
+    # -- which beast-booter the drives have ----------------------------------
+
+    def _start_probe(self) -> None:
+        """Check the usable drives for beast-booter boot files, in a worker thread.
+        Never while an install, update or firmware job runs (poll() retries later)."""
+        if not self._probe_pending or self.probing or self.phase is Phase.RUNNING or self.other_job_running():
+            return
+        self._probe_pending = False
+        probe = getattr(self._backend, "probe_installed", None)  # test fakes may not have it
+        disks = [r.disk for r in self.rows if r.eligible]
+        if probe is None or not disks or not self.dist_summary.version:
+            return
+        gen, cancel = self._probe_gen, threading.Event()
+        # The probe also asks before it mounts anything (should_stop)
+        kw = {"should_stop": cancel.is_set} if _takes_should_stop(probe) else {}
+
+        def check() -> list:
+            found = []
+            for d in disks:
+                if cancel.is_set():  # a job was requested: not one more drive
+                    break
+                found.append(_probe(probe, d, kw))
+            return found
+
+        self.probing, self._probe_cancel = True, cancel
+        self._probe_task = self._start_task(check, lambda res, err: self._on_probed(gen, res, err))
+
+    def _on_probed(self, gen: int, results, err) -> None:
+        self.probing, self._probe_task, self._probe_cancel = False, None, None
+        if gen == self._probe_gen and err is None:
+            found = dict(results)
+            rows = [dataclasses.replace(r, probe=found[r.id], freshness=self.freshness_of(found[r.id]))
+                    if r.id in found else r for r in self.rows]
+            if rows != self.rows:
+                self.rows = rows
+                self.rows_version += 1
+        self._start_probe()  # the rows changed while this check ran
+
+    def probe_busy(self) -> bool:
+        """The check's thread is still running (it may have a boot partition mounted)."""
+        return self._probe_task is not None and not self._probe_task.finished.is_set()
+
+    def hold_probes(self) -> None:
+        """A job that uses a drive was requested: a running check stops before its next
+        drive (it runs again later), and no new one starts until the job is over."""
+        if self.probe_busy() and self._probe_cancel is not None:
+            self._probe_cancel.set()
+            self._probe_pending = True
+
+    @property
+    def checking(self) -> bool:
+        """A drive check is running or will run as soon as it may."""
+        return self.probing or self._probe_pending
+
+    @property
+    def waiting_for_probe(self) -> bool:
+        return self.phase is Phase.RUNNING and self.job is not None and self.job.proc is None
+
+    def freshness_of(self, result: ProbeResult | None) -> Freshness | None:
+        if result is None or not self.dist_summary.version:
+            return None
+        return assess(result.installed, self.dist_summary.version, self.dist_summary.build_id)
+
+    @property
+    def update_notice(self) -> UpdateNotice | None:
+        """The drives whose boot files Update boot files would bring up to this app's.
+        Its text does not depend on the selection, so the list below it stays put."""
+        rows = [r for r in self.rows if r.eligible and r.freshness is not None and r.freshness.needs_update]
+        if not rows:
+            return None
+        app = self.dist_summary.version
+
+        def has(f: Freshness) -> str:
+            v = f.installed.version if f.installed else ""
+            if f.state == OTHER_BUILD:
+                return f"{v}, a different build" if v else "a different build"
+            return v or "an unknown version"
+
+        if len(rows) == 1:
+            r = rows[0]
+            f = r.freshness
+            assert f is not None
+            if f.state == OTHER_BUILD:
+                what = f"{r.title} has a different build of beast-booter {app} than this app."
+                short = f"Update available: {r.title} has a different build of beast-booter {app}."
+            else:
+                what = f"{r.title} has beast-booter {has(f)}; this app has {app}."
+                short = f"Update available: {r.title} has beast-booter {has(f)} (this app: {app})."
+            return UpdateNotice("Boot files update available", f"{what} Select it and click Update boot files.",
+                                r.id, short)
+        names = ", ".join(f"{r.title} ({has(r.freshness)})" for r in rows if r.freshness)
+        return UpdateNotice("Boot files updates available",
+                            f"These drives have older or different beast-booter boot files than this app "
+                            f"({app}): {names}. Select one and click Update boot files.", None,
+                            f"Update available for {len(rows)} drives with older or different boot files.")
+
+    @property
+    def suggest_update(self) -> bool:
+        """The selected drive's boot files should be updated (and can be now)."""
+        row = self.selected_row
+        return (row is not None and row.freshness is not None and row.freshness.needs_update
+                and self.update_blocker() is None)
 
     def set_show_all(self, value: bool) -> None:
         if value != self.show_all:
@@ -635,6 +794,11 @@ class Controller:
         ]
         if row.disk.mountpoints:
             details.append("Its volumes will be unmounted first: " + ", ".join(row.disk.mountpoints))
+        f = row.freshness
+        if f is not None and f.state != REINSTALL:
+            have = f"beast-booter {f.installed.version}" if f.installed and f.installed.version else "beast-booter"
+            details.append(f"It already has {have}. To keep the files on it, cancel and use "
+                           "Update boot files instead.")
         details.append("Your system will ask for administrator rights to write to the drive.")
         req = ConfirmRequest(spec, True, "Erase this drive?", row.describe(), tuple(details),
                              ACK_TEXT, "Erase and install")
@@ -649,8 +813,11 @@ class Controller:
         assert row is not None
         spec = JobSpec("update", "device", row.id, disk=row.disk)
         version = self.dist_summary.version
+        f = row.freshness
+        now = f" (it has {f.installed.version} now)" if f and f.installed and f.installed.version else ""
         details = (
-            f"The boot code and the boot partition are replaced with beast-booter {version}.",
+            f"The boot code and the boot partition are replaced with beast-booter {version}{now}.",
+            *(("That is older than what the drive has: this downgrades it.",) if f and f.state == NEWER else ()),
             "The storage partition with your files is not touched.",
             "This only works on a drive that beast-booter installed; anything else is refused.",
             "Your system will ask for administrator rights to write to the drive.",
@@ -717,6 +884,8 @@ class Controller:
         self._start_job(JobSpec("install", "image", path, options=o, image_size=size))
 
     def _start_job(self, spec: JobSpec) -> None:
+        if spec.kind == "device":
+            self.hold_probes()
         # A private directory (mode 0700): nobody else can create its cancel file.
         tmp = tempfile.mkdtemp(prefix="beast-booter-gui-", dir=self._tmp_root)
         progress_file = os.path.join(tmp, "progress.jsonl")
@@ -733,22 +902,54 @@ class Controller:
                 raise BeastError(f"{self.launcher} is missing; the beast-booter folder is incomplete")
             elevated = spec.kind == "device" and not self.backend().is_elevated()
             state.note("running: " + " ".join(_quote(a) for a in argv), "debug")
-            if elevated:
-                state.note("asking for administrator rights")
-                proc = self.backend().run_elevated(argv)
-            else:
-                proc = LocalProcess(argv, os.path.join(tmp, "output.txt"))
         except Exception as e:  # noqa: BLE001 - shown in the window
-            shutil.rmtree(tmp, ignore_errors=True)
-            state.note(_error_text(e), "error")
-            self.final_log = state.log
-            self.outcome = Outcome(False, spec, _fail_title(spec), _error_text(e), code="start-failed",
-                                   target_state="Nothing was written.")
-            self.phase = Phase.FAILED
+            self._start_failed(spec, state, tmp, e)
             return
-        self.job = _Job(spec, argv, proc, ProgressReader(progress_file), state, tmp, elevated, self._clock(),
-                        cancel_path)
+        job = self.job = _Job(spec, argv, None, ProgressReader(progress_file), state, tmp, elevated, self._clock(),
+                              cancel_path)
         self.phase = Phase.RUNNING
+        if spec.kind == "device" and self.probe_busy():
+            state.note("waiting for a drive check to finish before writing")
+        else:
+            self._launch(job)
+
+    def _launch(self, job: _Job) -> None:
+        try:
+            if job.elevated:
+                job.state.note("asking for administrator rights")
+                job.proc = self.backend().run_elevated(job.argv)
+            else:
+                job.proc = LocalProcess(job.argv, os.path.join(job.tmpdir, "output.txt"))
+        except Exception as e:  # noqa: BLE001 - shown in the window
+            self.job = None
+            self._start_failed(job.spec, job.state, job.tmpdir, e)
+
+    def _start_failed(self, spec: JobSpec, state: ProgressState, tmp: str, e: BaseException) -> None:
+        self._not_started(spec, state, tmp, _fail_title(spec), _error_text(e), "start-failed")
+
+    def _not_started(self, spec: JobSpec, state: ProgressState, tmp: str, title: str, message: str, code: str,
+                     *, cancelled: bool = False) -> None:
+        shutil.rmtree(tmp, ignore_errors=True)
+        state.note(message, "warning" if cancelled else "error")
+        self.final_log = state.log
+        self.outcome = Outcome(False, spec, title, message, code=code, cancelled=cancelled,
+                               target_state="Nothing was written.")
+        self.phase = Phase.FAILED
+
+    def _poll_waiting(self, job: _Job) -> bool:
+        """A job that waits for a drive check: start it when the check is over."""
+        if job.cancel_requested:
+            self.job = None
+            self._not_started(job.spec, job.state, job.tmpdir, "Cancelled", "You stopped it before it started.",
+                              "cancelled", cancelled=True)
+        elif not self.probe_busy():
+            self._launch(job)
+        elif self._clock() - job.started_at > PROBE_LIMIT:
+            self.job = None
+            self._not_started(job.spec, job.state, job.tmpdir, _fail_title(job.spec), PROBE_BUSY, "probe-busy")
+        else:
+            return False
+        return True
 
     @property
     def progress(self) -> ProgressState | None:
@@ -763,9 +964,13 @@ class Controller:
         changed = self._poll_tasks()
         if self.phase is Phase.RUNNING and self.job is not None:
             changed |= self._poll_job(self.job)
+        if self._probe_pending:
+            self._start_probe()
         return changed
 
     def _poll_job(self, job: _Job) -> bool:
+        if job.proc is None:
+            return self._poll_waiting(job)
         events = job.reader.read_new()
         for ev in events:
             job.state.apply(ev)
@@ -830,6 +1035,14 @@ class Controller:
         self.outcome = outcome
         self.final_log = st.log
         self.phase = Phase.DONE if outcome.ok else Phase.FAILED
+        if spec.kind == "device":
+            self.drive_written(spec.target)  # its firmware packs too (FirmwareController)
+            # What the drive has now is unknown until it is checked again (dismiss() lists and checks).
+            self._probe_gen += 1
+            self._probe_pending = False
+            self.rows = [dataclasses.replace(r, freshness=None, probe=None) if r.id == spec.target else r
+                         for r in self.rows]
+            self.rows_version += 1
         shutil.rmtree(job.tmpdir, ignore_errors=True)
 
     @property
@@ -855,6 +1068,8 @@ class Controller:
             raise BeastError(CANNOT_STOP)
         job.cancel_requested = True
         job.state.note("stop requested", "warning")
+        if job.proc is None:
+            return  # not started yet: poll() ends it
         if job.cancel_path:
             try:
                 with open(job.cancel_path, "a", encoding="utf-8"):

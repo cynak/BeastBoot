@@ -25,6 +25,7 @@ from tkinter import filedialog, messagebox, ttk
 from .. import __version__
 from ..errors import BeastError
 from ..fs import LABEL_MAX
+from ..installed import CURRENT, NEWER, OTHER_BUILD, OUTDATED, REINSTALL
 from ..interfaces import DiskInfo
 from ..util import human_size
 from . import distinfo
@@ -55,6 +56,12 @@ POLL_MS = 100
 APP_NAME = "beast-booter"
 STEPS = ["Drive", "Options", "Install"]
 TAGLINE = "One USB drive. Many ISOs. Secure Boot intact."
+# The line on a drive card that says which beast-booter it has (installed.Freshness):
+# state -> (badge style, icon). Unknown versions get the muted style and no icon.
+FRESHNESS_BADGES = {
+    OUTDATED: ("AccentBadge", "info"), OTHER_BUILD: ("AccentBadge", "info"), CURRENT: ("OkBadge", "ok"),
+    NEWER: ("WarnBadge", "warning"), REINSTALL: ("WarnBadge", "warning"),
+}
 
 
 def enable_windows_dpi_awareness() -> None:
@@ -250,6 +257,13 @@ class DriveList(ttk.Frame):
                 why = ttk.Label(c, text=f"Not usable: {row.problem}", style="Warn.Pick.TLabel")
                 why.grid(row=1, column=2, sticky="e", padx=(px(10), 0))
                 widgets.append(why)
+            elif row.freshness is not None:  # it has beast-booter: which, and is it up to date?
+                # Where "Not usable" goes on other cards, so that every card keeps the same height
+                style, kind = FRESHNESS_BADGES.get(row.freshness.state, ("MutedBadge", None))
+                badge = ttk.Label(c, text=" " + row.freshness.summary, style=f"{style}.Pick.TLabel",
+                                  image=th.icon(kind, 11) if kind else "", compound="left")
+                badge.grid(row=1, column=2, sticky="e", padx=(px(10), 0))
+                widgets.append(badge)
             for w in [c, *widgets]:
                 c.adopt(w)
                 w.bind("<Button-1>", lambda e, d=row.id: self.click(d), add="+")
@@ -313,6 +327,7 @@ class App:
         self.ws = self.theme.ws
         self.fonts = self.theme.fonts
         self.style = self.theme.style
+        self._badge_styles()
         self.fw = FirmwareController(controller)
         title = f"{APP_NAME} {__version__}" + (" (demo)" if demo else "")
         root.title(title)
@@ -349,6 +364,15 @@ class App:
         self._after = root.after(POLL_MS, self._tick)
 
     # -- helpers ------------------------------------------------------------
+
+    def _badge_styles(self) -> None:
+        """Small bold text in a state colour, on a drive card (FRESHNESS_BADGES)."""
+        p = self.theme.p
+        for name, fg in (("AccentBadge", "accent_text"), ("OkBadge", "ok_text"), ("WarnBadge", "warn_text"),
+                         ("MutedBadge", "muted")):
+            style = f"{name}.Pick.TLabel"
+            self.style.configure(style, background=p["card"], foreground=p[fg], font=self.fonts["eyebrow"])
+            self.style.map(style, background=self.theme.pick_map())
 
     def px(self, points: float) -> int:
         return self.theme.px(points)
@@ -477,10 +501,30 @@ class App:
                         text="Everything on it will be erased. Then copy ISO files onto it and boot any of them.")
         sub.grid(row=1, column=0, sticky="ew")
         self.compact_hide.append(sub)
+        # A short window has no room for the notice card above the list: one line here instead
+        self.head_notice = WrapLabel(head, style="Eyebrow.TLabel", min_chars=40, cursor="hand2",
+                                     image=self.theme.icon("info", 13), compound="left")
+        self.head_notice.grid(row=1, column=0, sticky="ew")
+        self.head_notice.grid_remove()
+        self.head_notice.bind("<Button-1>", lambda e: self._select_notice_drive())
         ttk.Button(head, text="Refresh", underline=0, command=self.refresh).grid(row=0, column=1, rowspan=2,
                                                                                sticky="e", padx=(px(10), 0))
         self.drives = DriveList(scroll.body, self)
-        self.drives.grid(row=0, column=0, sticky="ew")
+        self.drives.grid(row=1, column=0, sticky="ew")
+        # Listed drives with older boot files (shown by _render_drives; above the list, created
+        # after it so that Tab still starts at the drive cards)
+        notice = self.notice = card(scroll.body, self.theme, kind="Info", padding=12)
+        notice.columnconfigure(1, weight=1)
+        ttk.Label(notice, image=self.theme.icon("info", 22), style="Info.TLabel").grid(
+            row=0, column=0, rowspan=2, sticky="n", padx=(0, px(10)))
+        self.notice_title = ttk.Label(notice, style="Sub.Info.TLabel")
+        self.notice_title.grid(row=0, column=1, sticky="w")
+        self.notice_text = WrapLabel(notice, style="Body.Info.TLabel", min_chars=30)
+        self.notice_text.grid(row=1, column=1, sticky="ew")
+        self.notice_button = ttk.Button(notice, text="Select it", style="Info.TButton",
+                                        command=self._select_notice_drive)
+        self.notice_button.grid(row=0, column=2, rowspan=2, sticky="e", padx=(px(10), 0))
+        self.notice_button.bind("<Return>", lambda e: self.notice_button.invoke())
         self.drive_empty = card(scroll.body, self.theme, kind="Info", padding=16)
         self.drive_empty.columnconfigure(1, weight=1)
         ttk.Label(self.drive_empty, image=self.theme.icon("usb", 30), style="Info.TLabel").grid(
@@ -511,8 +555,7 @@ class App:
         self.next_button.grid(row=0, column=3, sticky="e")
         for b in (self.update_button, self.next_button, self.image_button):
             b.bind("<Return>", lambda e, b=b: b.invoke())
-        self.big_buttons.append(self.next_button)
-        scroll.track()
+        scroll.track()  # (Next and Update: their size and style follow the drive, see _render_drives)
         return page
 
     def _build_options_page(self, parent) -> ttk.Frame:
@@ -765,6 +808,14 @@ class App:
         else:
             self._drive_hint = ("", "Muted.TLabel")
         self.render()
+
+    def _select_notice_drive(self) -> None:
+        n = self.c.update_notice
+        if n is not None and n.drive_id:
+            self.select_drive(n.drive_id)
+            card = self.drives.cards.get(n.drive_id)
+            if card is not None:
+                card.focus_set()
 
     def explain_drive(self, drive_id: str) -> None:
         row = next((r for r in self.c.rows if r.id == drive_id), None)
@@ -1035,21 +1086,48 @@ class App:
                 self.drive_empty_text.grid()
             else:
                 self.drive_empty_text.grid_remove()
-            self.drive_empty.grid(row=1, column=0, sticky="ew")
+            self.drive_empty.grid(row=2, column=0, sticky="ew")
         else:
             self.drive_empty.grid_remove()
+        notice = c.update_notice if c.rows else None
+        if notice is not None and self._compact:
+            self.head_notice.configure(text=" " + notice.short)
+            self.head_notice.grid()
+        else:
+            self.head_notice.grid_remove()
+        if notice is not None and not self._compact:
+            self.notice_title.configure(text=notice.title)
+            self.notice_text.configure(text=notice.text)
+            if notice.drive_id:
+                self.notice_button.grid()
+                self.notice_button.state(["disabled"] if notice.drive_id == c.selected_id else ["!disabled"])
+            else:
+                self.notice_button.grid_remove()
+            m = self.theme.margin  # line up with the drive cards' borders
+            self.notice.grid(row=0, column=0, sticky="ew", padx=m, pady=(0, self.px(8)))
+        else:
+            self.notice.grid_remove()
         text, style = self._drive_hint
+        row = c.selected_row
         if not text:
             style = "Muted.TLabel"
             if c.loading and c.rows:
                 text = "Refreshing..."
-            elif c.selected_row is not None:
-                text = f"Selected: {c.selected_row.describe()}"
+            elif row is not None and row.freshness is not None and row.freshness.advice:
+                text = row.freshness.advice
+                style = "Warn.TLabel" if row.freshness.state in (NEWER, REINSTALL) else "TLabel"
+            elif row is not None:
+                text = f"Selected: {row.describe()}"
                 style = "TLabel"
             elif not c.show_all:
                 text = "Only removable drives are listed."
         self.drive_hint.configure(text=text, style=style)
-        has = c.selected_row is not None and c.phase is Phase.IDLE
+        has = row is not None and c.phase is Phase.IDLE
+        # A drive with older boot files: Update is the main action, Next (erase and install) the other one
+        big = "" if self._compact else "Big."
+        update_first = c.suggest_update
+        self.update_button.configure(style=f"{big}Accent.TButton" if update_first else "TButton")
+        self.next_button.configure(style="TButton" if update_first else f"{big}Accent.TButton")
         self.next_button.state(["!disabled"] if has else ["disabled"])
         self.update_button.state(["!disabled"] if c.update_blocker() is None else ["disabled"])
         self.image_button.state(["!disabled"] if c.image_blocker() is None else ["disabled"])
@@ -1158,7 +1236,8 @@ class App:
         self.status_title.configure(text=title)
         self.status_target.configure(text=spec.target_text)
         if not st.started:
-            self.step_label.configure(text="Waiting for administrator permission..." if elevated else "Starting...")
+            self.step_label.configure(text="Finishing a check of the drives first..." if self.c.waiting_for_probe else
+                                      "Waiting for administrator permission..." if elevated else "Starting...")
             if str(self.bar.cget("mode")) != "indeterminate":
                 self.bar.configure(mode="indeterminate")
                 self.bar.start(15)

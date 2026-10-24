@@ -6,13 +6,14 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue"></a>
+  <a href="LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-52525b"></a>
   <a href="VERSION"><img alt="Version: 0.1.0 (in development)" src="https://img.shields.io/badge/version-0.1.0%20%28in%20development%29-orange"></a>
-  <a href="docs/ARCHITECTURE.md#2-boot-flows"><img alt="Platforms: BIOS, UEFI, Secure Boot" src="https://img.shields.io/badge/platforms-BIOS%20%7C%20UEFI%20%7C%20Secure%20Boot-4f46e5"></a>
+  <a href="docs/ARCHITECTURE.md#2-boot-flows"><img alt="Platforms: BIOS, UEFI, Secure Boot" src="https://img.shields.io/badge/platforms-BIOS%20%7C%20UEFI%20%7C%20Secure%20Boot-d62839"></a>
   <br>
-  <a href="sbom/README.md"><img alt="SBOM: CycloneDX 1.6 + SPDX 2.3" src="https://img.shields.io/badge/SBOM-CycloneDX%201.6%20%2B%20SPDX%202.3-6d28d9"></a>
-  <a href="sbom/README.md"><img alt="Vulnerabilities: report with every release" src="https://img.shields.io/badge/vulnerabilities-report%20per%20release-0f766e"></a>
-  <a href="docs/CODE_QUALITY.md"><img alt="Lint: ruff + ShellCheck" src="https://img.shields.io/badge/lint-ruff%20%2B%20ShellCheck-126ed3"></a>
+  <a href="sbom/README.md"><img alt="SBOM: CycloneDX 1.6 + SPDX 2.3" src="https://img.shields.io/badge/SBOM-CycloneDX%201.6%20%2B%20SPDX%202.3-52525b"></a>
+  <a href="sbom/README.md"><img alt="Vulnerabilities: report with every release" src="https://img.shields.io/badge/vulnerabilities-report%20per%20release-52525b"></a>
+  <a href="https://github.com/cynak/BeastBoot/releases"><img alt="Release on GitHub" src="https://img.shields.io/github/v/release/cynak/BeastBoot?include_prereleases&color=d62839&label=release"></a>
+  <a href="docs/CODE_QUALITY.md"><img alt="Lint: ruff + ShellCheck" src="https://img.shields.io/badge/lint-ruff%20%2B%20ShellCheck-52525b"></a>
 </p>
 
 <p align="center">
@@ -22,6 +23,7 @@
 </p>
 
 <p align="center">
+  <a href="#screenshots">Screenshots</a> ·
   <a href="#download-and-use">Download</a> ·
   <a href="#quick-start">Quick&nbsp;start</a> ·
   <a href="#how-it-works">How&nbsp;it&nbsp;works</a> ·
@@ -53,10 +55,68 @@
 > Status: **0.1, in development.** See the [roadmap](#roadmap) and the
 > [known Secure Boot limits](#secure-boot).
 
+## Screenshots
+
+<table>
+<tr>
+<td width="50%" valign="top"><img src="docs/assets/screenshots/menu-root.png" width="100%" alt="The beast-booter boot menu: folders and ISO files with distribution icons, then System information, Download an ISO from a link, Secure Boot help, Reboot and Power off"><br>
+<sub><b>Boot menu.</b> ISOs and folders on the drive, each with its distribution's icon, then the tools.</sub></td>
+<td width="50%" valign="top"><img src="docs/assets/screenshots/menu-folder.png" width="100%" alt="The boot menu inside the Linux folder, listing ISO files"><br>
+<sub><b>Folders.</b> Any folder on the drive opens as its own list; Esc goes back.</sub></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="docs/assets/screenshots/menu-system.png" width="100%" alt="The System information page of the boot menu"><br>
+<sub><b>System information.</b> What the firmware reports: board, CPU, memory, boot mode, Secure Boot.</sub></td>
+<td width="50%" valign="top"><img src="docs/assets/screenshots/menu-download.png" width="100%" alt="The text screen of the download helper"><br>
+<sub><b>Download an ISO from a link.</b> The network helper asks for a link, downloads it over HTTPS and checks it.</sub></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="docs/assets/screenshots/app-drive.png" width="100%" alt="The beast-booter desktop app listing USB drives"><br>
+<sub><b>The app: choose the drive.</b> Only removable drives are offered; system and read-only disks are refused.</sub></td>
+<td width="50%" valign="top"><img src="docs/assets/screenshots/app-options.png" width="100%" alt="The options page of the desktop app"><br>
+<sub><b>Options.</b> File system, partition table, label, and the boot files with their Secure Boot key fingerprints.</sub></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="docs/assets/screenshots/app-confirm.png" width="100%" alt="The erase confirmation dialog of the desktop app"><br>
+<sub><b>Nothing is erased by accident.</b> You tick a box before the drive is erased.</sub></td>
+<td width="50%" valign="top"><img src="docs/assets/screenshots/app-update-available.png" width="100%" alt="The desktop app pointing out a drive with older beast-booter boot files and offering Update boot files"><br>
+<sub><b>Out-of-date drives are pointed out.</b> A drive with older boot files gets a notice and one-click Update boot files; your files on it stay.</sub></td>
+</tr>
+</table>
+
+<details>
+<summary>More of the app</summary>
+
+<table>
+<tr>
+<td width="50%" valign="top"><img src="docs/assets/screenshots/app-done.png" width="100%" alt="The desktop app after a finished install"><br>
+<sub><b>Ready.</b> Next steps, with the key fingerprint to compare in MokManager.</sub></td>
+<td width="50%" valign="top"><img src="docs/assets/screenshots/app-installing.png" width="100%" alt="The desktop app while it installs"><br>
+<sub><b>Installing.</b> Every step is shown; details are one click away.</sub></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="docs/assets/screenshots/app-firmware.png" width="100%" alt="The firmware packs page of the desktop app"><br>
+<sub><b>Firmware packs.</b> Optional WiFi and Ethernet firmware for the download helper, from linux-firmware, every file checked by SHA-256. What a drive already has is shown without a password.</sub></td>
+<td width="50%" valign="top"><img src="docs/assets/screenshots/app-firmware-details.png" width="100%" alt="Details of a firmware pack: source, files, SHA-256 and download URLs"><br>
+<sub><b>Every file, its source and its SHA-256.</b> </sub></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="docs/assets/screenshots/app-drive-light.png" width="100%" alt="The desktop app in its light theme"><br>
+<sub><b>Light theme.</b> </sub></td>
+<td width="50%"></td>
+</tr>
+</table>
+
+</details>
+
+The boot menu pictures are from QEMU; the app pictures use its demo mode (simulated drives, an
+example Secure Boot key). [`scripts/make_screenshots.sh`](scripts/make_screenshots.sh) takes them all
+again; the colours are in [docs/assets/BRAND.md](docs/assets/BRAND.md).
+
 ## Download and use
 
-Each release has a portable package per OS. Unpack it and run it; nothing
-is installed.
+Each [release](https://github.com/cynak/BeastBoot/releases) has a portable package per OS. Unpack it
+and run it; nothing is installed.
 
 | OS | File | Start |
 |---|---|---|
@@ -230,7 +290,8 @@ Releases are built by GitHub Actions when a `vX.Y.Z` tag is pushed, with
   (portable packages); drives and images, MBR/GPT, exFAT/FAT32/NTFS; dark
   graphical menu with folder browsing and a System information page; Linux
   distro recipes; BIOS + UEFI + Secure Boot via MOK; network download over
-  Ethernet and WiFi with optional firmware packs; reproducible,
+  Ethernet and WiFi with optional firmware packs; Ubuntu desktop ISOs boot
+  from exFAT using the ISO's own exFAT driver; reproducible,
   manifest-verified build; SBOM and vulnerability scan; QEMU test suite.
 - **Next:** GRUB with `grub,6` and a shim signed by Microsoft's 2023 UEFI CA
   (from Ubuntu's updates); filesystem-independent ISO mapping, so a distro's

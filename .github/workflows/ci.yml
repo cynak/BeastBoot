@@ -1,0 +1,163 @@
+# Continuous integration: lint, unit tests, build the portable packages and
+# smoke-test each one on its own OS (docs/CODE_QUALITY.md, docs/PORTABLE.md).
+# Releases are built by release.yml (docs/RELEASING.md).
+#
+# Push / pull request runs package the test-only fake dist/ (fast, no signing
+# key; the packages are marked test_only and say so in README.txt). A manual
+# run can build the real boot files in the pinned build container instead.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      dist:
+        description: "Boot files: 'container' = real dist/ from build/Containerfile (throwaway signing key), 'fake' = installer/tests/fakedist.py"
+        type: choice
+        options: [container, fake]
+        default: container
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DIST_SOURCE: ${{ github.event_name == 'workflow_dispatch' && inputs.dist || 'fake' }}
+
+jobs:
+  lint:
+    name: lint (ruff, ShellCheck)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Cache the pinned lint tools
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .tools/cache/lint
+          key: lint-${{ hashFiles('scripts/lint.sh', 'requirements-dev.txt') }}
+
+      - name: Python dev tools (.venv, pinned with hashes in requirements-dev.txt)
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet --disable-pip-version-check --require-hashes -r requirements-dev.txt
+
+      - name: scripts/lint.sh --ci
+        run: scripts/lint.sh --ci
+
+  unit:
+    name: unit tests
+    runs-on: ubuntu-latest
+    # The project's build platform (same container as the release build), so the
+    # reference tools the tests compare against (mkfs.exfat, mkfs.fat, GRUB) are
+    # the versions the tests were validated with.
+    # Container jobs default to `sh` (dash); the steps use bash.
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: ubuntu:26.04
+    timeout-minutes: 30
+    steps:
+      - name: Host tools the tests use as independent validators
+        run: |
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends \
+            ca-certificates git python3 python3-venv \
+            mtools dosfstools exfatprogs ntfs-3g fdisk gdisk xorriso \
+            grub-common grub-pc-bin grub-efi-amd64-bin
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Python dev tools
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet --disable-pip-version-check --require-hashes -r requirements-dev.txt
+
+      - name: Installer, devtools and beast-net unit tests
+        run: |
+          export PYTHONPATH="$PWD/installer"
+          .venv/bin/python -m pytest -q -p no:cacheprovider installer/tests
+          .venv/bin/python -m pytest -q -p no:cacheprovider devtools/tests
+          .venv/bin/python -m pytest -q -p no:cacheprovider beastnet/tests
+          .venv/bin/python -m pytest -q -p no:cacheprovider tests/menu
+
+  package:
+    name: build portable packages (ubuntu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Cache the pinned Python runtimes
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .tools/cache/pbs
+          key: pbs-${{ hashFiles('packaging/portable/runtimes.lock') }}
+
+      - name: Fetch and verify the runtimes (SHA-256 from runtimes.lock)
+        run: python3 -I packaging/portable/build.py --all --fetch-only
+
+      - name: "Boot files: fake dist (test only, does not boot)"
+        if: env.DIST_SOURCE == 'fake'
+        run: python3 -I installer/tests/fakedist.py dist
+
+      - name: "Boot files: real dist from the pinned build container"
+        if: env.DIST_SOURCE == 'container'
+        run: |
+          # A signing key that exists only in this run: these packages are for
+          # testing. Release builds sign with the project key (docs/SECURE_BOOT.md).
+          BB_KEY_CN="beast-booter CI throwaway key (run $GITHUB_RUN_ID)" build/keygen.sh
+          docker build -t beast-booter-build -f build/Containerfile .
+          mkdir -p out/container
+          docker run --rm -v "$PWD/keys:/src/keys:ro" -v "$PWD/out/container:/out" \
+            -e BB_DIST_DIR=/out/dist -e SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" \
+            beast-booter-build
+          mv out/container/dist dist
+          sudo apt-get update -q && sudo apt-get install -y -q sbsigntool
+          build/verify-dist.sh dist
+
+      - name: Build the packages twice (the second build must be byte-identical)
+        run: |
+          # sbom/ in the repository describes the release dist/, not the one
+          # built here, so build.py would refuse it: leave it out in CI.
+          # TODO: generate the SBOM for this dist/ (sbom-vuln) and include it.
+          args=(--all --no-sbom)
+          if [ "$DIST_SOURCE" = fake ]; then args+=(--allow-test-dist); fi
+          python3 -I packaging/portable/build.py "${args[@]}"
+          python3 -I packaging/portable/build.py "${args[@]}" --out out/portable-again
+          diff out/portable/SHA256SUMS out/portable-again/SHA256SUMS
+          cat out/portable/SHA256SUMS
+
+      - name: Verify every archive against its PACKAGE-MANIFEST.json and layout
+        run: python3 -I packaging/portable/build.py --verify out/portable/*.zip out/portable/*.tar.gz
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: portable-packages
+          path: |
+            out/portable/*.zip
+            out/portable/*.tar.gz
+            out/portable/SHA256SUMS
+          if-no-files-found: error
+          compression-level: 0 # already compressed
+          retention-days: 14
+
+  portable-test:
+    name: portable smoke
+    needs: package
+    uses: ./.github/workflows/portable-test.yml
+    with:
+      artifact: portable-packages

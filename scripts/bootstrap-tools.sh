@@ -3,7 +3,7 @@
 #
 # On Debian/Ubuntu you can instead install the same packages system-wide:
 #   sudo apt install grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed shim-signed \
-#        sbsigntool mtools dosfstools exfatprogs ntfs-3g xorriso socat \
+#        sbsigntool mtools dosfstools exfatprogs ntfs-3g xorriso squashfs-tools socat \
 #        qemu-system-x86 qemu-system-gui ovmf python3-pytest python3-virt-firmware \
 #        grub-pc-dbg grub-efi-amd64-dbg gdb
 # (grub-*-dbg must be the same version as grub-pc-bin / grub-efi-amd64-bin.)
@@ -62,6 +62,7 @@ PKGS=(
   # images, filesystems, ISOs
   mtools dosfstools exfatprogs ntfs-3g libntfs-3g89t64
   xorriso libisoburn1t64 libisofs6t64 libburn4t64
+  squashfs-tools
   # QEMU + firmware
   ovmf-generic seabios ipxe-qemu qemu-system-x86 qemu-system-common qemu-system-data
   libfdt1 libpmem1 libndctl6 libdaxctl1 librdmacm1t64 libslirp0 libcacard0

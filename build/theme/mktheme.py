@@ -36,39 +36,41 @@ import sys
 import zlib
 
 # ---------------------------------------------------------------------------
-# Colours. Taken from docs/assets/hero-dark.svg (the project's dark banner).
+# Colours. Taken from docs/assets/BRAND.md (dark greys, one red accent).
 # Values are "#RRGGBB"; alpha, where needed, is given where a colour is used.
 # ---------------------------------------------------------------------------
 PALETTE = {
-    "bg_from": "#0B1120",        # background gradient, top left
-    "bg_to": "#1A1740",          # background gradient, bottom right
-    "glow": "#4F46E5",           # soft light behind the menu
-    "glow2": "#7C3AED",          # second, fainter light (bottom left)
-    "dots": "#3730A3",           # dot pattern (right side)
-    "panel": "#0D1230",          # menu panel and console box fill (translucent)
-    "panel_edge": "#2E3466",     # their 1 px border
-    "console": "#10153A",        # console box and text background (opaque)
+    "bg_from": "#0F0F10",        # background gradient, top left (grey-950)
+    "bg_to": "#1C1517",          # background gradient, bottom right (red-tinted grey)
+    "glow": "#D62839",           # soft light behind the menu (red-600)
+    "glow2": "#7A1622",          # second, fainter light, bottom left (red-800)
+    "dots": "#7A1622",           # dot pattern, right side (red-800)
+    "panel": "#141415",          # menu panel fill (translucent; grey-900)
+    "panel_edge": "#2F2F33",     # their 1 px border (grey-700)
+    "console": "#0F0F10",        # console box and text background (opaque; grey-950)
     "console_text": "white",     # console text: a GRUB colour name (see docs/MENU.md)
-    "accent": "#818CF8",         # selection border, progress bar, "-" in the name
-    "accent_fill": "#6366F1",    # selection fill (translucent)
-    "accent_deep": "#312E81",
-    "item": "#CBD5E1",           # entry text
+    "accent": "#F0505E",         # selection border, progress bar, "-" in the name (red-400)
+    "accent_fill": "#D62839",    # selection fill (translucent; red-600)
+    "accent_deep": "#7A1622",    # red-800
+    "item": "#CFCFD4",           # entry text (grey-300)
     "item_sel": "#FFFFFF",       # selected entry text
-    "muted": "#94A3B8",          # footer and timeout text
-    "title": "#F8FAFC",          # "beast-booter"
-    "eyebrow": "#A5B4FC",        # version, tagline accents
-    "pill_fill": "#1E1B4B",      # badges and key caps
-    "pill_edge": "#4338CA",
-    "pill_text": "#E0E7FF",
-    "on": "#2DD4BF",             # badge dot: Secure Boot on
-    "off": "#FBBF24",            # badge dot: Secure Boot off
-    "neutral": "#A78BFA",        # badge dot: firmware mode
+    "muted": "#9A9AA2",          # footer and timeout text (grey-400)
+    "title": "#F2F2F3",          # "beast-booter" (grey-100)
+    "eyebrow": "#FF8A93",        # version, tagline accents (red-300)
+    "pill_fill": "#1A1A1C",      # badges and key caps (grey-850)
+    "pill_edge": "#7A1622",      # red-800
+    "pill_text": "#F2F2F3",      # grey-100
+    "on": "#34D399",             # badge dot: Secure Boot on (OK)
+    "off": "#FBBF24",            # badge dot: Secure Boot off (warning)
+    "neutral": "#9A9AA2",        # badge dot: firmware mode (grey-400)
     "folder": "#FBBF24",
     "folder_dark": "#D97706",
-    "disc_hole": "#151634",
+    "disc_hole": "#141415",
+    "line": "#CFCFD4",           # line icons (grey-300)
 }
 
 # Linux families and Windows: tint of the disc icon (menuentry --class).
+# The distributions' own colours; generic Linux is neutral grey.
 FAMILIES = {
     "ubuntu": "#E95420",
     "debian": "#D70A53",
@@ -76,7 +78,7 @@ FAMILIES = {
     "arch": "#1793D1",
     "suse": "#73BA25",
     "mint": "#87CF3E",
-    "linux": "#A78BFA",
+    "linux": "#CFCFD4",
 }
 
 # Geometry (pixels; the theme positions are percentages plus these offsets).
@@ -409,14 +411,14 @@ def icon_folder(up: bool = False):
 
 def icon_disc(tint: str | None = None):
     cv, s = icon_canvas()
-    face = grad(rgb("#E2E8F0"), rgb("#C7D2FE"), 3 * s, 3 * s, 21 * s, 21 * s)
+    face = grad(rgb("#F2F2F3"), rgb("#CFCFD4"), 3 * s, 3 * s, 21 * s, 21 * s)
     if tint:
         t = rgb(FAMILIES[tint])
         face = grad(lerp3(t, (1, 1, 1), 0.35), t, 3 * s, 3 * s, 21 * s, 21 * s)
     cv.shape(scaled(sd_circle(12, 12, 10), s), face)
-    if not tint:  # the iridescent sheen of the banner's discs
+    if not tint:  # a red label ring (the accent), so ISOs stand out from grey Linux
         cv.shape(scaled(sd_ring(12, 12, 7.2, 3.2), s),
-                 grad(rgb("#F5D0FE"), rgb("#A5F3FC"), 4 * s, 20 * s, 20 * s, 4 * s), 0.7)
+                 grad(rgb("accent_fill"), rgb("accent_deep"), 4 * s, 20 * s, 20 * s, 4 * s), 0.85)
     cv.shape(scaled(sd_ring(12, 12, 8.4, 0.6), s), (1, 1, 1), 0.45)
     shine = sd_subtract(sd_polygon([(12, 12), (3.5, 6.5), (8, 2.5)]), sd_circle(12, 12, 3.6))
     cv.shape(scaled(sd_union(shine), s), (1, 1, 1), 0.45)
@@ -435,7 +437,7 @@ def icon_windows():
 
 def icon_up():
     cv, s = icon_canvas()
-    col = "#C7D2FE"
+    col = "line"
     path = sd_union(
         sd_polyline([(20, 20), (20, 13)], STROKE),
         sd_arc(16, 13, 4, 270, 360, STROKE),
@@ -491,20 +493,20 @@ def icon_key():
 
 def icon_chip():
     cv, s = icon_canvas()
-    col = "#C7D2FE"
+    col = "line"
     pins = []
     for p in (8.5, 12, 15.5):
         pins += [sd_polyline([(p, 2), (p, 5)], 1.6), sd_polyline([(p, 19), (p, 22)], 1.6),
                  sd_polyline([(2, p), (5, p)], 1.6), sd_polyline([(19, p), (22, p)], 1.6)]
     ic_line(cv, s, sd_union(*pins), col)
     cv.shape(scaled(sd_rrect(5, 5, 19, 19, 2.2), s), grad(rgb("accent_fill"), rgb("accent_deep"), 0, 0, 24 * s, 24 * s))
-    cv.shape(scaled(sd_rrect(9, 9, 15, 15, 1), s), rgb("#C7D2FE"))
+    cv.shape(scaled(sd_rrect(9, 9, 15, 15, 1), s), rgb("line"))
     return cv
 
 
 def icon_gear():
     cv, s = icon_canvas()
-    col = "#C7D2FE"
+    col = "line"
     teeth = []
     for k in range(8):
         a = math.radians(k * 45)
@@ -516,7 +518,7 @@ def icon_gear():
 
 def icon_reboot():
     cv, s = icon_canvas()
-    col = "#C7D2FE"
+    col = "line"
     ic_line(cv, s, sd_arc(12, 12.5, 8, 320, 250, STROKE), col)
     head = sd_polygon([(19.8, 3.2), (20.6, 10.6), (13.4, 8.6)])
     ic_line(cv, s, head, col)
@@ -525,7 +527,7 @@ def icon_reboot():
 
 def icon_power():
     cv, s = icon_canvas()
-    col = "#FCA5A5"
+    col = "eyebrow"
     ic_line(cv, s, sd_union(sd_arc(12, 13, 8.5, 300, 240, STROKE + 0.2), sd_polyline([(12, 2.5), (12, 12)], STROKE + 0.2)), col)
     return cv
 
@@ -602,7 +604,7 @@ def boxes() -> dict[str, Canvas]:
     # Selection: fill fades from left to right (stretched with the box).
     w = 2 * SEL_PAD + 64
     out.update(nine_slice("select", SEL_PAD, SEL_R, None, 0.42, rgb("accent"), 0.9, mid=64,
-                          fill_paint=grad(rgb("accent_fill"), rgb("#4F46E5"), SEL_PAD, 0, w - SEL_PAD, 0)))
+                          fill_paint=grad(rgb("accent_fill"), rgb("#B01E2E"), SEL_PAD, 0, w - SEL_PAD, 0)))
     out.update(nine_slice("sb_frame", 3, 3, rgb("#FFFFFF"), 0.07))
     out.update(nine_slice("sb_thumb", 3, 3, rgb("accent"), 0.75))
     out.update(bar_box("bar", rgb("accent"), 0.16))
@@ -691,13 +693,13 @@ def logo(cv: Canvas, ox: float, oy: float, size: float) -> None:
     """The banner's USB stick with a shield, upright."""
     s = size / 24.0
     off = lambda f: (lambda x, y: f(x - ox, y - oy))  # noqa: E731
-    metal = grad(rgb("#64748B"), rgb("#E2E8F0"), ox + 8 * s, 0, ox + 16 * s, 0)
+    metal = grad(rgb("#5C5C63"), rgb("#F2F2F3"), ox + 8 * s, 0, ox + 16 * s, 0)
     cv.shape(off(scaled(sd_rrect(8.6, 0.6, 15.4, 6.2, 0.8), s)), metal)
-    cv.shape(off(scaled(sd_rrect(9.9, 2.2, 11.3, 3.4, 0.3), s)), rgb("#1E293B"))
-    cv.shape(off(scaled(sd_rrect(12.7, 2.2, 14.1, 3.4, 0.3), s)), rgb("#1E293B"))
+    cv.shape(off(scaled(sd_rrect(9.9, 2.2, 11.3, 3.4, 0.3), s)), rgb("#1F1F22"))
+    cv.shape(off(scaled(sd_rrect(12.7, 2.2, 14.1, 3.4, 0.3), s)), rgb("#1F1F22"))
     body = grad(rgb("accent_fill"), rgb("accent_deep"), ox + 6 * s, oy + 5 * s, ox + 18 * s, oy + 24 * s)
     cv.shape(off(scaled(sd_rrect(6, 5.6, 18, 23.6, 2.6), s)), body)
-    cv.shape(off(scaled(sd_rrect(7, 6.8, 8, 21.6, 0.5), s)), rgb("#C7D2FE"), 0.35)
+    cv.shape(off(scaled(sd_rrect(7, 6.8, 8, 21.6, 0.5), s)), rgb("line"), 0.35)
     sh = [(12 + (px - 12) * 0.42, 9 + (py - 2) * 0.42) for px, py in SHIELD]
     cv.shape(off(scaled(sd_polygon(sh), s)), (1, 1, 1), 0.95)
     chk = [(12 + (px - 12) * 0.42, 9 + (py - 2) * 0.42) for px, py in [(8.2, 12), (11, 14.8), (16, 9.4)]]

@@ -1,0 +1,41 @@
+{
+  "about": [
+    "Official ISO download links for the live checks (opt-in, they use the internet):",
+    "  scripts/check_iso_sources.py         beast-net's downloader on this computer: headers, redirects, TLS, Range, checksum file",
+    "  tests/e2e/test_e2e_beastnet_live.py  beast-net in the QEMU lab: full download, verify, one-shot boot (BB_LIVE_NET=1)",
+    "Links name exact releases, so they go stale: when a check says 'gone', update the link here.",
+    "vm: downloaded by the lab test by default. recipe: what the menu must detect after the download.",
+    "Microsoft: Evaluation Center links (go.microsoft.com/fwlink) are stable public links; the consumer",
+    "Windows 11 page makes a personal link valid for 24 hours, test one with BB_LIVE_URL or --url."
+  ],
+  "sources": [
+    {"id": "ubuntu-desktop", "name": "Ubuntu 26.04.1 Desktop", "vendor": "Canonical",
+     "url": "https://releases.ubuntu.com/26.04.1/ubuntu-26.04.1-desktop-amd64.iso",
+     "sha256_url": "https://releases.ubuntu.com/26.04.1/SHA256SUMS",
+     "min_bytes": 5000000000, "vm": true, "recipe": "casper"},
+    {"id": "ubuntu-server", "name": "Ubuntu 26.04.1 Server", "vendor": "Canonical",
+     "url": "https://releases.ubuntu.com/26.04.1/ubuntu-26.04.1-live-server-amd64.iso",
+     "sha256_url": "https://releases.ubuntu.com/26.04.1/SHA256SUMS",
+     "min_bytes": 2000000000, "vm": false, "recipe": null},
+    {"id": "kubuntu-desktop", "name": "Kubuntu 26.04.1 Desktop", "vendor": "Canonical (cdimage)",
+     "url": "https://cdimage.ubuntu.com/kubuntu/releases/26.04.1/release/kubuntu-26.04.1-desktop-amd64.iso",
+     "sha256_url": "https://cdimage.ubuntu.com/kubuntu/releases/26.04.1/release/SHA256SUMS",
+     "min_bytes": 3000000000, "vm": false, "recipe": null},
+    {"id": "debian-netinst", "name": "Debian 13.7 netinst", "vendor": "Debian (mirror redirect)",
+     "url": "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.7.0-amd64-netinst.iso",
+     "sha256_url": "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/SHA256SUMS",
+     "min_bytes": 500000000, "vm": false, "recipe": null},
+    {"id": "fedora-workstation", "name": "Fedora 44 Workstation Live", "vendor": "Fedora (MirrorManager redirect)",
+     "url": "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Workstation/x86_64/iso/Fedora-Workstation-Live-44-1.7.x86_64.iso",
+     "sha256_url": "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Workstation/x86_64/iso/Fedora-Workstation-44-1.7-x86_64-CHECKSUM",
+     "min_bytes": 2000000000, "vm": false, "recipe": null},
+    {"id": "windows-11-enterprise-eval", "name": "Windows 11 Enterprise (evaluation)", "vendor": "Microsoft Evaluation Center",
+     "url": "https://go.microsoft.com/fwlink/?LinkId=2382600&clcid=0x409&culture=en-us&country=us",
+     "sha256_url": null,
+     "min_bytes": 5000000000, "vm": true, "recipe": "windows"},
+    {"id": "windows-server-2025-eval", "name": "Windows Server 2025 (evaluation)", "vendor": "Microsoft Evaluation Center",
+     "url": "https://go.microsoft.com/fwlink/?linkid=2345730&clcid=0x409&culture=en-us&country=us",
+     "sha256_url": null,
+     "min_bytes": 5000000000, "vm": false, "recipe": "windows"}
+  ]
+}

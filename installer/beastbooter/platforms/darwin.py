@@ -764,6 +764,12 @@ class DarwinBackend:
         raise BeastError("macOS cannot create NTFS filesystems; choose exFAT (default) or FAT32")
 
     # -- elevation ---------------------------------------------------------------
+    def probe_installed(self, disk: DiskInfo, *, should_stop=None):
+        """interfaces.PlatformBackend.probe_installed (installed_probe.py)."""
+        from ..installed_probe import probe_darwin
+
+        return probe_darwin(self, disk, should_stop=should_stop)
+
     def is_elevated(self) -> bool:
         return os.geteuid() == 0
 
