@@ -30,9 +30,9 @@ jobs:
         include:
           - { os: ubuntu-latest, target: linux-x86_64, ext: tar.gz }
           - { os: windows-latest, target: windows-x86_64, ext: zip }
-          # Pinned: macos-latest moved to macOS 26 (2026-10-24), where two tests fail
-          # (Tk 9 ignores the --scale override; the fake-osascript kill test exits 127).
-          # Both are tracked in the experimental macOS 26 entry until they are fixed.
+          # macos-latest moved to macOS 26 on 2026-10-24: gate on macOS 15 and run macOS 26
+          # without blocking until it has a track record. Two tests are flaky on Apple
+          # silicon on both (GUI --scale self-test, fake-osascript kill test: docs/PORTABLE.md).
           - { os: macos-15, target: macos-arm64, ext: zip }
           - { os: macos-26, target: macos-arm64, ext: zip, experimental: true }
           # The plan named macos-13; that image has been retired. macos-15-intel
