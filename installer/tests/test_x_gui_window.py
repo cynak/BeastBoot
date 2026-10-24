@@ -230,6 +230,15 @@ SMALL_SCREEN = textwrap.dedent(r"""
 
     root = tk.Tk()
     root.tk.call("tk", "scaling", scale * 96 / 72)
+    asked = []  # the sizes the app sets with root.geometry()
+    _geometry = tk.Wm.wm_geometry
+
+    def geometry(self, new=None):
+        if new:
+            asked.append(new)
+        return _geometry(self, new)
+
+    tk.Wm.wm_geometry = tk.Wm.geometry = geometry
     c = Controller(backend_factory=lambda: demo.DemoBackend(list_delay=0.0),
                    dist=distinfo.DistLocation(Path(sys.argv[2]), "--dist"), launcher=demo.FAKE_CLI)
     a = appmod.App(root, c, demo=True, theme=theme)
@@ -248,6 +257,14 @@ SMALL_SCREEN = textwrap.dedent(r"""
 
     problems = []
     pump()
+    if asked:  # Windows and macOS keep a window inside the real screen; X11 does not
+        aw, ah = (int(n) for n in asked[-1].split("+")[0].split("x"))
+        if root.winfo_width() < aw - 1 or root.winfo_height() < ah - 1:
+            real = root.tk.call("winfo", "screenwidth", "."), root.tk.call("winfo", "screenheight", ".")
+            print(f"SKIP the window manager made the {aw}x{ah} window {root.winfo_width()}x{root.winfo_height()}: "
+                  f"the real screen ({real[0]}x{real[1]}) is smaller than the simulated {width}x{height}")
+            root.destroy()
+            sys.exit(77)
     if root.winfo_width() > width or root.winfo_height() > height:
         problems.append(f"window {root.winfo_width()}x{root.winfo_height()} larger than the screen")
     wx0, wy0, wx1, wy1 = box(root)
@@ -322,5 +339,7 @@ def test_small_screens_cut_nothing(tmp_path, fw_dist, width, height, scale, them
     proc = subprocess.run([PYTHON, "-s", "-E", "-B", str(script), str(INSTALLER), str(fw_dist),
                            str(width), str(height), str(scale), theme],
                           env=ENV, capture_output=True, text=True, timeout=150)
+    if proc.returncode == 77:
+        pytest.skip(proc.stdout.strip().splitlines()[-1].removeprefix("SKIP "))
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "LAYOUT" in proc.stdout

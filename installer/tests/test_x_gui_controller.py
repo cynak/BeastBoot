@@ -418,10 +418,11 @@ def test_image_size_rejected(text):
 # the CLI command line
 # ---------------------------------------------------------------------------
 
-PY = "/opt/bb/python/bin/python3"
-LAUNCH = "/opt/bb/app/beast_booter_launch.py"
-PF = "/tmp/bb-gui-x/progress.jsonl"
-DIST = "/opt/bb/payload/dist"
+R = "C:" if os.name == "nt" else ""  # an absolute path needs a drive on Windows
+PY = R + "/opt/bb/python/bin/python3"
+LAUNCH = R + "/opt/bb/app/beast_booter_launch.py"
+PF = R + "/tmp/bb-gui-x/progress.jsonl"
+DIST = R + "/opt/bb/payload/dist"
 
 
 def test_install_device_argv():
@@ -437,9 +438,9 @@ def test_install_device_argv():
 def test_argv_with_cancel_file():
     spec = JobSpec("update", "device", "/dev/sdb", disk=STICK)
     argv = build_cli_argv(spec, python=PY, launcher=LAUNCH, progress_file=PF, dist=DIST,
-                          cancel_file="/tmp/bb-gui-x/cancel")
+                          cancel_file=R + "/tmp/bb-gui-x/cancel")
     i = argv.index("--cancel-file")
-    assert argv[i + 1] == "/tmp/bb-gui-x/cancel"
+    assert argv[i + 1] == R + "/tmp/bb-gui-x/cancel"
     with pytest.raises(BeastError, match="absolute"):
         build_cli_argv(spec, python=PY, launcher=LAUNCH, progress_file=PF, dist=DIST, cancel_file="cancel")
 
@@ -456,18 +457,18 @@ def test_update_device_argv_has_no_install_options():
 
 
 def test_image_argv_uses_byte_size():
-    spec = JobSpec("install", "image", "/home/u/my images/bb 'test'.img", options=Options(), image_size=4 << 30)
+    spec = JobSpec("install", "image", R + "/home/u/my images/bb 'test'.img", options=Options(), image_size=4 << 30)
     argv = build_cli_argv(spec, python=PY, launcher=LAUNCH, progress_file=PF, dist=DIST)
     i = argv.index("--image")
-    assert argv[i + 1] == "/home/u/my images/bb 'test'.img"  # one element, unquoted
+    assert argv[i + 1] == R + "/home/u/my images/bb 'test'.img"  # one element, unquoted
     assert argv[i + 2 : i + 4] == ["--size", str(4 << 30)]
 
 
 def test_argv_is_quoting_safe():
     nasty = 'a b"c;$(rm -rf ~)`x`'
-    spec = JobSpec("install", "image", f"/tmp/{nasty}.img", options=Options(label="-x y"), image_size=1 << 30)
-    argv = build_cli_argv(spec, python=PY, launcher=LAUNCH, progress_file=PF, dist="/d i s t")
-    assert f"/tmp/{nasty}.img" in argv and "/d i s t" in argv
+    spec = JobSpec("install", "image", R + f"/tmp/{nasty}.img", options=Options(label="-x y"), image_size=1 << 30)
+    argv = build_cli_argv(spec, python=PY, launcher=LAUNCH, progress_file=PF, dist=R + "/d i s t")
+    assert R + f"/tmp/{nasty}.img" in argv and R + "/d i s t" in argv
     assert "--label=-x y" in argv  # a label starting with "-" can't be taken for an option
     assert all(isinstance(a, str) for a in argv)
 

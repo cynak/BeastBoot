@@ -124,29 +124,30 @@ def test_parse_installed_variants():
 # command lines
 # ---------------------------------------------------------------------------
 
-PY, LAUNCH, PF = "/opt/bb/runtime/python3", "/opt/bb/app/beast_booter_launch.py", "/tmp/bb-fw/p.jsonl"
+R = "C:" if os.name == "nt" else ""  # an absolute path needs a drive on Windows
+PY, LAUNCH, PF = R + "/opt/bb/runtime/python3", R + "/opt/bb/app/beast_booter_launch.py", R + "/tmp/bb-fw/p.jsonl"
 DEV = FwTarget("device", "/dev/sdb", STICK)
 
 
 def test_fw_command_lines():
     common = dict(python=PY, launcher=LAUNCH, progress_file=PF)
     base = [PY, "-s", "-E", "-B", LAUNCH, "firmware"]
-    assert build_fw_argv("fetch", packs=("intel-wifi", "realtek-ethernet"), out_dir="/tmp/bb-fw/packs",
-                         catalog="/d/esp/beast-net/catalog.json", **common) == base + [
-        "fetch", "--pack", "intel-wifi", "--pack", "realtek-ethernet", "--out", "/tmp/bb-fw/packs",
-        "--catalog", "/d/esp/beast-net/catalog.json", "--progress-file", PF]
-    assert build_fw_argv("install", target=DEV, from_dir="/tmp/bb-fw/packs", **common) == base + [
-        "install", "--device", "/dev/sdb", "--from", "/tmp/bb-fw/packs", "--progress-file", PF]
-    assert build_fw_argv("remove", target=FwTarget("image", "/x/a.img"), packs=("intel-wifi",), **common) == base + [
-        "remove", "--image", "/x/a.img", "--pack", "intel-wifi", "--progress-file", PF]
+    assert build_fw_argv("fetch", packs=("intel-wifi", "realtek-ethernet"), out_dir=R + "/tmp/bb-fw/packs",
+                         catalog=R + "/d/esp/beast-net/catalog.json", **common) == base + [
+        "fetch", "--pack", "intel-wifi", "--pack", "realtek-ethernet", "--out", R + "/tmp/bb-fw/packs",
+        "--catalog", R + "/d/esp/beast-net/catalog.json", "--progress-file", PF]
+    assert build_fw_argv("install", target=DEV, from_dir=R + "/tmp/bb-fw/packs", **common) == base + [
+        "install", "--device", "/dev/sdb", "--from", R + "/tmp/bb-fw/packs", "--progress-file", PF]
+    assert build_fw_argv("remove", target=FwTarget("image", R + "/x/a.img"), packs=("intel-wifi",), **common) == base + [
+        "remove", "--image", R + "/x/a.img", "--pack", "intel-wifi", "--progress-file", PF]
     assert build_fw_argv("list", target=DEV, **common) == base + [
         "list", "--device", "/dev/sdb", "--json", "--progress-file", PF]
 
 
 @pytest.mark.parametrize("kw, error", [
     (dict(command="fetch", packs=("intel-wifi",), out_dir="rel/dir"), "absolute"),
-    (dict(command="fetch", packs=("--evil",), out_dir="/o"), "bad pack id"),
-    (dict(command="install", from_dir="/o"), "needs a target"),
+    (dict(command="fetch", packs=("--evil",), out_dir=R + "/o"), "bad pack id"),
+    (dict(command="install", from_dir=R + "/o"), "needs a target"),
     (dict(command="remove", target=DEV, packs=("a", "b")), "one pack"),
     (dict(command="list", target=FwTarget("image", "x.img")), "absolute"),
     (dict(command="format"), "unknown firmware command"),

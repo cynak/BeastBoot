@@ -98,8 +98,8 @@ def test_restrict_writes_merges_touching_and_overlapping_ranges(tmp_path):
 
 def test_image_target_without_pread_like_windows(tmp_path, monkeypatch):
     """Windows Python has no os.pread / os.pwrite: seek + read / write is used instead."""
-    monkeypatch.delattr(os, "pread")
-    monkeypatch.delattr(os, "pwrite")
+    monkeypatch.delattr(os, "pread", raising=False)
+    monkeypatch.delattr(os, "pwrite", raising=False)
     p = tmp_path / "disk.img"
     with ImageTarget.create(str(p), MIB) as t:
         t.write(MIB - 5, b"tail!")
@@ -174,12 +174,12 @@ def test_open_errors(tmp_path):
     with pytest.raises(BeastError, match="does not exist"):
         ImageTarget(str(tmp_path / "missing.img"), writable=False)
     with pytest.raises(BeastError, match="not a regular file"):
-        ImageTarget("/dev/null", writable=False)
+        ImageTarget(os.devnull, writable=False)  # NUL on Windows: a character device too
     with pytest.raises(BeastError, match="invalid image size"):
         ImageTarget.create(str(tmp_path / "x.img"), 0)
     (tmp_path / "ro.img").write_bytes(b"\0" * 512)
     os.chmod(tmp_path / "ro.img", 0o444)
-    if os.geteuid() != 0:
+    if getattr(os, "geteuid", lambda: 1)() != 0:  # root ignores the mode; Windows: read-only attribute
         with pytest.raises(BeastError, match="permission denied"):
             ImageTarget(str(tmp_path / "ro.img"), writable=True)
 

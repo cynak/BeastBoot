@@ -112,15 +112,15 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           command -v xvfb-run > /dev/null || { sudo apt-get update -q && sudo apt-get install -y -q xvfb; }
-          xvfb-run -a "$PY" -I packaging/portable/ci/smoke.py "$PKG" --clean-env --gui
+          xvfb-run -a "$PY" -I -B packaging/portable/ci/smoke.py "$PKG" --clean-env --gui
 
       - name: CLI --version and --help, GUI --selftest (macOS)
         if: runner.os == 'macOS'
-        run: '"$PY" -I packaging/portable/ci/smoke.py "$PKG" --clean-env --gui'
+        run: '"$PY" -I -B packaging/portable/ci/smoke.py "$PKG" --clean-env --gui'
 
       - name: CLI --version and --help, GUI --selftest (Windows; python.exe and pythonw.exe)
         if: runner.os == 'Windows'
-        run: '"$PY" -I packaging/portable/ci/smoke.py "$PKG" --gui'
+        run: '"$PY" -I -B packaging/portable/ci/smoke.py "$PKG" --gui'
 
       - name: BeastBooter.cmd returns at once and leaves the GUI running in pythonw.exe
         if: runner.os == 'Windows'
@@ -204,7 +204,7 @@ jobs:
             sudo apt-get update -q && sudo apt-get install -y -q exfatprogs dosfstools mtools
             extra=(--clean-env --extra-path /usr/sbin --extra-path /sbin)
           fi
-          "$PY" -I packaging/portable/ci/smoke.py "$PKG" --image "${extra[@]}"
+          "$PY" -I -B packaging/portable/ci/smoke.py "$PKG" --image "${extra[@]}"
 
       - name: Real-device smoke test (Windows, throwaway virtual disk)
         if: runner.os == 'Windows'

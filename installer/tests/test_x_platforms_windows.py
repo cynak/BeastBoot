@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import ctypes
 import json
+import os
 import struct
 import subprocess
 from pathlib import Path
@@ -570,7 +571,7 @@ def test_mounted_volume_blocks_writes_without_prepare(backend, dll):
     disk = small_stick(dll)
     with backend.open_raw(disk, writable=True) as t:
         t.write(0, b"\x55\xaa")  # the MBR is outside every volume: allowed
-        with pytest.raises(BeastError, match=r"access denied \(Windows error 5\).*mounted volumes"):
+        with pytest.raises(BeastError, match=r"(?i)access (is )?denied\.? \(Windows error 5\).*mounted volumes"):
             t.write(MIB + 3, b"data")
 
 
@@ -648,7 +649,7 @@ def test_open_raw_errors(backend, dll):
         backend.open_raw(wrong, writable=False)
     assert dll.handles == {}
     dll.admin = False
-    with pytest.raises(BeastError, match=r"cannot open \\\\.\\PhysicalDrive2: access denied.*administrator"):
+    with pytest.raises(BeastError, match=r"cannot open \\\\.\\PhysicalDrive2: (?i:access (is )?denied).*administrator"):
         backend.open_raw(disk, writable=True)
     missing = DiskInfo(**{**disk.__dict__, "id": "\\\\.\\PhysicalDrive9", "path": "\\\\.\\PhysicalDrive9"})
     with pytest.raises(BeastError, match="Windows error 2"):
@@ -741,7 +742,8 @@ def test_run_powershell(monkeypatch):
 
     monkeypatch.setattr(win.subprocess, "run", fake_run)
     assert win.run_powershell("Get-Disk").startswith("##BEAST:disks")
-    assert seen["creationflags"] == 0 and seen["stdin"] == subprocess.DEVNULL  # CREATE_NO_WINDOW only on Windows
+    assert seen["creationflags"] == (win.CREATE_NO_WINDOW if os.name == "nt" else 0)  # no console window flash
+    assert seen["stdin"] == subprocess.DEVNULL
 
     def failing(argv, **kw):
         return subprocess.CompletedProcess(argv, 1, b"", b"Access denied.\r\n")
