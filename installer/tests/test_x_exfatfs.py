@@ -19,6 +19,7 @@ import time
 from pathlib import Path
 
 import pytest
+from conftest import O_BINARY, allocated_bytes, pread, pwrite, sparse_file
 
 from beastbooter import exfatfs
 from beastbooter.errors import BeastError
@@ -72,18 +73,18 @@ class FileTarget:
     sector_size = 512
 
     def __init__(self, path: Path) -> None:
-        self._fd = os.open(path, os.O_RDWR)
+        self._fd = os.open(path, os.O_RDWR | O_BINARY)
         self.size = os.fstat(self._fd).st_size
         self.writes = 0
 
     def read(self, offset: int, length: int) -> bytes:
-        return os.pread(self._fd, length, offset)
+        return pread(self._fd, length, offset)
 
     def write(self, offset: int, data: bytes) -> None:
         assert offset >= 0 and offset + len(data) <= self.size, "write outside the target"
         view = memoryview(data)
         while view:
-            n = os.pwrite(self._fd, view, offset)
+            n = pwrite(self._fd, view, offset)
             offset += n
             view = view[n:]
         self.writes += 1
@@ -96,9 +97,7 @@ class FileTarget:
 
 
 def sparse_image(path: Path, size: int) -> Path:
-    with open(path, "wb") as f:
-        f.truncate(size)
-    return path
+    return sparse_file(path, size)
 
 
 def formatted(path: Path, size: int, **kw) -> Path:
@@ -313,7 +312,7 @@ def test_formatting_2tib_takes_seconds_and_stays_sparse(tmp_path):
     elapsed = time.monotonic() - start
     t.close()
     assert elapsed < 15, f"format took {elapsed:.1f} s"
-    allocated = os.stat(img).st_blocks * 512
+    allocated = allocated_bytes(img)
     assert allocated < 128 * MIB  # FAT (64 MiB) + bitmap (2 MiB) + a little
     if FSCK:
         fsck(img)

@@ -215,7 +215,7 @@ class ImageTarget(FdTarget):
                 raise BeastError(f"{path} exists and is not a regular file")
             os.ftruncate(fd, 0)  # drop old contents: the new image reads as all zeros
             _make_sparse(fd)  # Windows only (see there)
-            os.ftruncate(fd, size)  # sparse: no blocks allocated until written
+            _set_size(fd, size)  # sparse: no blocks allocated until written
         except OSError as e:
             os.close(fd)
             raise BeastError(f"cannot create {path}: {e.strerror}") from None
@@ -251,6 +251,32 @@ def _make_sparse(fd: int, *, windll=None, get_osfhandle=None) -> None:
         fn(get_osfhandle(fd), FSCTL_SET_SPARSE, None, 0, None, 0, ctypes.byref(returned), None)
     except (ImportError, OSError, AttributeError, ValueError):
         pass
+
+
+FILE_END_OF_FILE_INFO = 6  # FILE_INFO_BY_HANDLE_CLASS.FileEndOfFileInfo
+
+
+def _set_size(fd: int, size: int, *, windll=None, get_osfhandle=None) -> None:
+    """os.ftruncate(fd, size), except on Windows: there os.ftruncate (the C runtime's
+    _chsize_s) grows a file by writing zeros over the new part, which allocates all of
+    it, sparse or not, so a 2 TiB image would fill the disk. Setting the end of file
+    directly (SetFileInformationByHandle) leaves the new part of a sparse file unallocated."""
+    if os.name != "nt" and windll is None:
+        os.ftruncate(fd, size)
+        return
+    import ctypes
+
+    if get_osfhandle is None:
+        import msvcrt
+
+        get_osfhandle = msvcrt.get_osfhandle
+    k32 = windll.kernel32 if windll is not None else ctypes.WinDLL("kernel32", use_last_error=True)
+    fn = k32.SetFileInformationByHandle
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32]
+    eof = ctypes.c_int64(size)
+    if not fn(get_osfhandle(fd), FILE_END_OF_FILE_INFO, ctypes.byref(eof), ctypes.sizeof(eof)):
+        raise ctypes.WinError(ctypes.get_last_error())
 
 
 # ---------------------------------------------------------------------------

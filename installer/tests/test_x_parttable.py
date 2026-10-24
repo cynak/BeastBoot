@@ -18,6 +18,7 @@ import zlib
 from pathlib import Path
 
 import pytest
+from conftest import O_BINARY, allocated_bytes, pread, pwrite, sparse_file
 
 from beastbooter import parttable
 from beastbooter.bootcode import boot_writes
@@ -69,19 +70,18 @@ class ImageFile:
     sector_size = SECTOR_SIZE
 
     def __init__(self, path: Path, size: int | None = None):
-        flags = os.O_RDWR | os.O_CREAT | (os.O_TRUNC if size is not None else 0)
-        self.fd = os.open(path, flags, 0o644)
         if size is not None:
-            os.ftruncate(self.fd, size)
+            sparse_file(path, size)
+        self.fd = os.open(path, os.O_RDWR | os.O_CREAT | O_BINARY, 0o644)
         self.size = os.fstat(self.fd).st_size
         self.writes: list[tuple[int, int]] = []
 
     def read(self, offset: int, length: int) -> bytes:
-        return os.pread(self.fd, length, offset)
+        return pread(self.fd, length, offset)
 
     def write(self, offset: int, data: bytes) -> None:
         assert 0 <= offset and offset + len(data) <= self.size, "write outside the image"
-        os.pwrite(self.fd, data, offset)
+        pwrite(self.fd, data, offset)
         self.writes.append((offset, len(data)))
 
     def flush(self) -> None:
@@ -195,7 +195,7 @@ def test_tools_read_the_planned_geometry(tmp_path, name, size, layout):
 
     # The installer's own parser agrees too.
     with open(img, "rb") as f:
-        parsed = read_partition_table(lambda off, n: os.pread(f.fileno(), n, off), size // SECTOR_SIZE)
+        parsed = read_partition_table(lambda off, n: pread(f.fileno(), n, off), size // SECTOR_SIZE)
     assert {i: (e.start, e.size) for i, e in parsed.entries.items()} == {
         p.index: (p.start, p.size) for p in plan.parts
     }
@@ -394,7 +394,7 @@ def test_writes_stay_in_the_table_areas(tmp_path):
     for off, length in t.writes:
         assert off + length <= 34 * SECTOR_SIZE or off >= (n - 33) * SECTOR_SIZE
     assert sum(length for _off, length in t.writes) == (34 + 33) * SECTOR_SIZE
-    assert os.stat(tmp_path / "disk.img").st_blocks * 512 < 1 << 20  # still sparse
+    assert allocated_bytes(tmp_path / "disk.img") < 1 << 20  # still sparse
 
 
 def test_errors(tmp_path):

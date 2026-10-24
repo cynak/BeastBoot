@@ -18,6 +18,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
+from conftest import O_BINARY, allocated_bytes, pread, pwrite, sparse_file
 
 from beastbooter import fatfs
 from beastbooter.errors import BeastError
@@ -52,19 +53,18 @@ class ImageFile:
     sector_size = SECTOR_SIZE
 
     def __init__(self, path: Path, size: int | None = None):
-        flags = os.O_RDWR | os.O_CREAT | (os.O_TRUNC if size is not None else 0)
-        self.fd = os.open(path, flags, 0o644)
         if size is not None:
-            os.ftruncate(self.fd, size)
+            sparse_file(path, size)
+        self.fd = os.open(path, os.O_RDWR | os.O_CREAT | O_BINARY, 0o644)
         self.size = os.fstat(self.fd).st_size
         self.writes: list[tuple[int, int]] = []
 
     def read(self, offset: int, length: int) -> bytes:
-        return os.pread(self.fd, length, offset)
+        return pread(self.fd, length, offset)
 
     def write(self, offset: int, data: bytes) -> None:
         assert 0 <= offset and offset + len(data) <= self.size, "write outside the image"
-        os.pwrite(self.fd, data, offset)
+        pwrite(self.fd, data, offset)
         self.writes.append((offset, len(data)))
 
     def flush(self) -> None:
@@ -346,7 +346,7 @@ def test_format_is_clean(tmp_path, name, size, bits):
     for path, data in files.items():
         assert mtype(tmp_path / "vol.img", 0, path) == data
     if size > 8 * GIB:
-        assert os.stat(tmp_path / "vol.img").st_blocks * 512 < 64 * MIB  # still sparse
+        assert allocated_bytes(tmp_path / "vol.img") < 64 * MIB  # still sparse
 
 
 def test_fat32_reserved_area(tmp_path):

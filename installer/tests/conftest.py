@@ -18,9 +18,85 @@ sys.path.insert(0, str(HERE.parent))  # installer/ -> import beastbooter
 sys.path.insert(0, str(HERE))  # fakedist
 
 import fakedist  # noqa: E402
-from beastbooter import cli  # noqa: E402
+from beastbooter import blockio, cli  # noqa: E402
+from beastbooter.errors import BeastError  # noqa: E402
 from beastbooter.esp import parse_set_lines  # noqa: E402
 from beastbooter.layout import SECTOR_SIZE  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# Big sparse image files
+# ---------------------------------------------------------------------------
+
+O_BINARY = getattr(os, "O_BINARY", 0)  # Windows: os.open is in text mode without it
+pread, pwrite = blockio._pread, blockio._pwrite  # os.pread / os.pwrite do not exist on Windows
+
+# Up to this size a test file is fine even where it cannot stay sparse. Above it
+# the test is skipped on such a file system instead of filling the disk.
+BIG_FILE = 4 << 30
+_sparse_ok: dict[int, bool] = {}
+_made: list[Path] = []
+
+
+def allocated_bytes(path) -> int:
+    """Disk space a file takes: st_blocks on POSIX, GetCompressedFileSizeW on Windows."""
+    if os.name != "nt":
+        return os.stat(path).st_blocks * 512
+    import ctypes
+    from ctypes import wintypes
+
+    fn = ctypes.WinDLL("kernel32", use_last_error=True).GetCompressedFileSizeW
+    fn.restype = wintypes.DWORD
+    fn.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(wintypes.DWORD)]
+    high = wintypes.DWORD(0)
+    low = fn(str(path), ctypes.byref(high))
+    if low == 0xFFFFFFFF and ctypes.get_last_error():
+        raise ctypes.WinError(ctypes.get_last_error())
+    return (high.value << 32) | low
+
+
+def keeps_sparse(directory) -> bool:
+    """Can files in `directory` stay sparse? Probe: a 2*BIG_FILE file, one byte written at its end."""
+    key = os.stat(directory).st_dev
+    if key not in _sparse_ok:
+        probe = Path(directory) / "sparse-probe.bin"
+        ok = False
+        try:
+            with blockio.ImageTarget.create(str(probe), 2 * BIG_FILE) as t:
+                # Not sparse: NTFS reserves the whole size at once; never write then.
+                if allocated_bytes(probe) < BIG_FILE:
+                    t.write(t.size - 1, b"\0")
+                    t.flush()
+                    ok = allocated_bytes(probe) < 64 << 20
+        except (OSError, BeastError):
+            ok = False
+        finally:
+            probe.unlink(missing_ok=True)
+        _sparse_ok[key] = ok
+    return _sparse_ok[key]
+
+
+def sparse_file(path, size: int) -> Path:
+    """A new all-zero file of `size` bytes that takes no disk space until written
+    (blockio.ImageTarget.create: FSCTL_SET_SPARSE on Windows). Deleted after the test.
+    Bigger than BIG_FILE: skipped where the file system cannot keep it sparse."""
+    path = Path(path)
+    if size > BIG_FILE and not keeps_sparse(path.parent):
+        pytest.skip(f"{path.parent} cannot keep a {size / (1 << 30):.0f} GiB file sparse")
+    blockio.ImageTarget.create(str(path), size).close()
+    _made.append(path)
+    return path
+
+
+@pytest.fixture(autouse=True)
+def _delete_sparse_files():
+    """Delete what sparse_file made as soon as its test ends, so a run never piles up images."""
+    yield
+    while _made:
+        try:
+            _made.pop().unlink(missing_ok=True)
+        except OSError:  # still open (Windows): left for pytest's tmp cleanup
+            pass
+
 
 # The installer itself needs no tools for exFAT/FAT32 (pure Python); mkfs.ntfs
 # makes NTFS. The others are independent validators used by the tests.

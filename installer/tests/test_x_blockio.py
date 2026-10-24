@@ -6,6 +6,7 @@ import os
 import random
 
 import pytest
+from conftest import allocated_bytes
 
 from beastbooter.blockio import AlignedTarget, FdTarget, ImageTarget, merge_ranges
 from beastbooter.errors import BeastError
@@ -25,7 +26,7 @@ def test_create_is_sparse_and_zero(tmp_path):
         assert t.read(5 * MIB + 3, 100) == b"\0" * 100
     st = os.stat(p)
     assert st.st_size == 64 * MIB
-    assert st.st_blocks * 512 < MIB  # nothing allocated
+    assert allocated_bytes(p) < MIB  # nothing allocated
 
 
 def test_any_offset_roundtrip(tmp_path):
@@ -138,6 +139,27 @@ def test_make_sparse_calls_fsctl_set_sparse():
     assert blockio.FSCTL_SET_SPARSE == (0x09 << 16) | (49 << 2)  # CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 49, ...)
     assert dll.kernel32.DeviceIoControl.restype is not None  # declared before the call
     blockio._make_sparse(7)  # not Windows: nothing to do, no error
+
+
+def test_set_size_on_windows_sets_end_of_file_without_writing_zeros(tmp_path):
+    """Windows' os.ftruncate writes zeros to grow a file (allocating a sparse image):
+    blockio sets the end of file with SetFileInformationByHandle(FileEndOfFileInfo)."""
+    from types import SimpleNamespace
+
+    from beastbooter import blockio
+
+    calls = []
+
+    def fn(*args):
+        calls.append((args[0], args[1], args[2]._obj.value, args[3]))
+        return 1
+
+    dll = SimpleNamespace(kernel32=SimpleNamespace(SetFileInformationByHandle=fn))
+    blockio._set_size(7, 3 << 40, windll=dll, get_osfhandle=lambda fd: 0x1234 + fd)
+    assert calls == [(0x123B, 6, 3 << 40, 8)]
+    with open(tmp_path / "f", "wb") as f:  # not Windows: plain ftruncate
+        blockio._set_size(f.fileno(), 12345)
+    assert (tmp_path / "f").stat().st_size == 12345
 
 
 def test_create_empties_existing_file(tmp_path):

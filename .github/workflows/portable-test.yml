@@ -186,7 +186,11 @@ jobs:
             display=(xvfb-run -a sh -c 'BB_GUI_TEST_DISPLAY=$DISPLAY exec "$@"' sh)
           fi
           cd "$app/tests"
-          PYTHONPATH="$RUNNER_TEMP/pytest-site" "${display[@]}" "$py" -s -B -m pytest -q -rs -p no:cacheprovider "${names[@]}"
+          # -rfEs: list every failure, error and skip at the end. --basetemp: test
+          # images go to the runner's temp dir. --maxfail: one broken fixture must
+          # not hide the rest, but a runaway stops before the log drowns.
+          PYTHONPATH="$RUNNER_TEMP/pytest-site" "${display[@]}" "$py" -s -B -m pytest -q --tb=short -rfEs \
+            --maxfail=300 --basetemp "$RUNNER_TEMP/pytest-tmp" -p no:cacheprovider "${names[@]}"
 
       - name: Image install + info --json
         # TODO(lead wiring): on Windows/macOS this needs the pure-Python
