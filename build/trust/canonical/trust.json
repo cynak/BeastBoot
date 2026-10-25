@@ -1,0 +1,96 @@
+{
+  "schema": 1,
+  "generated_by": "scripts/shim_trust.py extract",
+  "source": "deb:shim-signed 1.59+15.8-0ubuntu2 (Ubuntu 26.04), /usr/lib/shim/shimx64.efi.signed.latest",
+  "source_file": "shimx64.efi.signed.latest",
+  "source_sha256": "4c89145e958cf592a6f16552eadf112ef2c1c525e2435c2761e6a99fa88188b3",
+  "vendor_cert": {
+    "file": "canonical-master-ca.der",
+    "sha256": "ed1fe72cb9ca31c9af5b757afcd733323d675825032e6ced7fe1ae9eb767998c",
+    "subject": "CN=Canonical Ltd. Master Certificate Authority,O=Canonical Ltd.,L=Douglas,ST=Isle of Man,C=GB",
+    "issuer": "CN=Canonical Ltd. Master Certificate Authority,O=Canonical Ltd.,L=Douglas,ST=Isle of Man,C=GB",
+    "not_before": "Apr 12 11:12:51 2012 GMT",
+    "not_after": "Apr 11 11:12:51 2042 GMT"
+  },
+  "vendor_dbx": {
+    "x509": [
+      {
+        "file": "revoked/90244cc221e00c1fe0a7b78b3ce945dd73bf1633019eb6c15fa5646f9c8d2e1e.der",
+        "sha256": "90244cc221e00c1fe0a7b78b3ce945dd73bf1633019eb6c15fa5646f9c8d2e1e",
+        "subject": "CN=Canonical Ltd. Secure Boot Signing,OU=Secure Boot,O=Canonical Ltd.,ST=Isle of Man,C=GB",
+        "issuer": "CN=Canonical Ltd. Master Certificate Authority,O=Canonical Ltd.,L=Douglas,ST=Isle of Man,C=GB",
+        "not_before": "Apr 12 11:39:08 2012 GMT",
+        "not_after": "Apr 11 11:39:08 2042 GMT"
+      },
+      {
+        "file": "revoked/56aea1676eac9c441d140814982ef03ed5363629f421b5bba370e18d575f03e5.der",
+        "sha256": "56aea1676eac9c441d140814982ef03ed5363629f421b5bba370e18d575f03e5",
+        "subject": "CN=Canonical Ltd. Secure Boot Signing (2017),OU=Secure Boot,O=Canonical Ltd.,ST=Isle of Man,C=GB",
+        "issuer": "CN=Canonical Ltd. Master Certificate Authority,O=Canonical Ltd.,L=Douglas,ST=Isle of Man,C=GB",
+        "not_before": "Sep 26 21:52:11 2017 GMT",
+        "not_after": "Sep 25 21:52:11 2047 GMT"
+      },
+      {
+        "file": "revoked/d1c510659db584acf4680eaf2e20a54fef0ef94089111b831707d2a5f4014514.der",
+        "sha256": "d1c510659db584acf4680eaf2e20a54fef0ef94089111b831707d2a5f4014514",
+        "subject": "CN=Canonical Ltd. Secure Boot Signing (ESM 2018),OU=Secure Boot,O=Canonical Ltd.,ST=Isle of Man,C=GB",
+        "issuer": "CN=Canonical Ltd. Master Certificate Authority,O=Canonical Ltd.,L=Douglas,ST=Isle of Man,C=GB",
+        "not_before": "Oct 26 18:31:14 2018 GMT",
+        "not_after": "Oct 24 18:31:14 2048 GMT"
+      },
+      {
+        "file": "revoked/5b0a489adb7103dd2ef9d41f8db67d60f9209596d970f44c46112a1ce97ee605.der",
+        "sha256": "5b0a489adb7103dd2ef9d41f8db67d60f9209596d970f44c46112a1ce97ee605",
+        "subject": "CN=Canonical Ltd. Secure Boot Signing (2019),OU=Secure Boot,O=Canonical Ltd.,ST=Isle of Man,C=GB",
+        "issuer": "CN=Canonical Ltd. Master Certificate Authority,O=Canonical Ltd.,L=Douglas,ST=Isle of Man,C=GB",
+        "not_before": "Sep 18 16:10:17 2019 GMT",
+        "not_after": "Sep 16 16:10:17 2049 GMT"
+      },
+      {
+        "file": "revoked/4d36546e835df0dd217ee8727dd6d4dfbbc4f5baf0e405ad6f81ead418371858.der",
+        "sha256": "4d36546e835df0dd217ee8727dd6d4dfbbc4f5baf0e405ad6f81ead418371858",
+        "subject": "CN=Canonical Ltd. Secure Boot Signing (Ubuntu Core 2019),OU=Secure Boot,O=Canonical Ltd.,ST=Isle of Man,C=GB",
+        "issuer": "CN=Canonical Ltd. Master Certificate Authority,O=Canonical Ltd.,L=Douglas,ST=Isle of Man,C=GB",
+        "not_before": "Mar  4 10:27:14 2020 GMT",
+        "not_after": "Mar  3 10:27:14 2050 GMT"
+      },
+      {
+        "file": "revoked/2bc0187fc1c362656b4132038217286297b779d7eac211f5eaab8f9efe37d1e4.der",
+        "sha256": "2bc0187fc1c362656b4132038217286297b779d7eac211f5eaab8f9efe37d1e4",
+        "subject": "CN=Canonical Ltd. Secure Boot Signing (2021 v1),OU=Secure Boot,O=Canonical Ltd.,ST=Isle of Man,C=GB",
+        "issuer": "CN=Canonical Ltd. Master Certificate Authority,O=Canonical Ltd.,L=Douglas,ST=Isle of Man,C=GB",
+        "not_before": "Sep 23 19:29:32 2021 GMT",
+        "not_after": "Sep 22 19:29:32 2051 GMT"
+      },
+      {
+        "file": "revoked/efffedd4b6104c1737d9604d407979b131c49975b1173f8d69d26cf7c3dd78b3.der",
+        "sha256": "efffedd4b6104c1737d9604d407979b131c49975b1173f8d69d26cf7c3dd78b3",
+        "subject": "CN=Canonical Ltd. Secure Boot Signing (2021 v2),OU=Secure Boot,O=Canonical Ltd.,ST=Isle of Man,C=GB",
+        "issuer": "CN=Canonical Ltd. Master Certificate Authority,O=Canonical Ltd.,L=Douglas,ST=Isle of Man,C=GB",
+        "not_before": "Sep 23 19:29:42 2021 GMT",
+        "not_after": "Sep 22 19:29:42 2051 GMT"
+      },
+      {
+        "file": "revoked/b1f5343054b5b660440e4d1c5112e0deb69d4862c3648ecc0308a617b8813a63.der",
+        "sha256": "b1f5343054b5b660440e4d1c5112e0deb69d4862c3648ecc0308a617b8813a63",
+        "subject": "CN=Canonical Ltd. Secure Boot Signing (2021 v3),OU=Secure Boot,O=Canonical Ltd.,ST=Isle of Man,C=GB",
+        "issuer": "CN=Canonical Ltd. Master Certificate Authority,O=Canonical Ltd.,L=Douglas,ST=Isle of Man,C=GB",
+        "not_before": "Sep 23 19:30:02 2021 GMT",
+        "not_after": "Sep 22 19:30:02 2051 GMT"
+      }
+    ],
+    "sha256": []
+  },
+  "files": {
+    "canonical-master-ca.der": "ed1fe72cb9ca31c9af5b757afcd733323d675825032e6ced7fe1ae9eb767998c",
+    "revoked/2bc0187fc1c362656b4132038217286297b779d7eac211f5eaab8f9efe37d1e4.der": "2bc0187fc1c362656b4132038217286297b779d7eac211f5eaab8f9efe37d1e4",
+    "revoked/4d36546e835df0dd217ee8727dd6d4dfbbc4f5baf0e405ad6f81ead418371858.der": "4d36546e835df0dd217ee8727dd6d4dfbbc4f5baf0e405ad6f81ead418371858",
+    "revoked/56aea1676eac9c441d140814982ef03ed5363629f421b5bba370e18d575f03e5.der": "56aea1676eac9c441d140814982ef03ed5363629f421b5bba370e18d575f03e5",
+    "revoked/5b0a489adb7103dd2ef9d41f8db67d60f9209596d970f44c46112a1ce97ee605.der": "5b0a489adb7103dd2ef9d41f8db67d60f9209596d970f44c46112a1ce97ee605",
+    "revoked/90244cc221e00c1fe0a7b78b3ce945dd73bf1633019eb6c15fa5646f9c8d2e1e.der": "90244cc221e00c1fe0a7b78b3ce945dd73bf1633019eb6c15fa5646f9c8d2e1e",
+    "revoked/b1f5343054b5b660440e4d1c5112e0deb69d4862c3648ecc0308a617b8813a63.der": "b1f5343054b5b660440e4d1c5112e0deb69d4862c3648ecc0308a617b8813a63",
+    "revoked/d1c510659db584acf4680eaf2e20a54fef0ef94089111b831707d2a5f4014514.der": "d1c510659db584acf4680eaf2e20a54fef0ef94089111b831707d2a5f4014514",
+    "revoked/efffedd4b6104c1737d9604d407979b131c49975b1173f8d69d26cf7c3dd78b3.der": "efffedd4b6104c1737d9604d407979b131c49975b1173f8d69d26cf7c3dd78b3",
+    "revoked-sha256.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

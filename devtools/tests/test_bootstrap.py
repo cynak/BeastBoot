@@ -62,6 +62,9 @@ class FakeRepo:
         gdbdir = self.root / "devtools" / "gdb"
         gdbdir.mkdir(parents=True)
         (gdbdir / "grubsyms.py").write_text("import sys\nsys.exit(0)\n")
+        shimdir = self.root / "build" / "shim"   # Debian's shim fetch: nothing is downloaded here
+        shimdir.mkdir(parents=True)
+        (shimdir / "fetch.py").write_text("import sys\nsys.exit(0)\n")
         (self.root / ".tools").mkdir()   # empty, as in a fresh clone
         self.stubs = tmp / "stubs"
         self.stubs.mkdir()
@@ -117,12 +120,14 @@ def repo(tmp_path):
 
 def test_stale_system_dir_from_before_bootstrap_is_picked_again(repo):
     """Fresh clone: the env was resolved while .tools/ was empty, so it says
-    BB_GRUB_BIOS_DIR=/usr/lib/grub/i386-pc (the first candidate, as a fallback).
-    bootstrap must still match grub-pc-dbg against the grub-pc-bin it unpacked."""
+    BB_GRUB_BIOS_DIR=.tools/cache/grub-src/current/i386-pc (the first candidate,
+    the GRUB source build, as a fallback). bootstrap must still match grub-pc-dbg
+    against the grub-pc-bin it unpacked."""
     if (SYSTEM_BIOS_DIR / "boot.img").exists():
         pytest.skip("grub-pc-bin is installed on this host, so the system dir is not a stale fallback")
     env = repo.env_before_bootstrap()
-    assert env["BB_GRUB_BIOS_DIR"] == str(SYSTEM_BIOS_DIR)   # the pre-resolved fallback
+    first = repo.root / ".tools" / "cache" / "grub-src" / "current" / "i386-pc"
+    assert env["BB_GRUB_BIOS_DIR"] == str(first)   # the pre-resolved fallback
     repo.download_debs()
     p = repo.bootstrap(env)
     assert p.returncode == 0, p.stdout + p.stderr

@@ -1,6 +1,6 @@
 # beast-net top-level packages (Ubuntu 26.04 "resolute", amd64).
 #
-#   <package>[=<version>] <role>
+#   <package>[=<version>] <role> [suite=<series>]   (suite: another Ubuntu series, released pockets only)
 #
 # roles: kernel (vmlinuz), modules (module subset, modules.list), tool
 # (programs + Python, userland.list), data (CA bundle, terminfo), lib
@@ -12,12 +12,13 @@
 # index), resolves the libraries and rewrites packages.lock with every .deb's
 # SHA-256. The build itself only ever uses packages.lock.
 
-linux-image-7.0.0-38-generic=7.0.0-38.38       kernel
-linux-modules-7.0.0-38-generic=7.0.0-38.38     modules
+linux-image-7.3.0-9-generic=7.3.0-9.9         kernel   suite=stonking
+linux-modules-7.3.0-9-generic=7.3.0-9.9       modules  suite=stonking
 busybox=1:1.37.0-7ubuntu1                      tool  # dynamic: uses the locked libc6 (busybox-static embeds its own glibc copy)
 kmod=34.2-2ubuntu2                             tool
 wpasupplicant=2:2.11-0ubuntu5                  tool
 iw=6.17-1                                      tool
+mokutil=0.7.2-2                                tool  # "Trust Ubuntu's Secure Boot key" (build/trust/README.md)
 python3.14-minimal=3.14.4-1ubuntu0.2           tool
 libpython3.14-minimal=3.14.4-1ubuntu0.2        tool
 libpython3.14-stdlib=3.14.4-1ubuntu0.2         tool

@@ -309,14 +309,15 @@ class FirmwarePage(ttk.Frame):
         elif installed is None:
             text = UNKNOWN_TEXTS.get(f.unknown_why or "", UNKNOWN_TEXTS["not-read"])
         elif installed:
-            names = [(f.catalog.pack(p.id).title if f.catalog.pack(p.id) else p.id) for p in installed]
+            names = [(f.catalog.pack(p.id).title if f.catalog.pack(p.id) else p.id)
+                     + (f" ({p.stale_note[:1].lower()}{p.stale_note[1:]})" if p.stale_note else "") for p in installed]
             text = "Installed: " + ", ".join(names) + "."
         else:
             text = "No firmware packs are installed on it yet."
         self.installed_label.configure(text=text)
         self.check_button.state(["!disabled"] if f.list_blocker() is None else ["disabled"])
 
-        sig = (id(cat), tuple(p.id for p in (installed or ())), f.target.key if f.target else None)
+        sig = (id(cat), tuple((p.id, p.stale) for p in (installed or ())), f.target.key if f.target else None)
         if sig != self._cards_sig:
             self._cards_sig = sig
             self._rebuild_cards()
@@ -381,6 +382,9 @@ class FirmwarePage(ttk.Frame):
                                                                                  padx=(0, px(6)))
                 ttk.Button(row, text="Remove...", style="Ghost.Pick.TButton",
                            command=lambda pid=p.id: self._remove(pid)).grid(row=0, column=3, sticky="e")
+            if note := f.stale_note(p.id):  # made for the helper before an update: select it and install again
+                WrapLabel(c, text=note, style="ErrorBold.Pick.TLabel", min_chars=40).grid(
+                    row=5, column=0, columnspan=2, sticky="ew", pady=(px(4), 0))
             for w in PickCard._descendants(c):
                 c.adopt(w)
             c.adopt(c)

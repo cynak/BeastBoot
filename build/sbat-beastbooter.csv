@@ -1,6 +1,9 @@
-# beast-booter's own SBAT line, appended to Ubuntu's SBAT lines in grubx64.efi.
-# build.sh drops '#' lines and fills in @GRUB_VERSION@ (grub-efi-amd64-bin
-# version), @VERSION@ (repo VERSION) and @PROJECT_URL@ (BB_PROJECT_URL).
+# beast-booter's own SBAT line, appended after the sbat/grub lines and Ubuntu's
+# vendor lines that build/grub/grubsrc.py sbat writes for our source-built GRUB.
+# build.sh drops '#' lines and fills in @GRUB_VERSION@ (version of our GRUB
+# build: Ubuntu's grub2 source version + our patch level, e.g. 2.14-2ubuntu3+bb1),
+# @VERSION@ (repo VERSION) and @PROJECT_URL@ (BB_PROJECT_URL).
 # Bump the generation (2nd field) when a beast-booter-specific security
-# problem means older beast-booter GRUB builds must be revoked.
-grub.beastbooter,1,beast-booter,grub2,@GRUB_VERSION@+bb@VERSION@,@PROJECT_URL@
+# problem (our patches, the module selection, a bad signing) means older
+# beast-booter GRUB builds must be revoked.
+grub.beastbooter,1,beast-booter,grub2,@GRUB_VERSION@,@PROJECT_URL@

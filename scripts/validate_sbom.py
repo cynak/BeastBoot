@@ -10,9 +10,10 @@ Checks (each one PASS/FAIL, written to sbom/validation.json):
   spdx-structure    unique SPDXIDs, every relationship end exists, DESCRIBES present,
                     every LicenseRef declared, every file has SHA1 + SHA256
   cdx-structure     unique bom-refs, every dependency ref exists, every dist/ file once
-  origin-verified   every file copied from a package (origin deb:...) carries
-                    beast-booter:origin-verified and it is a match, not MISMATCH (the shipped
-                    bytes equal the package's file: dpkg md5sums or the .deb contents);
+  origin-verified   every file copied from a package (origin deb:...) or from our GRUB
+                    source build (grub-src:...) carries beast-booter:origin-verified and it
+                    is a match, not MISMATCH (the shipped bytes equal the package's file:
+                    dpkg md5sums or the .deb contents; GRUB: its build-info.json);
                     repo:/key: files that differ from the working tree are listed as warnings
   formats-agree     CycloneDX and SPDX list the same files (SHA-256) and purls
   syft-roundtrip    syft converts both documents (cdx->spdx, spdx->cdx) without error
@@ -79,7 +80,7 @@ def norm_purl(p: str) -> str:
     """purl without the distro qualifier and with sorted qualifiers (syft's deb-archive
     cataloger cannot know the distro of a loose .deb)."""
     base, _, q = p.partition("?")
-    base = base.replace("pkg:deb/ubuntu/", "pkg:deb/")
+    base = base.replace("pkg:deb/ubuntu/", "pkg:deb/").replace("pkg:deb/debian/", "pkg:deb/")
     qs = sorted(x for x in q.split("&") if x and not x.startswith("distro=") and not x.startswith("package-id="))
     return base + ("?" + "&".join(qs) if qs else "")
 
@@ -173,14 +174,21 @@ def main() -> int:
         pr = {p["name"]: p["value"] for p in c.get("properties", [])}
         origin = manifest["files"].get(name, {}).get("origin", "")
         v = pr.get("beast-booter:origin-verified")
-        if origin.startswith("deb:"):
+        if origin.startswith(("deb:", "grub-src:")):     # package files, files of our GRUB build
             if v is None:
                 unverified.append(name)
             elif not v.startswith(("md5 matches", "sha256 matches")):
                 mismatch.append(f"{name}: {v}")
+        elif origin.startswith("built:deb:") and "with its signatures removed" in origin:
+            # re-signed (the beast-net kernel): same code as the package file, our signature
+            if v is None or v.startswith("unverified"):
+                unverified.append(f"{name}: {v}" if v else name)
+            elif not v.startswith("authenticode sha256 matches"):
+                mismatch.append(f"{name}: {v}")
         elif v is not None and not v.startswith("sha256 matches"):
             warnings.append(f"{name}: {v}")
-    n_pkg = sum(1 for n in file_comps if manifest["files"].get(n, {}).get("origin", "").startswith("deb:"))
+    n_pkg = sum(1 for n in file_comps
+                if manifest["files"].get(n, {}).get("origin", "").startswith(("deb:", "grub-src:")))
     record("origin-verified", not mismatch and not unverified,
            {"package_files": n_pkg, "mismatch": mismatch[:30], "mismatch_count": len(mismatch),
             "no_verification_property": unverified[:30], "repo_warnings": warnings[:30]})
@@ -315,7 +323,9 @@ def main() -> int:
                                    "contents (property beast-booter:origin-verified).")})
 
         # ---- syft purls for the same packages -----------------------------------------
-        deb_comps = [c for c in comps if c.get("purl", "").startswith("pkg:deb/") and "arch=source" not in c["purl"]]
+        # (not our GRUB source build: its purl names the Ubuntu source it tracks, it is no .deb)
+        deb_comps = [c for c in comps if c.get("purl", "").startswith("pkg:deb/") and "arch=source" not in c["purl"]
+                     and not c["bom-ref"].startswith("grub-src:")]
         host, loose = [], []
         for c in deb_comps:
             pr = {p["name"]: p["value"] for p in c.get("properties", [])}

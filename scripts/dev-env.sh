@@ -43,19 +43,32 @@ _bb_pick() {
   echo "$1"
 }
 _bb_t="$BB_ROOT/.tools/root"
-BB_GRUB_EFI_DIR="$(_bb_pick "${BB_GRUB_EFI_DIR:-}" kernel.img /usr/lib/grub/x86_64-efi "$_bb_t/usr/lib/grub/x86_64-efi")"
+# GRUB modules: our source build first (build/grub/grubsrc.py keeps
+# .tools/cache/grub-src/current pointing at the last one; it is what dist/
+# ships, with kernel.exec + *.module for gdb next to the modules). build.sh
+# itself never reads these variables: it always uses the source build.
+_bb_g="${BB_GRUB_CACHE:-$BB_ROOT/.tools/cache/grub-src}/current"
+BB_GRUB_EFI_DIR="$(_bb_pick "${BB_GRUB_EFI_DIR:-}" kernel.img "$_bb_g/x86_64-efi" /usr/lib/grub/x86_64-efi "$_bb_t/usr/lib/grub/x86_64-efi")"
+# Ubuntu's signed GRUB: only the e2e stub images use it (its SBAT)
 BB_GRUB_EFI_SIGNED_DIR="$(_bb_pick "${BB_GRUB_EFI_SIGNED_DIR:-}" grubx64.efi.signed /usr/lib/grub/x86_64-efi-signed "$_bb_t/usr/lib/grub/x86_64-efi-signed")"
-BB_GRUB_BIOS_DIR="$(_bb_pick "${BB_GRUB_BIOS_DIR:-}" boot.img /usr/lib/grub/i386-pc "$_bb_t/usr/lib/grub/i386-pc")"
-BB_SHIM_DIR="$(_bb_pick "${BB_SHIM_DIR:-}" mmx64.efi /usr/lib/shim "$_bb_t/usr/lib/shim")"
+BB_GRUB_BIOS_DIR="$(_bb_pick "${BB_GRUB_BIOS_DIR:-}" boot.img "$_bb_g/i386-pc" /usr/lib/grub/i386-pc "$_bb_t/usr/lib/grub/i386-pc")"
+unset _bb_g
+# shim + MokManager: Debian's, pinned in build/shim/debian-shim.lock and unpacked
+# by scripts/bootstrap-tools.sh into BB_DEBIAN_DIR. A host /usr/lib/shim only
+# counts when it holds Debian's files (on Ubuntu it is Ubuntu's shim: never used).
+# The last candidate is where Ubuntu's shim was unpacked before (.tools/root): it
+# has no mmx64.efi.signed, so a value left from then is replaced, not kept.
+: "${BB_DEBIAN_DIR:=$BB_ROOT/.tools/debian}"
+BB_SHIM_DIR="$(_bb_pick "${BB_SHIM_DIR:-}" mmx64.efi.signed "$BB_DEBIAN_DIR/root/usr/lib/shim" /usr/lib/shim "$_bb_t/usr/lib/shim")"
 BB_OVMF_DIR="$(_bb_pick "${BB_OVMF_DIR:-}" OVMF_CODE_4M.secboot.fd /usr/share/OVMF "$_bb_t/usr/share/OVMF")"
 BB_SEABIOS_DIR="$(_bb_pick "${BB_SEABIOS_DIR:-}" bios-256k.bin /usr/share/seabios "$_bb_t/usr/share/seabios")"
 unset _bb_t
-export BB_GRUB_EFI_DIR BB_GRUB_EFI_SIGNED_DIR BB_GRUB_BIOS_DIR BB_SHIM_DIR BB_OVMF_DIR BB_SEABIOS_DIR
+export BB_GRUB_EFI_DIR BB_GRUB_EFI_SIGNED_DIR BB_GRUB_BIOS_DIR BB_SHIM_DIR BB_DEBIAN_DIR BB_OVMF_DIR BB_SEABIOS_DIR
 unset -f _bb_pick
 
 # GRUB debug symbols for `bb-dev gdb` (kernel.exec + *.module, same build as
-# the modules above). A system grub-pc-dbg / grub-efi-amd64-dbg installs them
-# next to the modules (dpkg ties it to the same version); otherwise
+# the modules above). Our source build has them next to the modules, as does a
+# system grub-pc-dbg / grub-efi-amd64-dbg (dpkg ties it to the same version); otherwise
 # scripts/bootstrap-tools.sh unpacks version-matched copies into BB_GRUB_DBG_DIR.
 : "${BB_GRUB_DBG_DIR:=$BB_ROOT/.tools/grub-dbg}"
 if [ -z "${BB_GRUB_PC_DBG_DIR:-}" ]; then

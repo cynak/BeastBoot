@@ -107,8 +107,22 @@ It puts `.tools/bin` first on `PATH`, adds `installer/` to `PYTHONPATH`, and
 exports `BB_ROOT`, `BB_GRUB_EFI_DIR`, `BB_GRUB_EFI_SIGNED_DIR`,
 `BB_GRUB_BIOS_DIR`, `BB_SHIM_DIR`, `BB_OVMF_DIR` and `BB_SEABIOS_DIR`. Each
 `BB_*_DIR` prefers the system location (for example `/usr/share/OVMF`) and
-falls back to `.tools/root/...`. A value you set before sourcing wins, which
-is how you point the build or the VMs at other firmware or GRUB files.
+falls back to `.tools/root/...`; the GRUB module directories prefer the last
+GRUB source build (`.tools/cache/grub-src/current/`). A value you set before
+sourcing wins, which is how you point the VMs and tests at other firmware or
+GRUB files. The build itself always uses GRUB built from source
+(`build/grub/grubsrc.py`, see docs/SECURE_BOOT.md).
+
+GRUB builder (`BB_GRUB_BUILDER`): `native` uses the host's compiler; if the
+host lacks bison, flex, autopoint or gawk, it unpacks the locked Ubuntu 26.04
+`.deb`s into the cache and uses them only if their `--version` runs (they
+need glibc 2.38 or newer). `docker` builds in the pinned Ubuntu 26.04 image
+and links `grub-mkimage` statically, because the host runs it. `auto`, the
+default, builds natively and falls back to docker when a tool is missing or
+does not run. Either way, the build fails if `bin/grub-mkimage --version`
+does not run on the host. With `BB_OFFLINE=1`, the GRUB build downloads
+nothing. It needs the sources and `.deb`s in `.tools/cache/grub-src/dl/`,
+and the docker builder is refused because it needs the network.
 
 `.venv/` is used by VS Code (interpreter, debugger, Test Explorer, ruff).
 Activate it in a shell with `source .venv/bin/activate` if you want its
@@ -434,8 +448,10 @@ bin/bb-dev setup --minimal        # tools, .venv, keys if missing, build
 Checks the environment and prints `OK`, `WARN` or `FAIL` per check, each
 WARN/FAIL with a one-line fix. Exit status 0 when nothing FAILed.
 
-Checks: Python >= 3.10; GRUB EFI and BIOS module directories; Ubuntu's
-signed GRUB (the build copies its SBAT data); shim and MokManager (`mmx64.efi`);
+Checks: Python >= 3.10; GRUB EFI and BIOS module directories; the GRUB
+source build (`build/grub/grubsrc.py`: every SBAT claim proven); Ubuntu's
+signed GRUB (only the e2e stub images use its SBAT data); Debian's shim and
+MokManager (`shimx64.efi.signed`, `mmx64.efi.signed`);
 OVMF code and vars (including `OVMF_CODE_4M.secboot.fd` and
 `OVMF_VARS_4M.ms.fd`); SeaBIOS; QEMU and its GTK display module; KVM access;
 mtools; xorriso; sfdisk; `mkfs.fat`, `mkfs.exfat`, `mkfs.ntfs`; sbsign/sbverify;
@@ -704,11 +720,12 @@ In gdb (`bb-help` lists the helpers from `devtools/gdb/bbgrub.py`):
 (gdb) bt
 ```
 
-- **Symbols are checked, not trusted.** They come from `grub-pc-dbg` at the
-  exact version of the shipped `grub-pc-bin` (`make tools` fetches it into
-  `.tools/grub-dbg/`; a system-wide `grub-pc-dbg` works too). `bb-dev gdb`
-  compares their code with the modules dist/ is built from and refuses to
-  start on a mismatch. `bb-dev doctor` shows the state.
+- **Symbols are checked, not trusted.** They come from the GRUB source build
+  (`kernel.exec` and `*.module` next to the modules dist/ ships, in
+  `.tools/cache/grub-src/current/`); for module directories you point at an
+  Ubuntu package instead, `make tools` fetches the matching `grub-pc-dbg`.
+  `bb-dev gdb` compares their code with the modules and refuses to start on a
+  mismatch. `bb-dev doctor` shows the state.
 - **KVM allows hardware breakpoints only** in BIOS GRUB: 4 in total, one is
   used by the helpers. Use `bb-break` or `hbreak`, not `break`.
 - **Backtraces:** `qemu-system-x86_64`'s gdb stub reports 64-bit registers

@@ -29,6 +29,13 @@ Root menu, top to bottom:
      WiFi, HTTPS + checksum) that saves an ISO under `/downloads/` and boots it
      once; shown only when the helper is on the boot partition. See
      [BEASTNET.md](BEASTNET.md).
+   - `Trust Ubuntu's Secure Boot key` (UEFI only, and only when the helper is
+     on the boot partition): starts the same helper with
+     `beastnet.action=trust-ubuntu`. In two steps, each confirmed in
+     MokManager after a reboot, it adds Ubuntu's revoked keys to MokListX and
+     then Ubuntu's key (Canonical's Master CA) to MokList, so Ubuntu-signed
+     kernels boot with Secure Boot on. See
+     [SECURE_BOOT.md](SECURE_BOOT.md#trust-ubuntus-secure-boot-key-optional).
    - `Secure Boot status / help`: whether Secure Boot is on and what that
      means for booting ISOs
    - `Enroll a key (MokManager)` (UEFI only): starts shim's MokManager
@@ -116,7 +123,7 @@ With `bb_debug=1` the menu prints one machine-readable line per event. Every
 line starts with exactly `BEAST: `:
 
 ```
-BEAST: ready version=0.1.1 platform=efi sb=0 esp=hd0,msdos2 data=hd0,msdos1 fs=exfat
+BEAST: ready version=0.1.2 platform=efi sb=0 esp=hd0,msdos2 data=hd0,msdos1 fs=exfat
 BEAST: dir /
 BEAST: item dir /Some Folder
 BEAST: item iso /ubuntu-24.04.iso

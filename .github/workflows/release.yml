@@ -72,15 +72,20 @@ jobs:
       TZ: UTC
     steps:
       # The packages scripts/bootstrap-tools.sh documents for a system-wide
-      # install (GRUB 2.14, shim-signed, QEMU/OVMF for the e2e tests), plus
-      # what the beast-net and SBOM steps use.
+      # install (QEMU/OVMF for the e2e tests), the toolchain of
+      # the GRUB source build (build/grub/grubsrc.py: gcc ... libfreetype-dev),
+      # plus what the beast-net and SBOM steps use. grub-common/grub2-common
+      # give grub-mkfont and unicode.pf2; grub-efi-amd64-signed is only for the
+      # e2e stub images.
+      # shim is Debian's (a step below).
       - name: Install the build host packages
         run: |
           apt-get update -q
           apt-get install -y -q --no-install-recommends \
             ca-certificates curl git make openssl binutils xz-utils zstd kmod \
             python3 python3-pytest python3-virt-firmware python3-jsonschema \
-            grub-common grub2-common grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed shim-signed sbsigntool \
+            gcc autoconf automake autopoint bison flex gawk pkgconf patch libfreetype-dev dpkg-dev \
+            grub-common grub2-common grub-efi-amd64-signed sbsigntool \
             mtools dosfstools exfatprogs ntfs-3g fdisk gdisk xorriso socat qemu-system-x86 ovmf \
             fonts-noto-core fonts-noto-mono
 
@@ -91,14 +96,22 @@ jobs:
       - name: Trust the checkout (the container runs as root)
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - name: Cache the pinned downloads (Python runtimes, beast-net packages, linux-firmware)
+      - name: Cache the pinned downloads (Python runtimes, beast-net packages, linux-firmware, GRUB source)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             .tools/cache/pbs
             .tools/cache/beastnet
             .tools/cache/linux-firmware
-          key: release-dl-${{ hashFiles('packaging/portable/runtimes.lock', 'build/beastnet/packages.lock', 'build/beastnet/firmware.lock') }}
+            .tools/cache/grub-src/dl
+            .tools/debian/debs
+          key: release-dl-${{ hashFiles('packaging/portable/runtimes.lock', 'build/beastnet/packages.lock', 'build/beastnet/firmware.lock', 'build/grub/source.lock.json', 'build/shim/debian-shim.lock') }}
+
+      # Debian's shim (signed through Microsoft UEFI CA 2011 and 2023) and its
+      # MokManager, pinned by SHA-256 in build/shim/debian-shim.lock;
+      # scripts/dev-env.sh points BB_SHIM_DIR at .tools/debian/root/usr/lib/shim.
+      - name: Debian shim and MokManager (pinned)
+        run: python3 -I build/shim/fetch.py fetch .tools/debian
 
       - name: Release signing key (secrets BB_SB_KEY_PEM, BB_SB_CERT_PEM)
         if: env.OFFICIAL == 'true'

@@ -27,6 +27,16 @@ gen_sbom/validate_sbom need them). Then the real scripts run against it with --r
                   and a module modules.order does not explain -> stay open
   gate            scripts/release/release_tool.py gate: only new findings at/above the
                   severity without a VEX statement block (baseline, --ignore-unfixed, warn)
+  boot-chain      Debian's shim + MokManager have Debian purls (distro from the lock, sid
+                  written as debian-unstable), the re-signed helper kernel is verified by
+                  Authenticode digest, efi_inspect reads every signature (a copy of shim
+                  with only its first one lacks the 2023 CA),
+                  only the given CA is a trust anchor (not one in $SSL_CERT_DIR), --only
+                  fails on an extra unparseable signature, and the offline scan finds both
+                  Microsoft CAs (no BB-SHIM-UEFI-CA-2011-ONLY)
+  debian-grype    a known-vulnerable shim (15.4-7) under each distro of debian-shim.lock, as
+                  debinfo writes its purl, gets >= 1 grype match offline (skipped without
+                  .tools/bin/grype or its DB)
 """
 from __future__ import annotations
 
@@ -82,15 +92,18 @@ def scratch_root(real: Path, base: Path, name: str) -> Path:
     (r / "sbom").mkdir()
     shutil.copy2(real / "sbom/vex.openvex.json", r / "sbom/vex.openvex.json")
     (r / ".tools/cache").mkdir(parents=True)
-    for d in ("bin", "debs", "root"):
-        (r / ".tools" / d).symlink_to(real / ".tools" / d)
+    for d in ("bin", "debs", "root", "debian"):          # debian: build/shim/fetch.py
+        if (real / ".tools" / d).exists():
+            (r / ".tools" / d).symlink_to(real / ".tools" / d)
     (r / ".tools/cache/schemas").symlink_to(real / ".tools/cache/schemas")
     # beast-net .debs (build/beastnet/packages.lock) and the portable runtimes (runtimes.lock)
-    for lock in ("build/beastnet/packages.lock", "packaging/portable/runtimes.lock"):
+    for lock in ("build/beastnet/packages.lock", "packaging/portable/runtimes.lock", "build/shim/debian-shim.lock",
+                 "build/shim/microsoft-uefi-ca-2011.pem", "build/shim/microsoft-uefi-ca-2023.pem",
+                 "build/grub/source.lock.json"):                  # gen_sbom: the GRUB purl distro
         if (real / lock).is_file():
             (r / lock).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(real / lock, r / lock)
-    for cache in ("beastnet", "pbs"):
+    for cache in ("beastnet", "pbs", "grub-src"):     # grub-src: build-info.json of the GRUB source build
         if (real / ".tools/cache" / cache).is_dir():
             (r / ".tools/cache" / cache).symlink_to(real / ".tools/cache" / cache)
     return r
@@ -137,6 +150,141 @@ def test_empty_cache(root: Path) -> None:
     check("empty-cache: markdown says not checked", "not checked" in md and "### R-DATA-UNAVAILABLE" in md)
     s0 = run(HERE / "scan_vulns.py", "--offline", root=root)
     check("empty-cache: without --fail-on exits 0", s0.returncode == 0, f"rc={s0.returncode} {s0.stderr[-300:]}")
+    sc = report(root)["boot_chain"]["signers"].get("shim_ca") or {}
+    check("boot-chain: offline scan verifies shim through both Microsoft UEFI CAs, one digest",
+          sc.get("uefi_ca_2011") and sc.get("uefi_ca_2023") and sc.get("one_digest")
+          and isinstance(sc.get("verified_with"), list), json.dumps(sc)[:400])
+    check("boot-chain: no BB-SHIM-UEFI-CA-2011-ONLY", "BB-SHIM-UEFI-CA-2011-ONLY" not in by_id(report(root)))
+
+
+def test_boot_chain(real: Path, base: Path) -> None:
+    """Debian's shim in the SBOM, the re-signed helper kernel, every signature read."""
+    import contextlib
+    import io
+    import struct
+
+    import efi_inspect as efi
+    cdx = json.loads((real / "sbom/beast-booter.cdx.json").read_text())
+
+    def walk(cs):
+        for c in cs or []:
+            yield c
+            yield from walk(c.get("components"))
+    comps = list(walk(cdx["components"]))
+    lock = {}
+    for line in (real / "build/shim/debian-shim.lock").read_text().splitlines():
+        x = line.split("#", 1)[0].split()
+        if len(x) >= 6:
+            lock[x[0]] = (x[1], x[4])
+    import debinfo as deb
+    for pkg, (ver, lock_distro) in sorted(lock.items()):
+        distro = deb.purl_distro(lock_distro)       # debian-sid -> debian-unstable (grype ignores sid)
+        purls = [c.get("purl", "") for c in comps if c.get("purl", "").startswith(f"pkg:deb/debian/{pkg}@")]
+        check(f"boot-chain: {pkg} is pkg:deb/debian/...@{ver}?distro={distro}",
+              len(purls) == 1 and purls[0].startswith(f"pkg:deb/debian/{pkg}@{ver.replace('+', '%2B')}?")
+              and f"distro={distro}" in purls[0], str(purls))
+    check("boot-chain: no Ubuntu shim-signed in the SBOM",
+          not [c for c in comps if c.get("purl", "").startswith("pkg:deb/ubuntu/shim-signed@")])
+    manifest = json.loads((real / "dist/manifest.json").read_text())
+    if "esp/beast-net/vmlinuz" in manifest["files"]:
+        k = next((c for c in comps if c["name"] == "esp/beast-net/vmlinuz"), {})
+        props = {p["name"]: p["value"] for p in k.get("properties", [])}
+        check("boot-chain: helper kernel marked re-signed, verified by Authenticode digest",
+              "beast-booter:re-signed" in props
+              and props.get("beast-booter:origin-verified", "").startswith("authenticode sha256 matches"),
+              str(props)[:400])
+    shim = real / "dist/esp/EFI/BOOT/BOOTX64.EFI"
+    cas = [f"Microsoft Corporation UEFI CA 2011={real / 'build/shim/microsoft-uefi-ca-2011.pem'}",
+           f"Microsoft UEFI CA 2023={real / 'build/shim/microsoft-uefi-ca-2023.pem'}"]
+    with contextlib.redirect_stdout(io.StringIO()):
+        probs = efi.require(shim, cas, None, None)
+    check("boot-chain: efi_inspect require passes for the shipped shim", probs == [], str(probs))
+    data = bytearray(shim.read_bytes())
+    pe = efi.parse_pe(bytes(data))
+    first = (struct.unpack_from("<I", data, pe.cert_off)[0] + 7) & ~7
+    one = data[:pe.cert_off + first]
+    struct.pack_into("<II", one, pe.certdir_off, pe.cert_off, first)
+    cut = base / "shim-first-signature-only.efi"
+    cut.write_bytes(bytes(one))
+    with contextlib.redirect_stdout(io.StringIO()):
+        probs = efi.require(cut, cas, None, None)
+    check("boot-chain: shim with only its first signature lacks the 2023 CA",
+          len(probs) == 1 and "Microsoft UEFI CA 2023" in probs[0], str(probs))
+
+    # The CA given is the only trust anchor: a certificate in OpenSSL's default store
+    # ($SSL_CERT_DIR) must not count. Here our MOK certificate is put there, so grubx64.efi
+    # (signed by it) would otherwise "chain to" Microsoft UEFI CA 2023.
+    grub, mok = real / "dist/esp/EFI/BOOT/grubx64.efi", base / "mok.pem"
+    subprocess.run(["openssl", "x509", "-inform", "DER", "-in", str(real / "dist/esp/ENROLL_THIS_KEY_IN_MOKMANAGER.cer"),
+                    "-out", str(mok)], check=True, capture_output=True)
+    store = base / "ssl-cert-dir"
+    store.mkdir()
+    h = subprocess.run(["openssl", "x509", "-hash", "-noout", "-in", str(mok)],
+                       check=True, capture_output=True, text=True).stdout.strip()
+    shutil.copy(mok, store / f"{h}.0")
+    old = os.environ.get("SSL_CERT_DIR")
+    os.environ["SSL_CERT_DIR"] = str(store)
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            probs = efi.require(grub, cas[1:], None, None)
+    finally:
+        if old is None:
+            os.environ.pop("SSL_CERT_DIR", None)
+        else:
+            os.environ["SSL_CERT_DIR"] = old
+    check("boot-chain: a certificate in $SSL_CERT_DIR is not a trust anchor",
+          len(probs) == 1 and "Microsoft UEFI CA 2023" in probs[0], str(probs))
+
+    # --only (exactly one signature, ours) also counts entries the parser cannot read:
+    # grubx64.efi plus a BER (indefinite-length) PKCS#7 entry, which shim's OpenSSL would read.
+    data = bytearray(grub.read_bytes())
+    pe = efi.parse_pe(bytes(data))
+    body = b"\x30\x80\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x07\x02\x00\x00"
+    entry = struct.pack("<IHH", 8 + len(body), 0x0200, 0x0002) + body
+    entry += b"\0" * (-len(entry) % 8)
+    two = data[:pe.cert_off + pe.cert_size] + entry
+    struct.pack_into("<II", two, pe.certdir_off, pe.cert_off, pe.cert_size + len(entry))
+    ber = base / "grub-plus-ber-signature.efi"
+    ber.write_bytes(bytes(two))
+    with contextlib.redirect_stdout(io.StringIO()):
+        ok_probs = efi.require(grub, [], f"beast-booter={mok}", None)
+        probs = efi.require(ber, [], f"beast-booter={mok}", None)
+    check("boot-chain: --only passes for grubx64.efi", ok_probs == [], str(ok_probs))
+    check("boot-chain: --only fails with a second, unparseable signature",
+          any("cannot read every signature" in p for p in probs)
+          and any("2 signatures, expected exactly one" in p for p in probs), str(probs))
+
+
+def test_debian_grype(real: Path, base: Path) -> None:
+    """A Debian purl as debinfo writes it is matched by grype: shim 15.4-7 (CVE-2022-28737,
+    CVE-2023-40546, ...) under each distro of build/shim/debian-shim.lock gets >= 1 match.
+    With distro=debian-sid grype matched nothing, and Debian's shim went unscanned."""
+    import debinfo as deb
+    grype = real / ".tools/bin/grype"
+    cache = real / ".tools/cache/grype"
+    if not grype.is_file():
+        print("selftest: SKIP  debian-grype - .tools/bin/grype missing (scripts/install-tools.sh)")
+        return
+    if not list(cache.glob("*/vulnerability.db")):
+        print(f"selftest: SKIP  debian-grype - no grype DB in {cache} (sbom-vuln.sh scan, online, once)")
+        return
+    distros = sorted({v[2] for v in deb.debian_lock(real).values()})
+    if not check("debian-grype: build/shim/debian-shim.lock names a distro", bool(distros)):
+        return
+    env = dict(os.environ, GRYPE_DB_CACHE_DIR=str(cache), GRYPE_DB_AUTO_UPDATE="false",
+               GRYPE_CHECK_FOR_APP_UPDATE="false", GRYPE_DB_VALIDATE_AGE="false")
+    for distro in distros:
+        p = deb.source_purl("shim", "15.4-7", distro, namespace="debian")
+        f = base / f"grype-purl-{distro}.txt"
+        f.write_text(p + "\n")
+        r = subprocess.run([str(grype), f"purl:{f}", "-o", "json"], capture_output=True, text=True,
+                           env=env, timeout=600)
+        try:
+            ids = sorted({m["vulnerability"]["id"] for m in json.loads(r.stdout)["matches"]})
+        except (ValueError, KeyError, TypeError):
+            ids = None
+        check(f"debian-grype: {p} has grype matches (lock distro {distro})", bool(ids),
+              f"rc={r.returncode} matches={ids} {r.stderr.strip()[-300:]}")
 
 
 def tamper(root: Path, rel: str) -> None:
@@ -159,8 +307,9 @@ def test_origin(root: Path) -> None:
     check("origin: baseline validate PASS (incl. origin-verified)",
           v.returncode == 0 and "PASS  origin-verified" in v.stdout, v.stdout[-600:] + v.stderr[-600:])
     manifest = json.loads((root / "dist/manifest.json").read_text())
+    # a GRUB module (from the GRUB source build, or a package in older dists), else any package file
     rel = next((r for r, x in sorted(manifest["files"].items())
-                if x["origin"].startswith("deb:") and r.endswith("normal.mod")), None) or \
+                if x["origin"].startswith(("grub-src:", "deb:")) and r.endswith("normal.mod")), None) or \
         next(r for r, x in sorted(manifest["files"].items()) if x["origin"].startswith("deb:"))
     repo_rel = next((r for r, x in sorted(manifest["files"].items()) if x["origin"].startswith("repo:")), None)
     tamper(root, rel)
@@ -214,7 +363,7 @@ def test_modules(real: Path) -> None:
     manifest = json.loads((dist / "manifest.json").read_text())
     bom, idx = sv.load_sbom(real / "sbom/beast-booter.cdx.json")
     mods = sv.grub_modules(real, dist, manifest, idx)
-    if not check("modules: moddep.lst of the EFI package verified", mods.get("efi_deps") is not None,
+    if not check("modules: moddep.lst of the EFI modules verified", mods.get("efi_deps") is not None,
                  mods.get("efi_closure_source", "")):
         return
     for mod in ("gettext", "net"):
@@ -223,9 +372,11 @@ def test_modules(real: Path) -> None:
         w = sv.module_removability(mod, mods)
         check(f"modules: {mod} not removable (pulled in by normal)",
               w["removable"] is False and "normal" in (w["pulled_in_by"] or []), json.dumps(w))
-    efi_comp = next((c for c in idx.values() if c["name"] == "grub-efi-amd64-bin" and c["role"] == "shipped"), None)
+    # the GRUB source build (grub-src:grub2@<version>), or the Ubuntu package in older dists
+    efi_comp = next((c for c in idx.values() if c["ref"].startswith("grub-src:") and c["role"] == "shipped"), None) \
+        or next((c for c in idx.values() if c["name"] == "grub-efi-amd64-bin" and c["role"] == "shipped"), None)
     if efi_comp is None:
-        check("modules: grub-efi-amd64-bin in SBOM", False)
+        check("modules: the GRUB component (grub-src:grub2@...) in SBOM", False)
         return
 
     def fake(title):
@@ -357,6 +508,60 @@ def test_kernel_vex(base: Path) -> None:
     check("kernel-vex: path found in the shipped binary overrides not_present",
           bin_res[0]["classification"] == "unresolved")
 
+    # fixed in the shipped kernel: CNA fix version vs the upstream base, Ubuntu tracker vs the series
+    mkf = "VERSION = 7\nPATCHLEVEL = {}\nSUBLEVEL = {}\nEXTRAVERSION = {}\nNAME = x\n"
+    rc6, stable = kv.upstream_base(mkf.format(3, 0, "-rc6")), kv.upstream_base(mkf.format(0, 14, ""))
+    check("kernel-vex: upstream base from the top-level Makefile (rc and stable)",
+          rc6 and rc6["tag"] == "v7.3-rc6" and rc6["rc"] == 6 and stable and stable["tag"] == "v7.0.14"
+          and kv.upstream_base(mkf.format(3, 0, "-ubuntu")) is None, f"{rc6} {stable}")
+
+    def fixrec(*vers):
+        return {"containers": {"cna": {"affected": [{"versions": [dict(zip(("version", "lessThanOrEqual", "versionType"),
+                                                                            v), status="unaffected") for v in vers]}]}}}
+    main = lambda v: ("" if v is None else v, "*", "original_commit_for_fix")  # noqa: E731
+    check("kernel-vex: mainline fix in an earlier release -> fixed",
+          (kv.cna_fix(fixrec(main("7.2")), rc6) or {}).get("rule") == "mainline")
+    check("kernel-vex: mainline fix in the base's own release, base is -rcN -> not fixed",
+          kv.cna_fix(fixrec(main("7.3")), rc6) is None and kv.cna_fix(fixrec(main("7.4")), stable) is None)
+    check("kernel-vex: mainline fix in the base's release, base is that release + stable -> fixed",
+          kv.cna_fix(fixrec(main("7.0")), stable) is not None)
+    check("kernel-vex: stable-branch fix <= base SUBLEVEL -> fixed, later or other branch -> not",
+          (kv.cna_fix(fixrec(("7.0.9", "7.0.*", "semver")), stable) or {}).get("rule") == "stable"
+          and kv.cna_fix(fixrec(("7.0.15", "7.0.*", "semver"), main("7.1")), stable) is None
+          and kv.cna_fix(fixrec(("7.3.1", "7.3.*", "semver")), rc6) is None)
+    check("kernel-vex: Debian version order",
+          kv.deb_vercmp("7.3.0-5.5", "7.3.0-9.9") < 0 and kv.deb_vercmp("7.3.0-10.10", "7.3.0-9.9") > 0
+          and kv.deb_vercmp("1.0~rc1-1", "1.0-1") < 0 and kv.deb_vercmp("1:0.1", "2.0") > 0
+          and kv.deb_vercmp("7.0.0-38.38", "7.0.0-38.38") == 0)
+    tr = {"updated_at": "x", "linux": [{"release_codename": "stonking", "status": "not-affected", "description": "7.3.0-5.5"},
+                                       {"release_codename": "resolute", "status": "released", "description": "7.0.0-38.38"}]}
+    check("kernel-vex: tracker released/not-affected <= shipped in the shipped series -> fixed",
+          (kv.tracker_fix(tr, "stonking", "7.3.0-9.9") or {}).get("version") == "7.3.0-5.5"
+          and kv.tracker_fix(tr, "resolute", "7.0.0-38.38") is not None)
+    check("kernel-vex: tracker pending/needed, newer version, other series or no version -> open",
+          kv.tracker_fix({"linux": [{"release_codename": "stonking", "status": "pending", "description": "7.3.0-9.9"},
+                                    {"release_codename": "tenacious", "status": "released", "description": "7.3.0-1.1"}]},
+                         "stonking", "7.3.0-9.9") is None
+          and kv.tracker_fix({"linux": [{"release_codename": "stonking", "status": "released",
+                                         "description": "7.3.0-10.10"}]}, "stonking", "7.3.0-9.9") is None
+          and kv.tracker_fix({"linux": [{"release_codename": "stonking", "status": "not-affected",
+                                         "description": "code not present"}]}, "stonking", "7.3.0-9.9") is None)
+    pubs = {"publications": [{"series": "stonking", "pocket": "Proposed", "status": "Published"},
+                             {"series": "tenacious", "pocket": "Release", "status": "Published"}],
+            "series": {"stonking": {"version": "26.10"}, "tenacious": {"version": "27.04"}}}
+    check("kernel-vex: shipped series = purl distro, released pockets only (never -proposed)",
+          kv.shipped_series(pubs, "ubuntu-26.10") is None
+          and (kv.shipped_series(pubs, "ubuntu-27.04") or {}).get("codename") == "tenacious")
+    cfg_ok = {"CONFIG_SECURITY_LOCKDOWN_LSM": "y", "CONFIG_SECURITY_LOCKDOWN_LSM_EARLY": "y",
+              "CONFIG_LOCK_DOWN_IN_SECURE_BOOT": "y"}
+    src_ok = {"arch/x86/kernel/setup.c": 'x\n\tsecurity_lock_kernel_down("EFI Secure Boot mode", LOCKDOWN_INTEGRITY_MAX);\n'}
+    st_ok = kv.vendor_specific("CVE-2025-1272", cfg_ok, src_ok) or ""
+    check("kernel-vex: vendor-specific CVE closed only when config and source both hold",
+          "arch/x86/kernel/setup.c:2" in st_ok
+          and kv.vendor_specific("CVE-2025-1272", dict(cfg_ok, CONFIG_LOCK_DOWN_IN_SECURE_BOOT="n"), src_ok) is None
+          and kv.vendor_specific("CVE-2025-1272", cfg_ok, {}) is None
+          and kv.vendor_specific("CVE-1", cfg_ok, src_ok) is None, st_ok[:120])
+
 
 def test_gate(base: Path) -> None:
     """scripts/release/release_tool.py gate: blocks only NEW findings >= severity without VEX."""
@@ -404,6 +609,8 @@ def main() -> int:
         test_kernel_vex(base)
         test_coverage(real)
         test_gate(base)
+        test_boot_chain(real, base)
+        test_debian_grype(real, base)
         test_modules(real)
         test_empty_cache(scratch_root(real, base, "empty-cache"))
         test_origin(scratch_root(real, base, "origin"))

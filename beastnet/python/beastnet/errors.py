@@ -17,10 +17,11 @@ GRUBENV = "grubenv"
 SCRIPT = "script"  # the beastnet.script plan is missing or invalid
 EXISTS = "exists"  # destination exists and the plan did not allow replacing it
 INTERNAL = "internal"  # a bug: an unexpected exception
+TRUST = "trust"  # "Trust Ubuntu's Secure Boot key" refused or failed (beastnet/python/beastnet/trust.py)
 
 CODES = frozenset({
     NO_NETWORK, WIFI_AUTH, DHCP, TLS, HTTP, REFUSED_PLAIN_HTTP, CHECKSUM_MISMATCH,
-    NO_SPACE, MOUNT, GRUBENV, SCRIPT, EXISTS, INTERNAL,
+    NO_SPACE, MOUNT, GRUBENV, SCRIPT, EXISTS, INTERNAL, TRUST,
 })
 
 

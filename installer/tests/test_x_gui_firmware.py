@@ -118,6 +118,35 @@ def test_parse_installed_variants():
     assert fw.parse_installed({"installed": {"v": 1, "packs": [entry, {"id": "BAD"}]}})[0].id == "intel-wifi"
     assert fw.parse_installed({"installed": {"v": 1, "packs": []}}) == ()
     assert fw.parse_installed(None) is None and fw.parse_installed({"x": 1}) is None
+    assert fw.parse_installed({"v": 1, "packs": [entry]})[0].stale_note is None
+
+
+def test_stale_packs_get_a_note():
+    entry = {"id": "intel-wifi", "catalog_tag": "20261019", "kernel": "7.0.0-38-generic", "files": [{}],
+             "stale": True, "stale_reason": "made for kernel 7.0.0-38-generic"}
+    p = fw.parse_installed({"installed": {"v": 1, "packs": [entry]}})[0]
+    assert p.kernel == "7.0.0-38-generic" and p.stale_note == "Made for kernel 7.0.0-38-generic - reinstall"
+    gone = fw.parse_installed({"packs": [{"id": "old-pack", "stale": True,
+                                          "stale_reason": "not in the drive's catalog"}]})[0]
+    assert gone.stale_note == "Not in the drive's catalog - remove"
+
+
+def test_mark_stale_mirrors_firmware_list(tmp_path):
+    cat = fw.parse_catalog(catalog_obj(), tmp_path / "catalog.json")
+    obj = catalog_obj()["packs"][0]
+    same = {"id": "intel-wifi", "catalog_tag": "20261019", "kernel": "7.0.0-38-generic",
+            "files": [{k: f[k] for k in ("path", "sha256", "size")} for f in obj["files"]]}
+    info = {"v": 1, "packs": [same, {**same, "id": "realtek-ethernet"}, {**same, "kernel": "6.1.0"} | {"id": "x"}]}
+    out = {p["id"]: p.get("stale_reason") for p in fw.mark_stale(info, cat)["packs"]}
+    assert out == {"intel-wifi": None, "realtek-ethernet": "made for other firmware files than the catalog lists",
+                   "x": "not in the drive's catalog"}
+    assert fw.mark_stale({"packs": [{**same, "kernel": "6.1.0"}]}, cat)["packs"][0]["stale_reason"] == \
+        "made for kernel 6.1.0"
+    assert "stale" not in info["packs"][1]  # the drive check's info is not changed in place
+    # valid JSON, malformed file entries (mixed types): "other files", never a crash in the Tk callback
+    bad = {**same, "files": [{"path": None}, {"path": "a", "size": "x"}, "junk"]}
+    assert fw.mark_stale({"packs": [bad]}, cat)["packs"][0]["stale_reason"] == \
+        "made for other firmware files than the catalog lists"
 
 
 # ---------------------------------------------------------------------------
@@ -627,6 +656,26 @@ def test_checked_drive_shows_its_packs_without_a_job(make):
     f.set_target_drive(None)
     f.set_target_drive(STICK.id)  # chosen after the check: known at once
     assert f.is_installed("intel-wifi")
+
+
+@pytest.mark.parametrize("same_version", [True, False])
+def test_checked_drive_marks_packs_for_another_kernel(make, fw_dist, same_version):
+    app = distinfo.read_summary(distinfo.DistLocation(fw_dist, "--dist"))
+    old = {**WIFI_ENTRY, "kernel": "6.9.0-1-generic"}
+    version = app.version if same_version else "0.0.1"
+    b = ProbingBackend({STICK.id: ProbeResult(InstalledBoot(version, app.build_id, 2,
+                                                            firmware=space_info(1 << 20, [old])["installed"]))})
+    c, f, _ = make(b)
+    c.poll()
+    f.set_target_drive(STICK.id)
+    assert f.is_installed("intel-wifi")
+    # Only a drive with this app's boot files has this app's catalog; an older one
+    # is marked by its update and by `firmware list`.
+    assert f.stale_note("intel-wifi") == ("Made for kernel 6.9.0-1-generic - reinstall" if same_version else None)
+    read_back(f, b, space_info(1 << 20, [{**old, "stale": True, "stale_reason": "made for kernel 6.9.0-1-generic"}]))
+    assert f.stale_note("intel-wifi") == "Made for kernel 6.9.0-1-generic - reinstall"
+    read_back(f, b, space_info(1 << 20, [WIFI_ENTRY]))  # reinstalled: the CLI's verdict wins
+    assert f.stale_note("intel-wifi") is None
 
 
 def test_drive_without_packs_says_so(make):

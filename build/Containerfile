@@ -1,6 +1,7 @@
 # beast-booter build environment: Ubuntu 26.04 with pinned package versions.
 #
-# NOTE: written without access to a container runtime; not yet tested.
+# NOTE: written without access to a container runtime; not yet tested
+# (the GRUB source build part neither: the docker daemon was unavailable).
 #
 # Build the image (from the repository root):
 #   podman build -t beast-booter-build -f build/Containerfile .
@@ -15,20 +16,34 @@
 #   build/verify-dist.sh out/container/dist
 # (docker works the same way; drop the ",Z" SELinux labels if not needed.)
 #
-# The files that end up on the drive come from the payload packages below.
-# They are fetched with `apt-get download` and unpacked with `dpkg-deb -x`
-# into /src/.tools (as scripts/bootstrap-tools.sh does), so no maintainer
-# scripts run, and build.sh checks every file against the .deb's md5sums.
-# Tool packages (grub-mkimage, sbsign, objcopy, ...) are installed normally.
+# GRUB is built from pinned source in the image (build/grub/grubsrc.py:
+# Ubuntu's grub2 source package + build/grub/patches, SHA-256-checked) with
+# the pinned toolchain below; build.sh then finds it in the cache. The other
+# files that end up on the drive come from the payload packages below. They
+# are fetched with `apt-get download` and unpacked with `dpkg-deb -x` into
+# /src/.tools (as scripts/bootstrap-tools.sh does), so no maintainer scripts
+# run, and build.sh checks every file against the .deb's md5sums. Tool
+# packages (grub-mkfont, sbsign, objcopy, the compiler, ...) are installed
+# normally.
+# shim and MokManager are Debian's: build/shim/fetch.py downloads the .debs
+# pinned (by SHA-256) in build/shim/debian-shim.lock into /src/.tools/debian.
 # For a fully pinned base image, replace the tag by a digest:
 #   FROM docker.io/library/ubuntu:26.04@sha256:<digest>
 FROM docker.io/library/ubuntu:26.04
 
-# Payload: copied to / built into the boot partition.
-ARG GRUB_EFI_BIN_VERSION=2.14-2ubuntu1
-ARG GRUB_EFI_SIGNED_VERSION=1.215+2.14-2ubuntu1
-ARG GRUB_PC_BIN_VERSION=2.14-2ubuntu2.1
-ARG SHIM_SIGNED_VERSION=1.59+15.8-0ubuntu2
+# Toolchain of the GRUB source build (build/grub/grubsrc.py; part of its cache key).
+ARG GCC_VERSION=4:15.2.0-5ubuntu1
+ARG AUTOCONF_VERSION=2.72-3.1ubuntu2
+ARG AUTOMAKE_VERSION=1:1.18.1-3build1
+ARG AUTOPOINT_VERSION=0.23.2-1
+ARG BISON_VERSION=2:3.8.2+dfsg-1ubuntu0.26.04.1
+ARG FLEX_VERSION=2.6.4-8.2build2
+ARG GAWK_VERSION=1:5.3.2-1ubuntu1.1
+ARG PKGCONF_VERSION=2.5.1-4
+ARG PATCH_VERSION=2.8-2build1
+ARG FREETYPE_VERSION=2.14.2+dfsg-1ubuntu0.2
+ARG XZ_VERSION=5.8.3-1ubuntu0.1
+ARG DPKG_DEV_VERSION=1.23.7ubuntu1
 # Tools (and grub2-common's unicode.pf2, which is also payload).
 ARG GRUB_COMMON_VERSION=2.14-2ubuntu2.1
 ARG SBSIGNTOOL_VERSION=0.9.4-3.1ubuntu9
@@ -37,6 +52,9 @@ ARG OPENSSL_VERSION=3.5.5-1ubuntu3.7
 ARG PYTHON3_VERSION=3.14.3-0ubuntu2
 ARG MAKE_VERSION=4.4.1-3
 ARG NOTO_VERSION=20201225-2build1
+ARG CA_CERTIFICATES_VERSION=20260816ubuntu0.26.04.1
+# git: the beast-net firmware catalog (build/beastnet/gen_catalog.py) reads the linux-firmware tag.
+ARG GIT_VERSION=1:2.53.0-1ubuntu1.1
 
 ENV DEBIAN_FRONTEND=noninteractive LC_ALL=C.UTF-8 TZ=UTC
 
@@ -46,22 +64,24 @@ RUN apt-get update \
       sbsigntool=${SBSIGNTOOL_VERSION} binutils=${BINUTILS_VERSION} \
       openssl=${OPENSSL_VERSION} python3=${PYTHON3_VERSION} make=${MAKE_VERSION} \
       fonts-noto-core=${NOTO_VERSION} fonts-noto-mono=${NOTO_VERSION} \
- && mkdir -p /src/.tools/debs /src/.tools/root \
- && cd /src/.tools/debs \
- && apt-get download \
-      grub-efi-amd64-bin=${GRUB_EFI_BIN_VERSION} \
-      grub-efi-amd64-signed=${GRUB_EFI_SIGNED_VERSION} \
-      grub-pc-bin=${GRUB_PC_BIN_VERSION} \
-      shim-signed=${SHIM_SIGNED_VERSION} \
- && for d in *.deb; do dpkg-deb -x "$d" /src/.tools/root; done \
- && rm -rf /var/lib/apt/lists/*
+      ca-certificates=${CA_CERTIFICATES_VERSION} gcc=${GCC_VERSION} autoconf=${AUTOCONF_VERSION} automake=${AUTOMAKE_VERSION} \
+      autopoint=${AUTOPOINT_VERSION} bison=${BISON_VERSION} flex=${FLEX_VERSION} gawk=${GAWK_VERSION} \
+      pkgconf=${PKGCONF_VERSION} patch=${PATCH_VERSION} libfreetype-dev=${FREETYPE_VERSION} \
+      xz-utils=${XZ_VERSION} dpkg-dev=${DPKG_DEV_VERSION} git=${GIT_VERSION} \
+ && mkdir -p /src/.tools/debs /src/.tools/root
 
 WORKDIR /src
 # Only the inputs the build reads (no host .tools/, no keys, no dist/).
 COPY VERSION ./
-COPY scripts/dev-env.sh scripts/
+COPY scripts/dev-env.sh scripts/efi_inspect.py scripts/shim_trust.py scripts/
 COPY installer/beastbooter/layout.py installer/beastbooter/
 COPY build/ build/
 COPY grub/ grub/
+COPY beastnet/ beastnet/
+# GRUB from source, cached in the image (/src/.tools/cache/grub-src); it fetches
+# the pinned source and two build-time .debs (apt, then Launchpad), all SHA-256-checked.
+RUN python3 -I build/grub/grubsrc.py build --builder native \
+ && rm -rf /src/.tools/cache/grub-src/work /var/lib/apt/lists/*
+RUN python3 -I build/shim/fetch.py fetch /src/.tools/debian
 
 CMD ["bash", "-c", "source scripts/dev-env.sh && exec build/build.sh"]

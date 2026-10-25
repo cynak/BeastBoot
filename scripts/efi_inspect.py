@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import datetime as _dt
 import hashlib
+import json
+import os
 import re
 import struct
 import subprocess
@@ -269,6 +271,9 @@ class Signature:
     certs: list[bytes]                       # DER certificates carried in the PKCS#7
     signer_ids: list[tuple[bytes, bytes]]    # (issuer DER, serial bytes) per SignerInfo
     nested: list[Signature] = field(default_factory=list)
+    raw: bytes = b""                         # the PKCS#7 SignedData (DER), without padding
+    content: bytes = b""                     # signed content: SpcIndirectDataContent value octets
+    unparsed_nested: int = 0                 # nested signatures that could not be parsed
 
 
 def parse_pkcs7(blob: bytes) -> Signature:
@@ -282,11 +287,14 @@ def parse_pkcs7(blob: bytes) -> Signature:
     certs: list[bytes] = []
     signer_ids: list[tuple[bytes, bytes]] = []
     nested: list[Signature] = []
+    unparsed_nested = 0
     idx = 2                                              # version, digestAlgorithms, contentInfo
     ci = sd[idx]
     ci_kids = list(_children(blob, ci[1], ci[2]))
+    content = b""
     if _oid(blob[ci_kids[0][1]:ci_kids[0][2]]) == OID_SPC_INDIRECT and len(ci_kids) > 1:
         _, ics, ice, _ = _tlv(blob, ci_kids[1][1])     # [0] -> SpcIndirectDataContent
+        content = blob[ics:ice]          # Authenticode signs the value without its SEQUENCE header
         spc = list(_children(blob, ics, ice))
         dinfo = list(_children(blob, spc[1][1], spc[1][2]))
         alg = list(_children(blob, dinfo[0][1], dinfo[0][2]))
@@ -312,8 +320,73 @@ def parse_pkcs7(blob: bytes) -> Signature:
                                     try:
                                         nested.append(parse_pkcs7(blob[vh:vz]))
                                     except (ValueError, IndexError):
-                                        pass
-    return Signature(algo, digest, certs, signer_ids, nested)
+                                        unparsed_nested += 1
+    return Signature(algo, digest, certs, signer_ids, nested, blob[:ce], content, unparsed_nested)
+
+
+def verify_signature(sig: Signature, ca_pem: Path | str) -> bool:
+    """Does `sig` verify cryptographically with the certificate in `ca_pem` as trust anchor?
+
+    `openssl smime -verify` over the signed SpcIndirectDataContent, so the signer's key
+    signed exactly the digest this signature carries, and the signer chains (through the
+    certificates carried in the signature) to `ca_pem`. Like the firmware and shim: an
+    intermediate CA may be the anchor (-partial_chain), certificate dates are not checked
+    (-no_check_time) and any extended key usage is accepted. `ca_pem` is the only anchor:
+    OpenSSL's default certificate directory and store (/etc/ssl/certs, $SSL_CERT_DIR) are
+    not loaded (-no-CApath -no-CAstore), or with -partial_chain every certificate there
+    would count as `ca_pem`. The image digest itself is compared separately
+    (digest_matches_signature)."""
+    if not sig.raw or not sig.content:
+        return False
+    with tempfile.TemporaryDirectory(prefix="efi-inspect-") as d:
+        p7, content = Path(d, "sig.p7"), Path(d, "content.bin")
+        p7.write_bytes(sig.raw)
+        content.write_bytes(sig.content)
+        r = subprocess.run(["openssl", "smime", "-verify", "-inform", "DER", "-in", str(p7), "-binary",
+                            "-content", str(content), "-CAfile", str(ca_pem), "-no-CApath", "-no-CAstore",
+                            "-partial_chain",
+                            "-no_check_time", "-purpose", "any", "-out", os.devnull],
+                           capture_output=True, text=True)
+    return r.returncode == 0
+
+
+def signatures(pe: PE) -> list[Signature]:
+    """Every Authenticode signature: each WIN_CERTIFICATE of type PKCS_SIGNED_DATA, then
+    the signatures nested inside them (older multi-signing). Unparseable entries are skipped
+    (unparsed_entries() lists them; policy checks must treat them as problems)."""
+    out = []
+    for _rev, ctype, blob in win_certificates(pe):
+        if ctype != 0x0002:
+            continue
+        try:
+            sig = parse_pkcs7(blob)
+        except (ValueError, IndexError):
+            continue
+        out.append(sig)
+        out.extend(sig.nested)
+    return out
+
+
+def unparsed_entries(pe: PE) -> list[str]:
+    """Certificate-table entries signatures() skips: other WIN_CERTIFICATE types, PKCS#7 our
+    DER parser rejects (shim's OpenSSL also reads BER) and unparseable nested signatures."""
+    out = []
+    for i, (_rev, ctype, blob) in enumerate(win_certificates(pe)):
+        if ctype != 0x0002:
+            out.append(f"entry {i}: WIN_CERTIFICATE type {ctype:#06x}")
+            continue
+        try:
+            sig = parse_pkcs7(blob)
+        except (ValueError, IndexError) as e:
+            out.append(f"entry {i}: unparseable PKCS#7 ({e})")
+            continue
+        stack = [sig]
+        while stack:
+            s = stack.pop()
+            if s.unparsed_nested:
+                out.append(f"entry {i}: {s.unparsed_nested} unparseable nested signature(s)")
+            stack.extend(s.nested)
+    return out
 
 
 def cert_issuer_serial(der: bytes) -> tuple[bytes, bytes]:
@@ -440,3 +513,189 @@ def public_view(info: dict) -> dict:
     out = dict(info)
     out["signatures"] = [{k: v for k, v in s.items() if k != "cert_der"} for s in info["signatures"]]
     return out
+
+
+# --------------------------------------------------------------------------- shim vendor keys
+
+EFI_CERT_X509 = "a5c059a1-94e4-4aa7-87b5-ab155c2bf072"
+EFI_CERT_SHA256 = "c1c41626-504c-4092-aca9-41f936934328"
+
+
+def _guid(b: bytes) -> str:
+    a, b2, c = struct.unpack_from("<IHH", b, 0)
+    return f"{a:08x}-{b2:04x}-{c:04x}-{b[8:10].hex()}-{b[10:16].hex()}"
+
+
+def parse_esl(data: bytes) -> dict:
+    """EFI_SIGNATURE_LIST entries -> {"x509": [DER, ...], "sha256": [hex, ...], "other": n}."""
+    out: dict = {"x509": [], "sha256": [], "other": 0}
+    off = 0
+    while off + 28 <= len(data):
+        stype = _guid(data[off:off + 16])
+        list_size, header_size, sig_size = struct.unpack_from("<III", data, off + 16)
+        if list_size < 28 or sig_size < 16 or off + list_size > len(data):
+            raise ValueError("malformed EFI_SIGNATURE_LIST")
+        p = off + 28 + header_size
+        while p + sig_size <= off + list_size:
+            entry = data[p + 16:p + sig_size]           # after the owner GUID
+            if stype == EFI_CERT_X509:
+                out["x509"].append(entry)
+            elif stype == EFI_CERT_SHA256:
+                out["sha256"].append(entry.hex())
+            else:
+                out["other"] += 1
+            p += sig_size
+        off += list_size
+    return out
+
+
+def shim_vendor(pe: PE) -> dict | None:
+    """shim's .vendor_cert section (struct cert_table): the built-in vendor key(s) and
+    vendor_dbx. -> {"cert": [DER, ...], "dbx": parse_esl(...)}, or None if absent."""
+    raw = pe.section(".vendor_cert")
+    if not raw or len(raw) < 16:
+        return None
+    a_size, d_size, a_off, d_off = struct.unpack_from("<IIII", raw, 0)
+    auth, deauth = raw[a_off:a_off + a_size], raw[d_off:d_off + d_size]
+    certs = [auth] if auth[:1] == b"\x30" else parse_esl(auth)["x509"]   # one DER cert, or a vendor_db ESL
+    return {"cert": certs, "dbx": parse_esl(deauth) if deauth else {"x509": [], "sha256": [], "other": 0}}
+
+
+def der_to_pem(ders: list[bytes]) -> str:
+    return "".join(subprocess.run(["openssl", "x509", "-inform", "DER"], input=c, capture_output=True,
+                                  check=True).stdout.decode() for c in ders)
+
+
+# --------------------------------------------------------------------------- signer checks
+
+
+def check_signers(path: Path, cas: dict[str, Path]) -> dict:
+    """Which of the named CA certificates (PEM files) each signature of `path` chains to.
+    -> {"authenticode_sha256", "signatures": [{"signer", "digest_algorithm", "signed_digest",
+        "digest_matches_signature", "chains_to": [names], "cert_sha256": [...]}]}"""
+    pe = parse_pe(Path(path).read_bytes())
+    out: dict = {"authenticode_sha256": authenticode_digest(pe).hex(), "signatures": [],
+                 "win_certificates": len(win_certificates(pe)), "unparsed": unparsed_entries(pe)}
+    for sig in signatures(pe):
+        by_id = {cert_issuer_serial(c): c for c in sig.certs}
+        signer = by_id.get(sig.signer_ids[0]) if sig.signer_ids else None
+        computed = authenticode_digest(pe, sig.digest_algo).hex() if sig.digest_algo else None
+        out["signatures"].append({
+            "signer": cert_info(signer)["subject"] if signer else None,
+            "digest_algorithm": sig.digest_algo,
+            "signed_digest": sig.digest.hex() if sig.digest else None,
+            "digest_matches_signature": computed is not None and computed == (sig.digest or b"").hex(),
+            "chains_to": [n for n, pem in cas.items() if verify_signature(sig, pem)],
+            "cert_sha256": [hashlib.sha256(c).hexdigest() for c in sig.certs],
+            "signer_infos": len(sig.signer_ids),
+        })
+    return out
+
+
+def _named(value: str) -> tuple[str, Path]:
+    name, sep, pem = value.partition("=")
+    if not sep or not Path(pem).is_file():
+        raise SystemExit(f"efi_inspect: --ca/--chains/--only take NAME=FILE.pem, got {value!r}")
+    return name, Path(pem)
+
+
+def require(path: Path, chains: list[str], only: str | None, vendor_of: str | None,
+            denied: list[str] = ()) -> list[str]:
+    """The policy checks of `efi_inspect.py require` (see main()); prints one line per
+    signature and returns the problems found."""
+    cas = dict(_named(c) for c in [*chains, *([only] if only else []), *denied])
+    with tempfile.TemporaryDirectory(prefix="efi-inspect-") as d:
+        vendor = None
+        if vendor_of:
+            vendor = shim_vendor(parse_pe(Path(vendor_of).read_bytes()))
+            if not vendor or not vendor["cert"]:
+                return [f"{vendor_of} has no vendor certificate"]
+            Path(d, "vendor.pem").write_text(der_to_pem(vendor["cert"]))
+            cas["the vendor certificate of " + Path(vendor_of).name] = Path(d, "vendor.pem")
+        info = check_signers(path, cas)
+    problems = [f"cannot read every signature ({u}); refusing to judge what it does not see"
+                for u in info["unparsed"]]
+    good = [s for s in info["signatures"] if s["digest_matches_signature"]]
+    for s in info["signatures"]:
+        print(f"{path.name}: signature by {s['signer']} over {s['digest_algorithm']}:"
+              f"{(s['signed_digest'] or '?')[:16]}... "
+              f"({'= the image digest' if s['digest_matches_signature'] else 'NOT the image digest'}), "
+              f"chains to: {', '.join(s['chains_to']) or 'none of the given CAs'}")
+    for name in [_named(c)[0] for c in chains]:
+        if not any(name in s["chains_to"] for s in good):
+            problems.append(f"no signature over the image's Authenticode digest chains to {name}")
+    if only:
+        name = _named(only)[0]
+        n = max(len(info["signatures"]), info["win_certificates"],
+                sum(s["signer_infos"] for s in info["signatures"]))
+        if n != 1:
+            problems.append(f"{n} signatures, expected exactly one (by {name})")
+        elif not (good and name in good[0]["chains_to"]):
+            problems.append(f"its signature does not verify with {name}")
+    for name in [_named(c)[0] for c in denied]:
+        if any(name in s["chains_to"] for s in info["signatures"]):
+            problems.append(f"signed through the denied certificate {name}")
+    if vendor is not None:
+        vname = "the vendor certificate of " + Path(vendor_of).name
+        if not any(vname in s["chains_to"] for s in good):
+            problems.append(f"not signed through {vname}")
+        revoked = {hashlib.sha256(c).hexdigest() for c in vendor["dbx"]["x509"]}
+        if info["authenticode_sha256"] in vendor["dbx"]["sha256"]:
+            problems.append(f"its Authenticode SHA-256 is in the vendor_dbx of {Path(vendor_of).name}")
+        if any(c in revoked for s in info["signatures"] for c in s["cert_sha256"]):
+            problems.append(f"a certificate of its signature is in the vendor_dbx of {Path(vendor_of).name}")
+    if not problems:
+        print(f"{path.name}: ok, Authenticode sha256:{info['authenticode_sha256']}")
+    return problems
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI (build/build.sh, build/verify-dist.sh):
+
+  signers FILE [--ca NAME=PEM]...   JSON: every signature, its digest, the given CAs it chains to
+  require FILE [--chains NAME=PEM]... [--only NAME=PEM] [--vendor-of SHIM] [--denied NAME=PEM]...
+      exit 1 unless every --chains CA has a signature over the image's own Authenticode
+      digest that chains to it (so they all sign the same digest); with --only, the image
+      has exactly one signature and it chains to that CA; with --vendor-of, a signature
+      chains to SHIM's built-in vendor certificate and neither the image's digest nor a
+      certificate of its signatures is in SHIM's vendor_dbx; no signature may chain to a
+      --denied certificate (what shim does with MokListX / vendor_dbx certificates).
+      Always exit 1 when a certificate-table entry cannot be read (unknown type, PKCS#7
+      this parser rejects): what it cannot see it cannot vouch for.
+  authenticode FILE                 print the Authenticode SHA-256 (signatures excluded)
+"""
+    import argparse
+    import sys
+    ap = argparse.ArgumentParser(prog="efi_inspect.py", description=main.__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("signers")
+    p.add_argument("file", type=Path)
+    p.add_argument("--ca", action="append", default=[])
+    p = sub.add_parser("require")
+    p.add_argument("file", type=Path)
+    p.add_argument("--chains", action="append", default=[])
+    p.add_argument("--only")
+    p.add_argument("--vendor-of")
+    p.add_argument("--denied", action="append", default=[])
+    p = sub.add_parser("authenticode")
+    p.add_argument("file", type=Path)
+    a = ap.parse_args(argv)
+    try:
+        if a.cmd == "authenticode":
+            print(authenticode_digest(parse_pe(a.file.read_bytes())).hex())
+            return 0
+        if a.cmd == "signers":
+            print(json.dumps(check_signers(a.file, dict(_named(c) for c in a.ca)), indent=2))
+            return 0
+        problems = require(a.file, a.chains, a.only, a.vendor_of, a.denied)
+    except (OSError, PEError, ValueError) as e:
+        print(f"efi_inspect: {a.file}: {e}", file=sys.stderr)
+        return 1
+    for msg in problems:
+        print(f"efi_inspect: {a.file}: {msg}", file=sys.stderr)
+    return 1 if problems else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

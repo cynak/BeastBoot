@@ -1144,22 +1144,31 @@ class Controller:
             'Choose "View key" and compare its fingerprint with the one below, then Continue, Yes, '
             "Reboot. Each computer asks only once."
         )
+        # Before secure_boot: the key fingerprint card follows the last step.
+        ubuntu = (
+            "With Secure Boot on, Ubuntu and Ubuntu-based ISOs (such as Linux Mint) start only after you run "
+            "\"Trust Ubuntu's Secure Boot key\" from the drive's boot menu (once per computer), or "
+            "with Secure Boot off."
+        )
         if outcome.spec.kind == "image":
             return [
                 f"Write {os.path.basename(outcome.spec.target)} to a USB drive with any disk imaging tool, "
                 "or attach it to a virtual machine.",
                 f"Copy your ISO files onto its {label} partition, like onto any USB drive.",
+                ubuntu,
                 secure_boot,
             ]
         if outcome.spec.action == "update":
             return [
                 "Your ISO files and other data on the drive were not touched.",
+                ubuntu,
                 "Computers that already enrolled this beast-booter key start it directly. "
                 "On any other computer: " + secure_boot[0].lower() + secure_boot[1:],
             ]
         return [
             f"Copy your ISO files onto the {label} drive, like onto any USB drive. Folders are fine.",
             "Start the computer from the drive (a key like F12, F11, F8 or Esc usually opens the boot menu).",
+            ubuntu,
             secure_boot,
         ]
 

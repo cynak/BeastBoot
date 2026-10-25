@@ -10,7 +10,7 @@ from typing import IO, Any
 from collections.abc import Callable
 
 from ..download import Progress, human_size
-from . import STEPS, UI, Field, Item, UIClosed, Worker, bars_text, human_time, lock_text
+from . import UI, Field, Item, UIClosed, Worker, bars_text, human_time, lock_text
 
 
 class LineUI(UI):
@@ -60,10 +60,10 @@ class LineUI(UI):
 
     def _header(self, title: str, kind: str = "") -> None:
         mark = {"error": "!! ", "warn": "! ", "ok": ""}.get(kind, "")
-        steps = "  ".join(f"[{s}]" if i == self.step else s for i, s in enumerate(STEPS))
+        steps = "  ".join(f"[{s}]" if i == self.step else s for i, s in enumerate(self.steps))
         self._p()
         self._p("=" * self.width)
-        self._p(f"beast-booter / beast-net    {steps}")
+        self._p(f"beast-booter / beast-net    {steps or self.subtitle}")
         self._p(f"{mark}{title}")
         self._p("-" * self.width)
 

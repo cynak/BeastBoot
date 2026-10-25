@@ -25,6 +25,7 @@ from .qemu import VM
 from .serial import Record
 
 ENTRY = "Download an ISO from a link"
+TRUST_ENTRY = "Trust Ubuntu's Secure Boot key"
 GUEST_HOST = "10.0.2.2"
 GUEST_IP = "10.0.2.15"
 PLAN_PATH = "/beast-booter/plan.json"

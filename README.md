@@ -7,7 +7,7 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-52525b"></a>
-  <a href="VERSION"><img alt="Version: 0.1.1" src="https://img.shields.io/badge/version-0.1.1-orange"></a>
+  <a href="VERSION"><img alt="Version: 0.1.2" src="https://img.shields.io/badge/version-0.1.2-orange"></a>
   <a href="docs/ARCHITECTURE.md#2-boot-flows"><img alt="Platforms: BIOS, UEFI, Secure Boot" src="https://img.shields.io/badge/platforms-BIOS%20%7C%20UEFI%20%7C%20Secure%20Boot-d62839"></a>
   <br>
   <a href="sbom/README.md"><img alt="SBOM: CycloneDX 1.6 + SPDX 2.3" src="https://img.shields.io/badge/SBOM-CycloneDX%201.6%20%2B%20SPDX%202.3-52525b"></a>
@@ -39,16 +39,19 @@
   default). Drop `.iso` files anywhere on it, in any folders. When you boot
   from it, a graphical menu lists the ISOs and lets you browse folders.
 - **Boots everywhere.** Legacy BIOS, UEFI, and UEFI with Secure Boot on.
-- **Secure Boot done properly.** Microsoft-signed shim, then BeastBoot's
-  GRUB 2.14 signed with a BeastBoot key that *you* enroll once in
-  MokManager. Nothing is disabled or bypassed. An ISO whose kernel your
-  machine doesn't trust is refused, with an explanation.
+- **Secure Boot done properly.** Debian's Microsoft-signed shim (signed
+  through both the 2011 and the 2023 UEFI CA), then BeastBoot's GRUB 2.14,
+  built from source with current security fixes and signed with a BeastBoot
+  key that *you* enroll once in MokManager. Nothing is disabled or bypassed.
+  An ISO whose kernel your machine doesn't trust is refused, with an
+  explanation.
 - **Download an ISO from the boot menu.** A small Linux helper connects over
   Ethernet or WiFi, downloads an ISO over HTTPS, checks it and boots it.
 - **Fully transparent.** Every file placed on the drive is built from this
-  repo or copied unmodified from a named Ubuntu package, and listed with its
-  origin and SHA-256 in a manifest you can verify. Every release publishes an
-  SBOM and a vulnerability report.
+  repo or from pinned sources, or copied unmodified from a named Ubuntu or
+  Debian package (the helper kernel only gets a new signature), and listed
+  with its origin and SHA-256 in a manifest you can verify. Every release
+  publishes an SBOM and a vulnerability report.
 - **Drives stay current.** The app notices when a drive has older boot files
   and updates them in place; your ISOs and files are never touched.
 - **One app for Linux, Windows and macOS.** A desktop app and a command line,
@@ -191,28 +194,32 @@ On the first boot with Secure Boot on, shim reports that it can't verify
 BeastBoot and opens MokManager. Choose **Enroll key from disk**, select
 `ENROLL_THIS_KEY_IN_MOKMANAGER.cer` on the `BEAST-EFI` volume, check the
 fingerprint, confirm, and reboot. This is a one-time step per computer.
-ISOs then boot if their kernel is signed by a key the machine trusts
-(Ubuntu and its flavours out of the box; other distributions after you
-enroll their key; unsigned ones only with Secure Boot off).
+ISOs then boot if their kernel is signed by a key the machine trusts:
+Debian out of the box; other distributions after you enroll their key;
+unsigned ones only with Secure Boot off.
 
-**Known limits in 0.1** (Secure Boot on only):
+**Ubuntu and Ubuntu-based ISOs** (Linux Mint and others that use Ubuntu's
+signed kernel): since 0.1.2 the drive's shim is Debian's, which does not
+trust Ubuntu's key by itself. Either turn Secure Boot off, or choose
+**Trust Ubuntu's Secure Boot key** in the menu's tools once per computer: it
+adds Ubuntu's revoked keys to MokListX, then Ubuntu's key to MokList, each
+confirmed in MokManager after a reboot. That setting belongs to the computer,
+so other systems on it trust Ubuntu's key too.
 
-- a PC that has applied the November 2025 SBAT revocation (`grub,6`)
-  refuses our GRUB, which is Ubuntu's 2.14 build and truthfully says
-  `grub,5`;
-- a PC whose firmware trusts only Microsoft's 2023 UEFI CA refuses our shim,
-  which is signed only by the 2011 CA.
-
-Both are fixed by shipping a newer GRUB and shim from Ubuntu's updates;
-BeastBoot will not fake the SBAT number. With an NTFS data partition,
-GRUB cannot see your ISOs under Secure Boot; use exFAT or FAT32. Full
-guide: [docs/SECURE_BOOT.md](docs/SECURE_BOOT.md).
+**Known limits of 0.1.1 and older** (Secure Boot on only), fixed in 0.1.2:
+a PC that has applied the November 2025 SBAT revocation (`grub,6`) refused
+their GRUB (Ubuntu's 2.14 build, truthfully `grub,5`; 0.1.2 builds GRUB from
+source and proves the fixes before it says `grub,6`), and a PC whose
+firmware trusts only Microsoft's 2023 UEFI CA refused their shim (signed only
+by the 2011 CA; 0.1.2 ships Debian's shim, signed by both). With an NTFS data
+partition, GRUB cannot see your ISOs under Secure Boot; use exFAT or FAT32.
+Full guide: [docs/SECURE_BOOT.md](docs/SECURE_BOOT.md).
 
 ## Download an ISO from a link
 
 The menu entry **Download an ISO from a link** starts beast-net, a small
-helper built from Ubuntu's Canonical-signed kernel (so it works with Secure
-Boot on). It brings up Ethernet by DHCP or joins a WiFi network, downloads
+helper built from Ubuntu's kernel, re-signed with the BeastBoot key (so it
+works with Secure Boot on). It brings up Ethernet by DHCP or joins a WiFi network, downloads
 an ISO over HTTPS into `/downloads/` with resume, checks an optional SHA-256
 (required for plain `http://`), and reboots into the menu to boot it once.
 
@@ -226,8 +233,9 @@ Details: [docs/BEASTNET.md](docs/BEASTNET.md).
 
 ## SBOM and vulnerabilities
 
-BeastBoot puts third-party code in the boot chain (GNU GRUB, shim and a
-Linux kernel from Ubuntu's packages), so every release publishes what it
+BeastBoot puts third-party code in the boot chain (GNU GRUB built from
+Ubuntu's source package, Debian's shim, and a Linux kernel from Ubuntu's
+packages), so every release publishes what it
 ships and what is known to be wrong with it:
 
 | Release file | Contents |
@@ -251,7 +259,7 @@ and GRUB, and the UEFI revocation list (dbx). Triage decisions are kept in
 make dev       # toolchain (rootless, into .tools/), .venv, signing key, dist/, tests, dev image
 make doctor    # what is missing and how to fix it
 make test      # installer unit tests
-make e2e       # 84 end-to-end tests in QEMU: BIOS, UEFI, Secure Boot, beast-net
+make e2e       # 100 end-to-end tests in QEMU: BIOS, UEFI, Secure Boot, beast-net
 make lint      # ruff + ShellCheck
 make vm        # boot the dev image in QEMU (MODE=bios|uefi|sb|sb-enrolled|sb-fresh)
 ```
@@ -293,15 +301,17 @@ Releases are built by GitHub Actions when a `vX.Y.Z` tag is pushed, with
 
 ## Roadmap
 
-- **0.1 (this release):** desktop app and CLI for Linux, Windows and macOS
+- **0.1:** desktop app and CLI for Linux, Windows and macOS
   (portable packages); drives and images, MBR/GPT, exFAT/FAT32/NTFS; dark
   graphical menu with folder browsing and a System information page; Linux
   distro recipes; BIOS + UEFI + Secure Boot via MOK; network download over
   Ethernet and WiFi with optional firmware packs; Ubuntu desktop ISOs boot
   from exFAT using the ISO's own exFAT driver; reproducible,
   manifest-verified build; SBOM and vulnerability scan; QEMU test suite.
-- **Next:** GRUB with `grub,6` and a shim signed by Microsoft's 2023 UEFI CA
-  (from Ubuntu's updates); filesystem-independent ISO mapping, so a distro's
+- **0.1.2 (this release):** GRUB built from source with `grub,6` and
+  current security fixes; Debian's shim, signed through Microsoft's 2011 and 2023 UEFI CAs;
+  opt-in "Trust Ubuntu's Secure Boot key"; helper kernel 7.3.
+- **Next:** filesystem-independent ISO mapping, so a distro's
   initramfs no longer needs to understand exFAT/NTFS; code-signed app
   packages.
 - **Later:** Windows installer ISOs, 32-bit and ARM64 UEFI, persistence,
@@ -310,5 +320,5 @@ Releases are built by GitHub Actions when a `vX.Y.Z` tag is pushed, with
 ## License
 
 GPL-3.0-or-later. See [LICENSE](LICENSE). BeastBoot distributes GNU GRUB
-(GPL-3.0-or-later), shim (BSD-2-Clause) and a Linux kernel (GPL-2.0) from
-Ubuntu's packages; each package's licence is listed in the SBOM.
+(GPL-3.0-or-later, built from Ubuntu's source package), shim (BSD-2-Clause,
+Debian's package) and a Linux kernel (GPL-2.0, Ubuntu's package); each package's licence is listed in the SBOM.

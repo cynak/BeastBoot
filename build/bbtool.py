@@ -9,7 +9,7 @@ is error-prone. Every subcommand is read-only except `manifest-write`.
   sbatlevel FILE                 print the 'latest' revocation level of a raw
                                  .sbatlevel section dumped from shim
   sbat-vs-level SBAT LEVEL       fail if any SBAT generation is below the level
-  build-id DIST VERSION UNSIGNED_SHA256
+  build-id DIST VERSION UNSIGNED_SHA256 [--unsigned REL=SHA256]...
                                  deterministic short id of a staged dist/
   manifest-write ...             write dist/manifest.json (schema 1)
   manifest-verify DIST           re-hash every file listed in DIST/manifest.json
@@ -145,10 +145,17 @@ def cmd_build_id(args) -> None:
     dist = Path(args.dist)
     h = hashlib.sha256()
     h.update(f"beast-booter {args.version}\n".encode())
+    # Files we sign count by their unsigned hash, so a fresh signature is the same build.
+    unsigned = {"esp/EFI/BOOT/grubx64.efi": args.unsigned_sha256}
+    for spec in args.unsigned or []:
+        rel, sep, digest = spec.partition("=")
+        if not sep or len(digest) != 64:
+            die(f"--unsigned takes REL=SHA256, got {spec!r}")
+        unsigned[rel] = digest
     for rel in dist_files(dist):
         if rel.endswith(GRUB_ESP_EXCLUDE):
             continue
-        digest = args.unsigned_sha256 if rel == "esp/EFI/BOOT/grubx64.efi" else sha256_file(dist / rel)
+        digest = unsigned.get(rel) or sha256_file(dist / rel)
         h.update(f"{digest}  {rel}\n".encode())
     print(h.hexdigest()[:12])
 
@@ -271,7 +278,9 @@ def main() -> None:
     p = sub.add_parser("sbat-vs-level"); p.add_argument("sbat"); p.add_argument("level")
     p.add_argument("--which", choices=("latest", "previous"), default="latest"); p.set_defaults(fn=cmd_sbat_vs_level)
     p = sub.add_parser("build-id"); p.add_argument("dist"); p.add_argument("version")
-    p.add_argument("unsigned_sha256"); p.set_defaults(fn=cmd_build_id)
+    p.add_argument("unsigned_sha256")
+    p.add_argument("--unsigned", action="append", metavar="REL=SHA256",
+                   help="another signed file, by the SHA-256 of its unsigned image"); p.set_defaults(fn=cmd_build_id)
     p = sub.add_parser("manifest-write")
     for opt in ("dist", "origins", "out", "version", "source-date-epoch", "build-id",
                 "cert-der", "cert-subject", "sbat", "extra"):

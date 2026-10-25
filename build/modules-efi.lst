@@ -1,5 +1,5 @@
 # GRUB modules embedded in esp/EFI/BOOT/grubx64.efi (x86_64-efi), one per line.
-# Taken unmodified from $BB_GRUB_EFI_DIR (Ubuntu grub-efi-amd64-bin). With
+# Taken from our source-built GRUB (build/grub/grubsrc.py, x86_64-efi). With
 # Secure Boot on, GRUB lockdown forbids loading modules from disk, so every
 # module the menu (grub/) uses must be listed here. grub-mkimage adds
 # dependencies automatically. build.sh fails if a listed module is missing.

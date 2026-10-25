@@ -587,6 +587,7 @@ def test_full_success(make, backend):
     steps = c.next_steps(o)
     assert "BEASTBOOTER" in steps[0]
     assert "ENROLL_THIS_KEY_IN_MOKMANAGER.cer" in steps[-1] and "MokManager" in steps[-1]
+    assert "Trust Ubuntu's Secure Boot key" in steps[-2] and "Secure Boot off" in steps[-2]
     assert any("slow drive" in line.text for line in c.log)
     c.dismiss()
     assert c.phase is Phase.IDLE and c.outcome is None

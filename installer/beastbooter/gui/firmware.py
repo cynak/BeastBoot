@@ -45,6 +45,7 @@ from pathlib import Path
 
 from ..errors import BeastError
 from ..esp import INSTALLED_JSON, FwSpace, fw_archive_size, fw_space, installed_entry_estimate
+from ..installed import CURRENT
 from ..interfaces import DiskInfo
 from ..layout import DIST_ESP_DIR, ESP_LABEL
 from ..util import human_size
@@ -263,6 +264,16 @@ class InstalledPack:
     catalog_tag: str
     cpio_sha256: str
     files: int
+    kernel: str = ""
+    stale: str = ""  # why it no longer matches the drive's catalog (firmware.stale_reason), or ""
+
+    @property
+    def stale_note(self) -> str | None:
+        """The short note on a stale pack's row: "Made for kernel X - reinstall"."""
+        if not self.stale:
+            return None
+        todo = "remove" if self.stale.startswith("not in") else "reinstall"
+        return f"{self.stale[:1].upper()}{self.stale[1:]} - {todo}"
 
 
 def parse_installed(info) -> tuple[InstalledPack, ...] | None:
@@ -280,9 +291,40 @@ def parse_installed(info) -> tuple[InstalledPack, ...] | None:
     for p in packs:
         if isinstance(p, dict) and isinstance(p.get("id"), str) and PACK_ID_RE.match(p["id"]):
             files = p.get("files")
+            stale = (str(p.get("stale_reason") or "made for another catalog")) if p.get("stale") else ""
             out.append(InstalledPack(p["id"], str(p.get("catalog_tag") or ""), str(p.get("cpio_sha256") or ""),
-                                     len(files) if isinstance(files, list) else 0))
+                                     len(files) if isinstance(files, list) else 0, str(p.get("kernel") or ""),
+                                     stale))
     return tuple(out)
+
+
+def mark_stale(info: dict, cat: Catalog) -> dict:
+    """The drive check's installed packs (installed.InstalledBoot.firmware) with
+    the verdict `firmware list` gives (beastbooter.firmware.stale_reason), taken
+    against `cat`: only call it when the drive has the same boot files as this
+    app, so `cat` is the drive's catalog too."""
+    packs = []
+    for p in info.get("packs") or ():
+        if isinstance(p, dict) and "stale" not in p:
+            p, pack = dict(p), cat.pack(str(p.get("id")))
+            tag, kernel, files = p.get("catalog_tag"), p.get("kernel"), p.get("files")
+            have = sorted(((f.get("path"), f.get("sha256"), f.get("size")) for f in files if isinstance(f, dict)),
+                          key=repr) \
+                if isinstance(files, list) else None
+            if pack is None:
+                reason = "not in the drive's catalog"
+            elif kernel and cat.kernel and kernel != cat.kernel:
+                reason = f"made for kernel {kernel}"
+            elif tag != cat.tag:
+                reason = f"made for linux-firmware tag {tag or '?'}"
+            elif have != sorted(((f.path, f.sha256, f.size) for f in pack.files), key=repr):
+                reason = "made for other firmware files than the catalog lists"
+            else:
+                reason = ""
+            if reason:
+                p["stale"], p["stale_reason"] = True, reason
+        packs.append(p)
+    return {**info, "packs": packs}
 
 
 def _count(v) -> bool:
@@ -572,6 +614,9 @@ class FirmwareController:
             return
         info = probe.installed.firmware
         if info is not None and parse_installed(info) is not None:
+            fresh = self.main.freshness_of(probe)
+            if self.catalog is not None and fresh is not None and fresh.state == CURRENT:
+                info = mark_stale(info, self.catalog)  # the drive has this app's catalog
             self._remember(t, info)
 
     @property
@@ -617,6 +662,12 @@ class FirmwareController:
     def is_installed(self, pack_id: str) -> bool:
         packs = self.installed_on_target
         return bool(packs) and any(p.id == pack_id for p in packs)
+
+    def stale_note(self, pack_id: str) -> str | None:
+        """"Made for kernel X - reinstall" when the pack installed on the target no
+        longer matches its catalog (an update changed the helper); None otherwise.
+        Installing it again replaces it."""
+        return next((p.stale_note for p in self.installed_on_target or () if p.id == pack_id), None)
 
     def _remember(self, target: FwTarget, info) -> None:
         """What a list/install/remove run reported about the target (forgotten if it didn't say)."""

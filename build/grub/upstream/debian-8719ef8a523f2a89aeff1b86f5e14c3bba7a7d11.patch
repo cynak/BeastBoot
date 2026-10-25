@@ -1,0 +1,79 @@
+From 8719ef8a523f2a89aeff1b86f5e14c3bba7a7d11 Mon Sep 17 00:00:00 2001
+From: Mate Kukri <mate.kukri@canonical.com>
+Date: Tue, 23 Jun 2026 15:54:27 +0100
+Subject: [PATCH] efi/peimage: only register loader when shim loader protocol
+ absent
+
+When shim provides its image loader protocol grub uses that and registers it
+as the override loader. peimage also registered one, which failed with
+"trying to register different loader". Skip registering when the shim loader
+protocol is present.
+---
+ debian/patches/secure-boot/efi-peimage.patch | 27 +++++++++++++++-----
+ 1 file changed, 21 insertions(+), 6 deletions(-)
+
+diff --git a/debian/patches/secure-boot/efi-peimage.patch b/debian/patches/secure-boot/efi-peimage.patch
+index 2b6f6543b..8b4ce6036 100644
+--- a/debian/patches/secure-boot/efi-peimage.patch
++++ b/debian/patches/secure-boot/efi-peimage.patch
+@@ -24,9 +24,9 @@ Signed-off-by: Julian Andres Klode <julian.klode@canonical.com>
+ Signed-off-by: Mate Kukri <mate.kukri@canonical.com>
+ ---
+  grub-core/Makefile.core.def    |  13 +
+- grub-core/loader/efi/peimage.c | 922 +++++++++++++++++++++++++++++++++++++++++
++ grub-core/loader/efi/peimage.c | 937 +++++++++++++++++++++++++++++++++++++++++
+  include/grub/efi/peimage.h     |  19 +
+- 3 files changed, 954 insertions(+)
++ 3 files changed, 969 insertions(+)
+  create mode 100644 grub-core/loader/efi/peimage.c
+  create mode 100644 include/grub/efi/peimage.h
+ 
+@@ -56,10 +56,10 @@ index 67bcbf0..70a5bcf 100644
+    efi = loader/efi/fdt.c;
+ diff --git a/grub-core/loader/efi/peimage.c b/grub-core/loader/efi/peimage.c
+ new file mode 100644
+-index 0000000..0d73081
++index 0000000..2ce369e
+ --- /dev/null
+ +++ b/grub-core/loader/efi/peimage.c
+-@@ -0,0 +1,922 @@
++@@ -0,0 +1,937 @@
+ +/* peimage.c - load EFI PE binaries (for Secure Boot support) */
+ +
+ +// SPDX-License-Identifier: GPL-3.0+
+@@ -972,15 +972,30 @@ index 0000000..0d73081
+ +  .unload_image = do_unload_image,
+ +};
+ +
+++static int registered;
+++
+ +GRUB_MOD_INIT (peimage)
+ +{
+-+  grub_efi_register_loader (&peimage_loader);
+++  static grub_guid_t shim_loader_guid = GRUB_EFI_SHIM_IMAGE_LOADER_GUID;
+++
+ +  my_mod = mod;
+++
+++  /*
+++   * When shim provides its own image loader protocol grub uses that (see
+++   * grub-core/kern/efi/sb.c), which registers it as the override loader. Do
+++   * not register a second one.
+++   */
+++  if (grub_efi_locate_protocol (&shim_loader_guid, 0) != NULL)
+++    return;
+++
+++  grub_efi_register_loader (&peimage_loader);
+++  registered = 1;
+ +}
+ +
+ +GRUB_MOD_FINI (peimage)
+ +{
+-+  grub_efi_unregister_loader (&peimage_loader);
+++  if (registered)
+++    grub_efi_unregister_loader (&peimage_loader);
+ +}
+ diff --git a/include/grub/efi/peimage.h b/include/grub/efi/peimage.h
+ new file mode 100644
+-- 
+GitLab
+

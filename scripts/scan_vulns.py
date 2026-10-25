@@ -233,7 +233,10 @@ def run_grype(root: Path, sbom: Path, vex: list[Path], distro: str, offline: boo
             env["GRYPE_DB_VALIDATE_AGE"] = "false"
             info["db"]["stale"] = True
     out = work / "grype.json"
-    cmd = [str(grype), f"sbom:{sbom}", "--distro", distro.replace("-", ":", 1), "-o", "json", "--file", str(out)]
+    # No --distro (the `distro` argument is unused): every deb purl carries its own
+    # distro qualifier (the beast-net kernel comes from ubuntu-26.10), and a forced
+    # --distro would match all of them against one release's data.
+    cmd = [str(grype), f"sbom:{sbom}", "-o", "json", "--file", str(out)]
     for v in vex:
         if v.exists():
             cmd += ["--vex", str(v)]
@@ -287,6 +290,7 @@ def run_osv(root: Path, sbom_file: Path, work: Path, label: str, offline: bool =
 
 def osv_source_view(idx: dict, work: Path) -> tuple[Path, dict]:
     """CycloneDX listing each Debian source package once -> {source@ver: [component refs]}."""
+    from urllib.parse import unquote
     seen: dict[str, list[str]] = {}
     comps = []
     for c in idx.values():
@@ -297,9 +301,12 @@ def osv_source_view(idx: dict, work: Path) -> tuple[Path, dict]:
             continue
         key = f"{src}@{sver}"
         if key not in seen:
-            distro = re.search(r"distro=([^&]+)", c["purl"]).group(1)
+            # Namespace and distro come from the binary package's own purl: Debian's
+            # shim-signed is pkg:deb/debian/..., and must not be looked up in Ubuntu's history.
+            ns = re.match(r"pkg:deb/([^/]+)/", c["purl"]).group(1)
+            distro = unquote(re.search(r"distro=([^&]+)", c["purl"]).group(1))
             comps.append({"type": "application", "bom-ref": f"src:{key}", "name": src, "version": sver,
-                          "purl": deb.source_purl(src, sver, distro)})
+                          "purl": deb.source_purl(src, sver, distro, namespace=ns)})
             seen[key] = []
         seen[key].append(c["ref"])
     doc = {"bomFormat": "CycloneDX", "specVersion": "1.6", "version": 1, "components": comps}
@@ -562,11 +569,22 @@ def apply_vex(findings: list[dict], statements: list[dict]) -> None:
 # =========================================================================== evidence
 
 
-def changelog_index(idx: dict, root: Path) -> dict[str, dict]:
-    """bom-ref -> {'cves': {...}, 'where': path} for every Debian binary package component."""
+def changelog_index(idx: dict, root: Path, manifest: dict | None = None) -> dict[str, dict]:
+    """bom-ref -> {'cves': {...}, 'where': path} for every Debian binary package component, and for
+    our GRUB source build: the debian/changelog of the Ubuntu source it is built from (kept in the
+    build directory, checked against its build-info.json)."""
     out = {}
     resolve = deb.Resolver(root)
+    ginfo, gout, _ = grub_build_info(root, manifest or {})
     for c in idx.values():
+        if c["ref"].startswith("grub-src:"):
+            ch = gout / "debian-changelog" if gout else None
+            if ginfo and c["version"] == ginfo.get("version") and ch and ch.is_file() \
+                    and hashlib.sha256(ch.read_bytes()).hexdigest() == ginfo["files"].get("debian-changelog"):
+                out[c["ref"]] = {"cves": deb.changelog_cves(ch.read_text(errors="replace")),
+                                 "where": f"debian/changelog of grub2 {ginfo.get('source_version')} "
+                                          f"(GRUB source build {ginfo.get('key')})", "pkg": None}
+            continue
         if not (c.get("purl") or "").startswith("pkg:deb/") or "arch=source" in c["purl"]:
             continue
         p = resolve(c["name"], c["version"])
@@ -688,6 +706,38 @@ def _closure(start: set[str], dep: dict[str, list[str]]) -> set[str]:
     return seen
 
 
+def grub_build_info(root: Path, manifest: dict) -> tuple[dict | None, Path | None, str]:
+    """(build-info.json, build dir, why not) of the source-built GRUB the manifest names
+    (build.grub_build_key) in the build/grub/grubsrc.py cache - only if it is the build-info.json
+    the manifest recorded (build.grub_build_info_sha256)."""
+    b = manifest.get("build", {})
+    key = b.get("grub_build_key")
+    if not key:
+        return None, None, "the manifest names no GRUB source build"
+    out = Path(os.environ.get("BB_GRUB_CACHE") or root / ".tools/cache/grub-src") / "out" / key
+    try:
+        raw = (out / "build-info.json").read_bytes()
+    except OSError:
+        return None, out, f"GRUB build {key} is not in the cache (python3 -I build/grub/grubsrc.py build recreates it)"
+    if hashlib.sha256(raw).hexdigest() != b.get("grub_build_info_sha256"):
+        return None, out, f"{out}/build-info.json is not the one the manifest recorded"
+    return json.loads(raw), out, ""
+
+
+def grub_build_texts(root: Path, manifest: dict, members: tuple[str, ...]) -> tuple[dict, str] | None:
+    """Text files of the source-built GRUB the manifest names, each checked against build-info.json."""
+    info, out, _ = grub_build_info(root, manifest)
+    if info is None:
+        return None
+    key = info.get("key")
+    texts = {}
+    for mem in members:
+        p = out / mem
+        if p.is_file() and hashlib.sha256(p.read_bytes()).hexdigest() == info["files"].get(mem):
+            texts[mem] = p.read_text()
+    return texts, f"GRUB {info.get('version')} (source build {key})"
+
+
 def grub_modules(root: Path, dist: Path, manifest: dict, idx: dict) -> dict:
     """Modules really inside grubx64.efi / core.img: the requested lists from manifest.json
     plus their dependencies per moddep.lst (grub-mkimage pulls those in)."""
@@ -703,8 +753,17 @@ def grub_modules(root: Path, dist: Path, manifest: dict, idx: dict) -> dict:
     m = re.search(r"deb:(grub-efi-amd64-bin)=(\S+?)[,:\s]", next((v["origin"] for k, v in manifest["files"].items()
                                                                    if k.endswith("grubx64.efi")), "") + " ")
     out["efi_requested"] = sorted(efi_req)
-    out["efi_deps"] = None                  # moddep.lst graph of the EFI package, when verifiable
+    out["efi_deps"] = None                  # moddep.lst graph of the EFI modules, when verifiable
     out["efi_commands"] = {}
+    gb = grub_build_texts(root, manifest, ("x86_64-efi/moddep.lst", "x86_64-efi/command.lst"))
+    if gb:                                  # GRUB built from source (build/grub/grubsrc.py)
+        texts, where = gb
+        if texts.get("x86_64-efi/moddep.lst"):
+            out["efi_deps"] = _moddep(texts["x86_64-efi/moddep.lst"])
+            out["efi"] = _closure(efi_req, out["efi_deps"])
+            out["efi_closure_source"] = f"moddep.lst of {where} (verified against its build-info.json)"
+        out["efi_commands"] = _commands(texts.get("x86_64-efi/command.lst") or "")
+        m = None
     if m:
         p = deb.Resolver(root)(m.group(1), m.group(2))
 
@@ -824,6 +883,7 @@ def parse_dbx_bin(data: bytes) -> dict:
 
 ORIGIN_DEB_FILE = re.compile(r"deb:([a-z0-9][a-z0-9+.-]*)=(\S+?):(/\S+)")
 ORIGIN_REPO_FILE = re.compile(r"(?:repo|key):([^\s,]+)")
+ORIGIN_GRUB_FILE = re.compile(r"grub-src:([a-z0-9][a-z0-9+.-]*)=(\S+?):(/\S+)")
 
 
 def check_boot_chain(root: Path, dist: Path, manifest: dict, fetch: Fetcher, idx: dict,
@@ -915,15 +975,40 @@ def check_boot_chain(root: Path, dist: Path, manifest: dict, fetch: Fetcher, idx
             finding(f"BB-SIG-BROKEN-{Path(rel).name}", "critical", comp_of(rel), f"{rel}: no valid Authenticode digest",
                     "The image's own signature does not match its content (or it is unsigned).",
                     "R-SIG-BROKEN", "boot-chain:signers")
-    # shim and the 2011 CA
+    # shim and the Microsoft UEFI CAs (2011 expired; new PCs trust only 2023). Each signature
+    # is verified with openssl against the CA certificates pinned in build/shim/ when they are
+    # there (else judged by the certificate names it carries), and it must sign the image's
+    # own Authenticode digest.
     if shim_rel:
         sigs = signers["binaries"][shim_rel]
-        roots = {c["cn"] for s in sigs for c in s.get("chain", [])}
+        pinned = {"Microsoft Corporation UEFI CA 2011": root / "build/shim/microsoft-uefi-ca-2011.pem",
+                  "Microsoft UEFI CA 2023": root / "build/shim/microsoft-uefi-ca-2023.pem"}
+        pinned = {k: v for k, v in pinned.items() if v.is_file()}
+        verified = efi.check_signers(dist / shim_rel, pinned)["signatures"] if pinned else []
+        shim_ca = {"verified_with": sorted(str(v.relative_to(root)) for v in pinned.values()) or
+                   "certificate names only (build/shim/microsoft-uefi-ca-*.pem not found)", "chains": []}
+        # check_signers() lists the parseable signatures in the same order (unparseable ones skipped)
+        parsed = [sg for sg in sigs if "error" not in sg]
+        for i, sg in enumerate(parsed):
+            names = [c["cn"] for c in sg["chain"]]
+            if pinned and len(verified) == len(parsed):
+                cas = verified[i]["chains_to"]
+            else:
+                cas = [n for n in ("Microsoft Corporation UEFI CA 2011", "Microsoft UEFI CA 2023") if n in names]
+            shim_ca["chains"].append({"signer": sg["signer"], "chain": " <- ".join(names), "chains_to": cas,
+                                      "digest_matches_signature": sg["digest_matches_signature"]})
+        ok_ca = {ca for ch in shim_ca["chains"] if ch["digest_matches_signature"] for ca in ch["chains_to"]}
+        shim_ca["uefi_ca_2011"] = "Microsoft Corporation UEFI CA 2011" in ok_ca
+        shim_ca["uefi_ca_2023"] = "Microsoft UEFI CA 2023" in ok_ca
+        shim_ca["one_digest"] = len({sg["signed_digest"] for sg in efis[shim_rel]["signatures"]
+                                     if sg.get("digest_matches_signature")}) <= 1
+        signers["shim_ca"] = shim_ca
         ca2011 = [c for s in sigs for c in s.get("chain", []) if c["cn"] == "Microsoft Corporation UEFI CA 2011"]
-        has2023 = any("UEFI CA 2023" in cn for cn in roots)
+        has2023 = shim_ca["uefi_ca_2023"]
         # what else is available?
         cand_files = sorted(set(glob.glob("/usr/lib/shim/shim*.efi*") +
-                                glob.glob(str(root / ".tools/root/usr/lib/shim/shim*.efi*"))))
+                                glob.glob(str(root / ".tools/root/usr/lib/shim/shim*.efi*")) +
+                                glob.glob(str(deb.debian_dir(root) / "root/usr/lib/shim/shim*.efi*"))))
         for cf in cand_files:
             if os.path.islink(cf):
                 continue
@@ -946,10 +1031,12 @@ def check_boot_chain(root: Path, dist: Path, manifest: dict, fetch: Fetcher, idx
                     f"(notAfter {c['not_after']}, {'expired ' + str(days) + ' days ago' if days > 0 else 'expires in ' + str(-days) + ' days'})",
                     "UEFI firmware does not enforce certificate expiry, so machines that trust the 2011 CA keep "
                     "booting this shim. Machines that ship only the 'Microsoft UEFI CA 2023' in db (new hardware), or "
-                    "where the 2011 CA is removed/revoked, refuse it. No signature chains to a 2023 CA. "
+                    "where the 2011 CA is removed/revoked, refuse it. No signature over the image's digest chains to "
+                    "the 2023 CA. Signatures: " + "; ".join(f"{ch['chain']} -> {', '.join(ch['chains_to']) or 'no pinned CA'}"
+                                                            for ch in shim_ca["chains"]) + ". "
                     + (f"Host files signed by a 2023 CA: {alt2023}." if alt2023 else
-                       "No shim signed by a Microsoft UEFI CA 2023 was found on this host (/usr/lib/shim, .tools/root) "
-                       "and the configured Ubuntu archive offers only: " + signers["apt_policy_shim_signed"]),
+                       "No shim signed by a Microsoft UEFI CA 2023 was found on this host (/usr/lib/shim, .tools/root, "
+                       ".tools/debian) and the configured Ubuntu archive offers only: " + signers["apt_policy_shim_signed"]),
                     "R-CA2011", "boot-chain:signers")
     # ---- beast-booter certificate ------------------------------------------------------
     cer = next((r for r in manifest["files"] if r.endswith(".cer")), None)
@@ -1053,6 +1140,7 @@ def check_boot_chain(root: Path, dist: Path, manifest: dict, fetch: Fetcher, idx
     pkg_cache: dict = {}
     resolver = deb.Resolver(root)
     member_cache: dict = {}
+    ginfo, _, gwhy = grub_build_info(root, manifest)
     for rel, meta in manifest["files"].items():
         p = dist / rel
         o = meta["origin"]
@@ -1081,6 +1169,18 @@ def check_boot_chain(root: Path, dist: Path, manifest: dict, fetch: Fetcher, idx
             v = deb.verify_member(p, pkg_cache[key], md.group(3), member_cache)
             if v.startswith("MISMATCH"):
                 prov["origin_mismatch"].append({"file": rel, "origin": o, "result": v})
+        elif o.startswith("grub-src:"):              # copied from our GRUB source build
+            prov["origin_checked"] += 1
+            mg = ORIGIN_GRUB_FILE.fullmatch(o.strip())
+            if not mg or mg.group(2) != manifest.get("build", {}).get("grub_version"):
+                prov["origin_mismatch"].append({"file": rel, "origin": o, "result": "MISMATCH: origin names no "
+                                                "file of the manifest's GRUB build (grub-src:<name>=<version>:/path)"})
+            elif ginfo is None:
+                prov["origin_unverified"].append({"file": rel, "origin": o, "result": gwhy})
+            elif ginfo["files"].get(mg.group(3).lstrip("/")) != meta["sha256"]:
+                prov["origin_mismatch"].append({"file": rel, "origin": o, "result": (
+                    f"MISMATCH: differs from {mg.group(3).lstrip('/')} of GRUB build {ginfo.get('key')} "
+                    "(build-info.json)")})
         elif mr:
             prov["origin_checked"] += 1
             src = (root / mr.group(1)).resolve()
@@ -1125,7 +1225,7 @@ def check_boot_chain(root: Path, dist: Path, manifest: dict, fetch: Fetcher, idx
 
     # ---- archive: newer boot packages? ----------------------------------------------------
     arch = {}
-    for src in ("shim-signed", "shim", "grub2-unsigned", "grub2-signed"):
+    for src in ("shim-signed", "shim", "grub2", "grub2-unsigned", "grub2-signed"):
         d, m = fetch.json(f"launchpad/{src}.json", LP_SOURCES.format(name=src), max_age_h=24)
         if isinstance(d, dict):
             pubs = [{"version": e["source_package_version"], "series": e["distro_series_link"].rsplit("/", 1)[-1],
@@ -1142,6 +1242,22 @@ def check_boot_chain(root: Path, dist: Path, manifest: dict, fetch: Fetcher, idx
 # =========================================================================== remediation
 
 
+def grub_build_fix(f: dict, idx: dict) -> str | None:
+    """The evidence line of our GRUB source build (SBOM property security-fixes, from
+    build/grub/security-fixes.json as proven by build/grub/grubsrc.py) when the finding's CVE is
+    listed there as present - for the build component itself or its upstream (CPE) component."""
+    ref = f["component"]["bom-ref"]
+    ids = {f["id"], *f.get("aliases", [])}
+    for c in idx.values():
+        if not c["ref"].startswith("grub-src:") or ref not in (c["ref"], c["props"].get("upstream")):
+            continue
+        for line in (c["props"].get("security-fixes") or "").splitlines():
+            cid, _, rest = line.partition(": ")
+            if cid in ids and rest.startswith("present"):
+                return f"{c['ref']}: {line}"
+    return None
+
+
 def remediation(f: dict, idx: dict, codename: str, archive: dict) -> tuple[str, str]:
     c = f["component"]
     cc = idx.get(c["bom-ref"], {})
@@ -1152,6 +1268,12 @@ def remediation(f: dict, idx: dict, codename: str, archive: dict) -> tuple[str, 
         return ("R-BUILD", f"Build/test tooling only - nothing from {pkgname} is on the drive. Update {pkgname} on the "
                 f"build host (fixed version: {fixv}); for .tools/debs packages re-run `make tools`. Lower priority; "
                 "recorded so it is not forgotten.")
+    gfix = grub_build_fix(f, idx)
+    if gfix:
+        return ("R-VEX-GRUB-FIXED", f"Our GRUB source build contains the fix - {gfix}. build/grub/grubsrc.py proved it "
+                "by reverse-applying the upstream commit to the fully patched source (build/grub/security-fixes.json); "
+                "the scanner matches by version only. Review the proposed statement (status fixed) in "
+                "sbom/vex.proposed.openvex.json and copy it into sbom/vex.openvex.json.")
     ev = f.get("evidence") or []
     ub0 = (f.get("ubuntu") or {}).get("status") or {}
     ubs0 = f" Ubuntu {codename}: " + ", ".join(f"{k} {v}" for k, v in ub0.items()) + "." if ub0 else ""
@@ -1207,7 +1329,7 @@ def remediation(f: dict, idx: dict, codename: str, archive: dict) -> tuple[str, 
     emb = sorted({x for h in hints for x in h["in_efi_image"]})
     newer, checked = [], []
     fam = FAMILY.get(src) or ("grub2" if c["name"].endswith("grub2") else None)
-    for s in {"grub2": ("grub2-unsigned", "grub2-signed"), "shim": ("shim-signed", "shim")}.get(fam, ()):
+    for s in {"grub2": ("grub2", "grub2-unsigned", "grub2-signed"), "shim": ("shim-signed", "shim")}.get(fam, ()):
         shipped = next((x["props"].get("source-version") for x in idx.values()
                         if x["props"].get("source-package") == s and x.get("role") in ("shipped", "build")), None)
         if not shipped or not (archive.get(s) or {}).get("published"):
@@ -1224,8 +1346,8 @@ def remediation(f: dict, idx: dict, codename: str, archive: dict) -> tuple[str, 
         return ("R-SB-BYPASS", f"No fixed GRUB package yet and no evidence the fix is in the shipped build.{ubs} This is a "
                 "Secure Boot / lockdown bypass that needs control of GRUB's configuration - on a beast-booter drive grub.cfg, "
                 "grub/beast/*.cfg and /grub/ are on a FAT ESP anyone holding the drive can modify, so treat it as reachable. "
-                "Actions: (1) take the Ubuntu grub2 fix as soon as it is published (it should also raise the SBAT "
-                "generation, see R-SBAT), `make build`, `make e2e`, re-scan; (2) document the gap in SECURITY.md / "
+                "Actions: (1) add the upstream fix to the GRUB source build (build/grub/patches + "
+                "build/grub/security-fixes.json, see R-SBAT for the SBAT generation), `make build`, `make e2e`, re-scan; (2) document the gap in SECURITY.md / "
                 "docs/SECURE_BOOT.md; (3) proposal for the build owner: evaluate GRUB's GPG verification of everything "
                 "it reads (grub-mkimage --pubkey + check_signatures=enforce, menu files signed at build time) so a "
                 f"tampered ESP is detected. Record OpenVEX affected with that action_statement meanwhile.{track}")
@@ -1242,8 +1364,8 @@ def remediation(f: dict, idx: dict, codename: str, archive: dict) -> tuple[str, 
             ws = list({w["module"]: w for h in hints for w in h.get("efi_removability") or []}.values())
             why = "; ".join(removability_text(w) for w in ws)
             drop = [w["module"] for w in ws if w["removable"]]
-            opts = ["(1) take the Ubuntu grub2 update as soon as it is published, then `make build`, `make e2e` "
-                    "and re-scan"]
+            opts = ["(1) add the upstream fix to build/grub/patches (with its evidence in "
+                    "build/grub/security-fixes.json), then `make build`, `make e2e` and re-scan"]
             if drop:
                 opts.append(f"({len(opts) + 1}) propose dropping {', '.join(drop)} from build/modules-efi.lst "
                             "(owner: build) if beast-booter does not need it")
@@ -1255,13 +1377,13 @@ def remediation(f: dict, idx: dict, codename: str, archive: dict) -> tuple[str, 
                     + f"Options: {'; '.join(opts)}.{track}")
         if f.get("cpe_only"):
             return ("R-NVD-CPE", "NVD lists this CVE for every GRUB version (CPE without a version range), so it matches "
-                    "GNU GRUB 2.14 by name only. Check the upstream fix commit against GRUB 2.14 / Ubuntu 2.14-2ubuntu1; "
-                    "record OpenVEX fixed (or not_affected with a justification) when it is included, otherwise "
+                    f"GNU GRUB 2.14 by name only. Check the upstream fix commit against our GRUB build {c['version']} "
+                    "(build/grub/security-fixes.json lists what it contains); record OpenVEX fixed (or not_affected with a justification) when it is included, otherwise "
                     f"treat as R-GRUB-EMBEDDED.{track}")
-        return ("R-GRUB-TRACK", f"No fixed GRUB package yet and no evidence the fix is in 2.14-2ubuntu1.{ubs} Find the "
-                "upstream fix commit and check the grub2-unsigned source; if absent, track the Ubuntu grub2 update "
-                "(it will also bump the SBAT generation - see R-SBAT), rebuild with `make build` and re-scan. Record "
-                f"OpenVEX under_investigation meanwhile.{track}")
+        return ("R-GRUB-TRACK", f"No evidence the fix is in our GRUB build {c['version']}.{ubs} Find the upstream "
+                "fix commit and check it against the source (build/grub/grubsrc.py prepares it); if absent, add it to "
+                "build/grub/patches with its evidence in build/grub/security-fixes.json (see R-SBAT for the SBAT "
+                f"generation), `make build` and re-scan. Record OpenVEX under_investigation meanwhile.{track}")
     if FAMILY.get(src) == "shim":
         return ("R-SHIM-TRACK", f"No fixed shim-signed package yet.{ubs} shim must stay the Microsoft-signed Ubuntu "
                 "binary (beast-booter cannot rebuild it). Track shim-signed updates; when one is published, update the "
@@ -1287,6 +1409,11 @@ def vex_proposals(findings: list[dict], ts: str, product: str, modules: dict) ->
                        "status": "fixed", "timestamp": ts,
                        "status_notes": f"PROPOSED by scan_vulns.py - verify before use. {e['changelog']}: "
                                        f"{e['entry']}: {e['context']}"})
+        elif f["remediation_key"] == "R-VEX-GRUB-FIXED":
+            st.append({"vulnerability": {"name": f["id"], "aliases": f["aliases"]}, "products": prod,
+                       "status": "fixed", "timestamp": ts,
+                       "status_notes": "PROPOSED by scan_vulns.py - verify before use. " + f["remediation"]
+                       .split(" Review the proposed", 1)[0]})
         elif f["remediation_key"] == "R-VEX-NOTPRESENT":
             st.append({"vulnerability": {"name": f["id"], "aliases": f["aliases"]}, "products": prod,
                        "status": "not_affected", "justification": "component_not_present", "timestamp": ts,
@@ -1397,6 +1524,15 @@ def write_markdown(path: Path, rep: dict) -> None:
             chain = "; ".join(f"{c['cn']} ({c['not_after'][:10]}{', expired' if c['expired'] else ''})" for c in sg["chain"])
             a(f"| `{rel}` | {md_escape(sg['signer'])} | {md_escape(chain)} | {'ok' if sg['digest_matches_signature'] else 'MISMATCH'} |")
     a("")
+    sc = bc["signers"].get("shim_ca")
+    if sc:
+        a("Shipped shim, Microsoft UEFI CAs: " + "; ".join(
+            f"{md_escape(ch['chain'])} -> **{', '.join(ch['chains_to']) or 'none'}**"
+            + ("" if ch["digest_matches_signature"] else " (digest MISMATCH)") for ch in sc["chains"])
+            + f". UEFI CA 2011: {'yes' if sc['uefi_ca_2011'] else 'no'}, UEFI CA 2023: "
+            f"{'yes' if sc['uefi_ca_2023'] else 'no'}, one Authenticode digest: {'yes' if sc['one_digest'] else 'NO'} "
+            f"(verified with {', '.join(sc['verified_with']) if isinstance(sc['verified_with'], list) else sc['verified_with']}).")
+        a("")
     a("Other shim builds on this host: " + ("; ".join(
         f"`{x['file']}`: " + (" + ".join(' <- '.join(ch) for ch in x["signature_chains"]) or "unsigned") + (" (**UEFI CA 2023**)" if x["uefi_ca_2023"] else "")
         for x in bc["signers"]["alternatives"]) or "none") + ".")
@@ -1576,18 +1712,19 @@ def write_markdown(path: Path, rep: dict) -> None:
 
 REMEDIATION_TEXT = {
     "R-SBAT": "GRUB's SBAT generation is below shim's published revocation level, so machines that have applied that "
-              "level refuse grubx64.efi under Secure Boot. Fix by moving to a GRUB build whose upstream SBAT generation "
-              "meets the level: update grub-efi-amd64-bin **and** grub-efi-amd64-signed (the SBAT source) to an Ubuntu "
-              "release that carries it, then `make build`, `make e2e`, regenerate the SBOM and re-scan. Do **not** edit "
-              "the `grub,N` line by hand - SBAT must truthfully describe the code. Only bump `grub.beastbooter` in "
-              "build/sbat-beastbooter.csv for beast-booter's own GRUB bugs. Until a fixed package exists, document the "
-              "limitation (docs/SECURE_BOOT.md) and keep the BIOS and Secure-Boot-off paths working.",
-    "R-CA2011": "Ship a shim that is also signed by the Microsoft UEFI CA 2023 as soon as Ubuntu publishes one "
-                "(watch shim-signed in the archive; Launchpad data is in this report). When it exists: point the build at "
-                "it (build/build.sh copies BB_SHIM_DIR/shimx64.efi.signed.latest), keep MokManager from the same "
-                "shim-signed build, rebuild, run the e2e Secure Boot test with an OVMF varstore that has only the 2023 CA. "
-                "Meanwhile document in docs/SECURE_BOOT.md that machines whose db lacks the 2011 CA cannot boot "
-                "beast-booter with Secure Boot on.",
+              "level refuse grubx64.efi under Secure Boot. beast-booter builds GRUB from source (build/grub/): find "
+              "which fixes the new level stands for (shim's SbatLevel_Variable.txt), add each missing upstream commit "
+              "to build/grub/patches/ (or move build/grub/source.lock.json to an Ubuntu grub2 source that has them), "
+              "record each fix with its upstream commit in build/grub/security-fixes.json and raise the `grub` claim "
+              "there - the GRUB build proves every listed fix present (reverse-applying the upstream commit) and "
+              "refuses a claim it cannot prove. Then `make build`, `make e2e`, regenerate the SBOM and re-scan. Never "
+              "edit the `grub,N` line by hand: SBAT must truthfully describe the code. Bump `grub.beastbooter` "
+              "(build/sbat-beastbooter.csv) only for beast-booter's own GRUB bugs.",
+    "R-CA2011": "Ship a shim that is also signed by the Microsoft UEFI CA 2023. beast-booter ships Debian's shim "
+                "(build/shim/debian-shim.lock), signed through both CAs over one Authenticode digest; build/build.sh "
+                "refuses a shim without both signatures. If this finding appears, the lock or BB_SHIM_DIR points at "
+                "another shim: pin a dual-signed shim-signed + the matching shim-helpers-amd64-signed, rebuild "
+                "(`make build`) and run the e2e Secure Boot tests (test_e2e_secureboot.py boots a 2023-only db).",
     "R-CERT": "Regenerate the beast-booter key with `make keys` (RSA >= 2048, codeSigning EKU, long validity), rebuild "
               "(`make build`) and tell users to enroll the new ENROLL_THIS_KEY_IN_MOKMANAGER.cer.",
     "R-DBX": "Never ship a binary that is in dbx. Replace it with a non-revoked build of the same component (newer "
@@ -1620,15 +1757,20 @@ REMEDIATION_TEXT = {
     "R-VEX-FIXED": "The package changelog shows the fix is already in the shipped version; the scanner flags it only "
                    "because the distribution tracker has not triaged it. Review the proposed `fixed` statement in "
                    "sbom/vex.proposed.openvex.json (it quotes the changelog entry) and copy it into sbom/vex.openvex.json.",
+    "R-VEX-GRUB-FIXED": "Our GRUB source build contains the fix (build/grub/security-fixes.json names the upstream "
+                        "commit; build/grub/grubsrc.py proves it present by reverse-applying that commit to the patched "
+                        "source and fails otherwise). The scanner matches by version only. Review the proposed `fixed` "
+                        "statement in sbom/vex.proposed.openvex.json and copy it into sbom/vex.openvex.json.",
     "R-VEX-NOTPRESENT": "The advisory concerns a userland utility that beast-booter does not ship. Record OpenVEX "
                         "not_affected / component_not_present (proposal provided).",
     "R-GRUB-NOT-EMBEDDED": "The affected GRUB module is not in grubx64.efi (requested modules plus their moddep.lst "
                            "dependencies) and beast-booter ships no x86_64-efi modules, so the UEFI path does not contain "
                            "the code; the BIOS path can load it from /grub/i386-pc. Record not_affected / "
-                           "vulnerable_code_not_present for the EFI package (proposal provided) and track the grub2 "
-                           "update for grub-pc-bin.",
-    "R-GRUB-EMBEDDED": "The affected module is embedded in grubx64.efi. The fix is the Ubuntu grub2 update: take it "
-                       "as soon as it is published, `make build`, `make e2e`, re-scan. Dropping the module from "
+                           "vulnerable_code_not_present for the EFI package (proposal provided) and add the upstream "
+                           "fix to the GRUB source build (build/grub/patches) for the BIOS path.",
+    "R-GRUB-EMBEDDED": "The affected module is embedded in grubx64.efi. Add the upstream fix to the GRUB source build "
+                       "(build/grub/patches, evidence in build/grub/security-fixes.json), `make build`, `make e2e`, "
+                       "re-scan. Dropping the module from "
                        "build/modules-efi.lst is an option only when it is requested directly, no other requested "
                        "module depends on it (moddep.lst) and the menu does not call its commands - the per-finding "
                        "text says which applies. Modules pulled in by `normal` (gettext, net, crypto, extcmd, ...) or "
@@ -1718,7 +1860,7 @@ def main() -> int:
     apply_vex(findings, vex_ok)
 
     log("evidence (changelogs, Ubuntu tracker, GRUB modules) ...")
-    cl = changelog_index(idx, root)
+    cl = changelog_index(idx, root, manifest)
     modules = grub_modules(root, dist, manifest, idx)
     # The Ubuntu tracker is asked about shipped findings, except beast-net ones below critical: grype's
     # Ubuntu namespace already carries the tracker's state for those, and the kernel alone has thousands.

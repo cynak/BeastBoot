@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""OpenVEX not_affected statements for beast-net kernel CVEs whose code is not on the drive.
+"""OpenVEX statements for beast-net kernel CVEs: not_affected (code not on the drive) or fixed.
 
-    python3 -I scripts/kernel_vex.py [--root DIR] [--offline] [--refresh]
+    python3 -I scripts/kernel_vex.py [--root DIR] [--offline] [--refresh] [--tracker-severity SEV]
 
 beast-net boots Ubuntu's signed kernel (dist/esp/beast-net/vmlinuz) with a SUBSET of its
 modules in dist/esp/beast-net/initrd.img (build/beastnet/modules.list). The scanner lists
@@ -29,8 +29,21 @@ an includer that is present or unknown, scripts/ and the build-time tools under 
 check reads the source paths (__FILE__ of WARN/BUG/dynamic-debug sites) out of the shipped
 vmlinuz and initramfs modules: a file found there is never declared not present.
 
+A CVE gets fixed (the evidence in status_notes; takes precedence over not_affected) when the
+shipped kernel contains its fix:
+  a. kernel CNA record: the mainline fix (original_commit_for_fix X.Y) is in an earlier release
+     than the upstream base of Ubuntu's source (its top-level Makefile VERSION.PATCHLEVEL.SUBLEVEL
+     EXTRAVERSION; Ubuntu's stable updates bump SUBLEVEL), or in release X.Y itself when the base
+     is X.Y[.z] (not when it is X.Y-rcN), or the base's own stable branch X.Y.* is fixed at a
+     version <= the base;
+  b. Ubuntu's CVE tracker (asked only about CVEs still open): linux in the series the SBOM purl
+     names (distro=ubuntu-YY.MM, matched to the Launchpad series that publishes this version in
+     a released pocket - never -proposed) is "released" or "not-affected" at a version <= the
+     shipped one. A status without a version is not used.
+
 Writes sbom/vex.kernel.openvex.json (OpenVEX 0.2.0) and sbom/kernel-vex-report.json (every
-kernel CVE: not_present / present / unresolved + evidence). Caches .tools/cache/kernel-vex/.
+kernel CVE: not_present / present / unresolved + evidence, fix evidence, vex_status, the
+critical/high ones still open). Caches .tools/cache/kernel-vex/ (Ubuntu tracker answers 24 h).
 Deterministic: the timestamp is SOURCE_DATE_EPOCH, else the kernel config's date in the .deb.
 """
 from __future__ import annotations
@@ -57,8 +70,37 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 VULNS_GIT = "https://git.kernel.org/pub/scm/linux/security/vulns.git"
-LP_API = "https://api.launchpad.net/devel/ubuntu/+archive/primary"
-INDEX_FORMAT = 3
+LP_UBUNTU = "https://api.launchpad.net/devel/ubuntu"
+LP_API = LP_UBUNTU + "/+archive/primary"
+UBUNTU_CVE = "https://ubuntu.com/security/cves/{id}.json"
+INDEX_FORMAT = 4
+# CVEs without a kernel CNA record that describe another vendor's kernel patches. Each claim is
+# checked on every run against the shipped kernel config and Ubuntu's source (the index keeps
+# these files); if any config value or source pattern does not hold, the CVE stays open.
+VENDOR_SPECIFIC = {
+    "CVE-2025-1272": {
+        "about": "Fedora Linux kernels from 6.12 on left lockdown disabled when booted with Secure Boot (CVE: "
+                 "'affects only Fedora Linux'; Ubuntu's tracker, upstream: 'Red Hat specific lockdown regression')",
+        "config": {"CONFIG_SECURITY_LOCKDOWN_LSM": "y", "CONFIG_SECURITY_LOCKDOWN_LSM_EARLY": "y",
+                   "CONFIG_LOCK_DOWN_IN_SECURE_BOOT": "y"},
+        "source": {"arch/x86/kernel/setup.c": r'security_lock_kernel_down\("EFI Secure Boot mode", '
+                                              r'LOCKDOWN_INTEGRITY_MAX\)'},
+        "holds": "the shipped kernel locks itself down (integrity) when it is booted with EFI Secure Boot",
+    },
+    "CVE-2015-7837": {
+        "about": "The kernel of Red Hat Enterprise Linux 7, kernel-rt and MRG 2 (Red Hat's securelevel patches) "
+                 "mishandled the secure_boot flag across a kexec reboot",
+        "config": {"CONFIG_SECURITY_LOCKDOWN_LSM": "y", "CONFIG_LOCK_DOWN_IN_SECURE_BOOT": "y",
+                   "CONFIG_KEXEC_SIG": "y", "CONFIG_KEXEC_BZIMAGE_VERIFY_SIG": "y"},
+        "source": {"arch/x86/kernel/kexec-bzimage64.c": r"params->secure_boot = boot_params\.secure_boot;",
+                   "kernel/kexec.c": r"security_locked_down\(LOCKDOWN_KEXEC\)",
+                   "kernel/kexec_file.c": r"security_locked_down\(LOCKDOWN_KEXEC\)"},
+        "holds": "under Secure Boot the shipped kernel is locked down (lockdown LSM, not securelevel), which "
+                 "refuses kexec_load and requires a signed image for kexec_file_load, and kexec_file_load hands "
+                 "the secure_boot flag to the next kernel",
+    },
+}
+EVIDENCE_FILES = {p for v in VENDOR_SPECIFIC.values() for p in v["source"]}
 ARCH = "x86"
 VEX_ID = "https://beast-booter.invalid/vex/beast-booter-kernel"
 UNK = "\x01?\x01"          # marker for a value the evaluator cannot know
@@ -396,20 +438,24 @@ class Tree:
         return sorted(pre + f for f in self.files if posixpath.dirname(f) == d and fnmatch.fnmatchcase(f, pat))
 
 
-def build_index(orig: Path, diff: Path, out: Path) -> None:
-    log(f"indexing {orig.name} + {diff.name} (one-time, ~1-2 min)")
-    patches = {p: h for p, h in parse_diff(gzip.decompress(diff.read_bytes()).decode("latin-1")).items()
-               if not p.startswith("debian")}
+def build_index(orig: Path, diff: Path | None, out: Path) -> None:
+    """Index Ubuntu's source: ORIG + DIFF (.orig.tar.gz + .diff.gz) or, for a native upload
+    (DIFF None, e.g. linux_7.3.0-9.9.tar.gz), the tarball alone."""
+    log(f"indexing {orig.name}{' + ' + diff.name if diff else ''} (one-time, ~1-2 min)")
+    patches = {} if diff is None else \
+        {p: h for p, h in parse_diff(gzip.decompress(diff.read_bytes()).decode("latin-1")).items()
+         if not p.startswith("debian")}
     files: set[str] = set()
     makefiles: dict[str, str] = {}
     includes: dict[str, list[str]] = {}
     keep: dict[str, str] = {}
+    evidence: dict[str, str] = {}
     with tarfile.open(orig, mode="r|gz") as t:
         for m in t:
             if not (m.isfile() or m.issym()):
                 continue
             path = m.name.split("/", 1)[1] if "/" in m.name else m.name
-            if not path:
+            if not path or (diff is None and path.startswith("debian")):    # packaging, as in the diff case
                 continue
             files.add(path)
             if not m.isfile():
@@ -422,6 +468,8 @@ def build_index(orig: Path, diff: Path, out: Path) -> None:
                 if path in patches:
                     keep[path] = data.decode("latin-1")
                     continue
+                if path in EVIDENCE_FILES:
+                    evidence[path] = data.decode("latin-1")
                 if is_mk:
                     makefiles[path] = data.decode("latin-1")
                 if ext in SCAN_EXT:
@@ -434,6 +482,8 @@ def build_index(orig: Path, diff: Path, out: Path) -> None:
             files.discard(path)
             continue
         files.add(path)
+        if path in EVIDENCE_FILES:
+            evidence[path] = new
         if MAKEFILE_RE.search(posixpath.basename(path)):
             makefiles[path] = new
         if posixpath.splitext(path)[1] in SCAN_EXT:
@@ -441,8 +491,10 @@ def build_index(orig: Path, diff: Path, out: Path) -> None:
             if incs:
                 includes[path] = incs
     doc = {"format": INDEX_FORMAT, "orig": orig.name, "orig_sha256": sha256_file(orig),
-           "diff": diff.name, "diff_sha256": sha256_file(diff), "patched_files": len(patches),
-           "files": sorted(files), "makefiles": makefiles, "includes": includes}
+           "diff": diff.name if diff else None, "diff_sha256": sha256_file(diff) if diff else None,
+           "patched_files": len(patches),
+           "files": sorted(files), "makefiles": makefiles, "includes": includes,
+           "evidence_files": sorted(EVIDENCE_FILES), "evidence": evidence}
     tmp = out.with_name(out.name + ".part")
     with gzip.open(tmp, "wt", encoding="utf-8", compresslevel=6) as f:
         json.dump(doc, f, sort_keys=True)
@@ -1628,15 +1680,22 @@ class Sources:
             fn = e["url"].rsplit("/", 1)[1]
             if fn.endswith((".orig.tar.gz", ".diff.gz")):
                 want["orig" if fn.endswith(".orig.tar.gz") else "diff"] = (fn, e["url"], e["sha256"])
-        if set(want) != {"orig", "diff"}:
-            raise Fail(f"linux {version}: expected .orig.tar.gz + .diff.gz, got {[e['url'] for e in meta]}")
+            elif fn == f"linux_{version}.tar.gz":          # native upload (development series kernels)
+                want["native"] = (fn, e["url"], e["sha256"])
+        if "native" in want and not want.keys() & {"orig", "diff"}:
+            want["orig"] = want.pop("native")
+        elif set(want) != {"orig", "diff"}:
+            raise Fail(f"linux {version}: expected .orig.tar.gz + .diff.gz or a native .tar.gz, "
+                       f"got {[e['url'] for e in meta]}")
+        diff_sha = want["diff"][2] if "diff" in want else None
         idx_p = self.cache / f"index-linux_{version}.json.gz"
         doc = None
         if idx_p.is_file():
             with gzip.open(idx_p, "rt", encoding="utf-8") as f:
                 doc = json.load(f)
             if doc.get("format") != INDEX_FORMAT or doc.get("orig_sha256") != want["orig"][2] \
-                    or doc.get("diff_sha256") != want["diff"][2]:
+                    or doc.get("evidence_files") != sorted(EVIDENCE_FILES) \
+                    or doc.get("diff_sha256") != diff_sha:
                 doc = None
         if doc is None:
             for _k, (fn, url, sha) in sorted(want.items()):
@@ -1646,13 +1705,76 @@ class Sources:
                         raise Fail(f"{p} missing and --offline")
                     log(f"downloading {url}")
                     download(url, p, sha)
-            build_index(src / want["orig"][0], src / want["diff"][0], idx_p)
+            build_index(src / want["orig"][0], src / want["diff"][0] if "diff" in want else None, idx_p)
             with gzip.open(idx_p, "rt", encoding="utf-8") as f:
                 doc = json.load(f)
         self.notes["source"] = {"orig": want["orig"][0], "orig_sha256": want["orig"][2],
-                                "diff": want["diff"][0], "diff_sha256": want["diff"][2],
+                                "diff": want["diff"][0] if "diff" in want else None, "diff_sha256": diff_sha,
                                 "url": want["orig"][1].rsplit("/", 1)[0] + "/"}
         return Tree(set(doc["files"]), doc["makefiles"], doc["includes"]), doc
+
+    # ---- where Launchpad publishes this linux version (series, pocket) + the series' versions
+    def publications(self, version: str) -> dict:
+        p = self.cache / "src" / f"linux_{version}.publications.json"
+        doc = json.loads(p.read_text()) if p.is_file() else None
+        if (doc is None or self.refresh) and not self.offline:
+            try:
+                pubs = json.loads(http_get(f"{LP_API}?ws.op=getPublishedSources&source_name=linux"
+                                           f"&version={urllib.parse.quote(version)}&exact_match=true"))
+                ents = sorted(({"series": e["distro_series_link"].rsplit("/", 1)[1], "pocket": e["pocket"],
+                                "status": e["status"], "date_published": e.get("date_published")}
+                               for e in pubs.get("entries", [])), key=lambda e: (e["series"], e["pocket"]))
+                series = {}
+                for s in sorted({e["series"] for e in ents}):
+                    d = json.loads(http_get(f"{LP_UBUNTU}/{s}"))
+                    series[s] = {"version": d.get("version"), "status": d.get("status")}
+                doc = {"version": version, "publications": ents, "series": series}
+                p.write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
+            except (Fail, ValueError, KeyError) as e:
+                log(f"WARNING: Launchpad publications of linux {version}: {e}"
+                    + ("; using the cached copy" if doc else "; Ubuntu tracker evidence disabled"))
+        self.notes["publications"] = doc
+        return doc or {}
+
+    # ---- Ubuntu CVE tracker: the linux statuses of each CVE (trimmed copy cached for 24 h)
+    def ubuntu_tracker(self, ids: list[str]) -> dict[str, dict]:
+        from concurrent.futures import ThreadPoolExecutor
+        d = self.cache / "ubuntu-cve"
+        d.mkdir(exist_ok=True)
+        out: dict[str, dict] = {}
+        todo = []
+        for i in ids:
+            p = d / f"{i}.json"
+            if p.is_file():
+                try:
+                    out[i] = json.loads(p.read_text())
+                except ValueError:
+                    pass
+            fresh = i in out and not self.refresh and time.time() - p.stat().st_mtime < 24 * 3600
+            if not self.offline and not fresh and re.fullmatch(r"CVE-\d{4}-\d+", i):
+                todo.append(i)
+
+        def get(i: str) -> tuple[str, dict | None]:
+            try:
+                raw = json.loads(http_get(UBUNTU_CVE.format(id=i), timeout=30))
+            except (Fail, ValueError):
+                return i, None
+            return i, {"id": raw.get("id"), "updated_at": raw.get("updated_at"),
+                       "linux": [s for pk in raw.get("packages") or [] if pk.get("name") == "linux"
+                                 for s in pk.get("statuses") or []]}
+        errs = 0
+        if todo:
+            log(f"Ubuntu CVE tracker: {len(todo)} lookups")
+            with ThreadPoolExecutor(max_workers=8) as ex:
+                for i, rec in ex.map(get, todo):
+                    if rec is None:
+                        errs += 1
+                        continue
+                    (d / f"{i}.json").write_text(json.dumps(rec, sort_keys=True) + "\n")
+                    out[i] = rec
+        self.notes["ubuntu_tracker"] = {"url": UBUNTU_CVE, "asked": len(ids), "fetched": len(todo) - errs,
+                                        "failed": errs, "answered": len(out)}
+        return out
 
     # ---- kernel CNA records
     def cve_records(self, ids: list[str]) -> dict[str, dict]:
@@ -1709,6 +1831,165 @@ class Sources:
                 git("reset", "-q", "--hard", "FETCH_HEAD")
         except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
             log(f"WARNING: could not update {VULNS_GIT}: {e}; using the cached records")
+
+
+# ============================================================================ fixed in the shipped kernel?
+def _order(c: str) -> int:
+    if c == "":
+        return 0
+    if c.isdigit():
+        return 0
+    if c.isalpha():
+        return ord(c)
+    return -1 if c == "~" else ord(c) + 256
+
+
+def _verrevcmp(a: str, b: str) -> int:
+    i = j = 0
+    while i < len(a) or j < len(b):
+        while (i < len(a) and not a[i].isdigit()) or (j < len(b) and not b[j].isdigit()):
+            ac, bc = _order(a[i] if i < len(a) else ""), _order(b[j] if j < len(b) else "")
+            if ac != bc:
+                return -1 if ac < bc else 1
+            i, j = i + 1, j + 1
+        while i < len(a) and a[i] == "0":
+            i += 1
+        while j < len(b) and b[j] == "0":
+            j += 1
+        first = 0
+        while i < len(a) and j < len(b) and a[i].isdigit() and b[j].isdigit():
+            if not first and a[i] != b[j]:
+                first = -1 if a[i] < b[j] else 1
+            i, j = i + 1, j + 1
+        if i < len(a) and a[i].isdigit():
+            return 1
+        if j < len(b) and b[j].isdigit():
+            return -1
+        if first:
+            return first
+    return 0
+
+
+def deb_vercmp(a: str, b: str) -> int:
+    """Debian version comparison (deb-version(7), dpkg's verrevcmp): -1, 0 or 1."""
+    def split(v: str) -> tuple[int, str, str]:
+        e, _, rest = v.partition(":") if ":" in v else ("0", "", v)
+        up, _, rev = rest.rpartition("-") if "-" in rest else (rest, "", "")
+        return int(e or 0), up, rev
+    ea, ua, ra = split(a)
+    eb, ub, rb = split(b)
+    if ea != eb:
+        return -1 if ea < eb else 1
+    return _verrevcmp(ua, ub) or _verrevcmp(ra, rb)
+
+
+def upstream_base(makefile: str) -> dict | None:
+    """The upstream release a kernel source tree is: VERSION/PATCHLEVEL/SUBLEVEL/EXTRAVERSION of
+    its top-level Makefile (Ubuntu's stable updates bump SUBLEVEL; a development kernel built
+    from a release candidate keeps EXTRAVERSION = -rcN). None when it cannot be read."""
+    v = {}
+    for k in ("VERSION", "PATCHLEVEL", "SUBLEVEL", "EXTRAVERSION"):
+        m = re.search(rf"^{k}[ \t]*=[ \t]*(\S*)[ \t]*$", makefile, re.M)
+        if not m:
+            return None
+        v[k] = m.group(1)
+    rc = re.fullmatch(r"-rc(\d+)", v["EXTRAVERSION"])
+    if not all(v[k].isdigit() for k in ("VERSION", "PATCHLEVEL", "SUBLEVEL")) or (v["EXTRAVERSION"] and not rc):
+        return None
+    ver = (int(v["VERSION"]), int(v["PATCHLEVEL"]), int(v["SUBLEVEL"]))
+    tag = f"v{ver[0]}.{ver[1]}" + (f".{ver[2]}" if ver[2] else "") + v["EXTRAVERSION"]
+    return {"version": ver, "rc": int(rc.group(1)) if rc else None, "tag": tag,
+            "makefile": ", ".join(f"{k} = {v[k]}" for k in ("VERSION", "PATCHLEVEL", "SUBLEVEL", "EXTRAVERSION"))}
+
+
+def cna_fix(rec: dict | None, base: dict | None) -> dict | None:
+    """Fix evidence from the kernel CNA record: the fix is in the shipped kernel's upstream base when
+    the mainline fix (original_commit_for_fix) is in an earlier release, or in the base's own release
+    when the base is that release or later (not a release candidate of it), or when the base's stable
+    branch X.Y.* is fixed at X.Y.F <= the base's SUBLEVEL."""
+    if not rec or not base:
+        return None
+    (bmaj, bmin, bsub), brc = base["version"], base["rc"]
+    for a in (rec.get("containers", {}).get("cna", {}) or {}).get("affected", []) or []:
+        for v in a.get("versions") or []:
+            if v.get("status") != "unaffected":
+                continue
+            ver = str(v.get("version") or "")
+            if v.get("versionType") == "original_commit_for_fix" and v.get("lessThanOrEqual") == "*":
+                m = re.fullmatch(r"(\d+)\.(\d+)(?:-rc(\d+))?", ver)
+                if not m:
+                    continue
+                fx, frc = (int(m[1]), int(m[2])), (int(m[3]) if m[3] else None)
+                if fx < (bmaj, bmin) or (fx == (bmaj, bmin) and (brc is None or (frc is not None and frc <= brc))):
+                    return {"source": "cna", "rule": "mainline", "fixed_in": ver}
+            elif v.get("versionType") == "semver" and v.get("lessThanOrEqual") == f"{bmaj}.{bmin}.*" and brc is None:
+                m = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", ver)
+                if m and (int(m[1]), int(m[2])) == (bmaj, bmin) and int(m[3]) <= bsub:
+                    return {"source": "cna", "rule": "stable", "fixed_in": ver}
+    return None
+
+
+def tracker_fix(tr: dict | None, codename: str | None, shipped: str) -> dict | None:
+    """Fix evidence from Ubuntu's CVE tracker: linux in the shipped series is 'released' or
+    'not-affected' at a version <= the shipped one (a status without a version is not used)."""
+    if not tr or not codename:
+        return None
+    for s in tr.get("linux") or []:
+        if s.get("release_codename") != codename:
+            continue
+        st, desc = s.get("status"), (s.get("description") or "").strip()
+        if st in ("released", "not-affected") and re.fullmatch(r"\d[0-9A-Za-z.+~:-]*", desc) \
+                and deb_vercmp(desc, shipped) <= 0:
+            return {"source": "ubuntu-tracker", "status": st, "version": desc, "updated_at": tr.get("updated_at")}
+    return None
+
+
+def shipped_series(pubs: dict, distro: str | None) -> dict | None:
+    """The Ubuntu series (from Launchpad) whose version is the SBOM purl's distro and that publishes
+    the source in a released pocket (never -proposed)."""
+    ver = distro.split("-", 1)[1] if distro and distro.startswith("ubuntu-") else None
+    order = {"Security": 0, "Updates": 1, "Release": 2}
+    for e in sorted(pubs.get("publications", []), key=lambda e: (e["series"], order.get(e["pocket"], 9))):
+        s = (pubs.get("series") or {}).get(e["series"]) or {}
+        if ver and s.get("version") == ver and e["pocket"] in order and e["status"] in ("Published", "Superseded"):
+            return {"codename": e["series"], "version": ver, "pocket": e["pocket"], "status": e["status"]}
+    return None
+
+
+def vendor_specific(cid: str, config: dict[str, str], evidence: dict[str, str]) -> str | None:
+    """Impact statement for a VENDOR_SPECIFIC CVE when every config value and source pattern holds."""
+    v = VENDOR_SPECIFIC.get(cid)
+    if not v:
+        return None
+    if any(config.get(k) != want for k, want in v["config"].items()):
+        return None
+    where = []
+    for path, pat in sorted(v["source"].items()):
+        text = evidence.get(path)
+        m = re.search(pat, text) if text is not None else None
+        if not m:
+            return None
+        where.append(f"{path}:{text.count(chr(10), 0, m.start()) + 1}")
+    return (f"{v['about']}. Not that code: {v['holds']}. Shipped config: "
+            + ", ".join(f"{k}={want}" for k, want in v["config"].items())
+            + f"; Ubuntu source: {', '.join(where)}. Checked by scripts/kernel_vex.py.")
+
+
+def fix_statement(cid: str, fx: dict, kver: str, base: dict | None, series: dict | None, notes: dict) -> str:
+    if fx["source"] == "cna":
+        rec = notes.get("cve_records") or {}
+        where = f"{VULNS_GIT} at {rec['commit'][:12]}" if rec.get("commit") else VULNS_GIT
+        if fx["rule"] == "mainline":
+            what = f"fixed in mainline Linux {fx['fixed_in']} (original_commit_for_fix)"
+        else:
+            what = f"fixed in the {fx['fixed_in'].rsplit('.', 1)[0]}.y stable branch at {fx['fixed_in']}"
+        return (f"kernel.org CNA record {cid} ({where}): {what}. The shipped kernel is Ubuntu linux {kver}, built "
+                f"from upstream {base['tag']} (top-level Makefile of Ubuntu's source: {base['makefile']}), which "
+                f"contains that fix. Evaluated by scripts/kernel_vex.py.")
+    return (f"Ubuntu CVE tracker (https://ubuntu.com/security/cves/{cid}.json, updated {fx.get('updated_at') or '?'}): "
+            f"linux in {series['codename']} (Ubuntu {series['version']}) is {fx['status']} ({fx['version']}); the "
+            f"shipped linux {kver} ({series['codename']} {series['pocket']} pocket) is >= {fx['version']}. "
+            "Evaluated by scripts/kernel_vex.py.")
 
 
 # ============================================================================ main
@@ -1768,6 +2049,8 @@ def main() -> int:
     ap.add_argument("--root", default=str(HERE.parent))
     ap.add_argument("--offline", action="store_true", help="cached data only")
     ap.add_argument("--refresh", action="store_true", help="refetch the CVE records and Launchpad metadata")
+    ap.add_argument("--tracker-severity", default="low", choices=("critical", "high", "medium", "low", "negligible"),
+                    help="ask Ubuntu's CVE tracker about open CVEs of at least this severity (default: low)")
     a = ap.parse_args()
     root = Path(a.root).resolve()
     sbom = root / "sbom"
@@ -1843,35 +2126,75 @@ def main() -> int:
             log("WARNING: dist/ changed; binary cross-check uses the cached path list")
         if binp and not binp.get("vmlinux"):
             log("WARNING: could not decompress vmlinuz (zstd needs Python 3.14 or the zstd tool)")
-        tree, _doc = srcs.source_index(kver)
+        tree, doc = srcs.source_index(kver)
         recs = srcs.cve_records(ids)
         log(f"{len(recs)}/{len(ids)} CVE records; evaluating Kbuild")
         build = Build(tree, config, order, builtin, initrd)
         log(f"{len(build.evals)} directories evaluated, {len(build.opaque)} opaque, "
             f"{len(build.mismatch)} self-check mismatches")
         res = classify_cves(build, ids, recs, binp)
+
+        # fixed in the shipped kernel? 1. the CNA record's fix version vs the upstream base of
+        # Ubuntu's source; 2. Ubuntu's tracker for the series the SBOM names (open CVEs only)
+        base = upstream_base(doc["makefiles"].get("Makefile", ""))
+        if base is None:
+            log("WARNING: top-level Makefile of the source has no plain version; no CNA fix evidence")
+        distro = (re.search(r"[?&]distro=([^&]+)", src_purl) or [None, None])[1]
+        series = shipped_series(srcs.publications(kver), distro)
+        if series is None:
+            log(f"WARNING: linux {kver} is not published in a released pocket of {distro}; "
+                "no Ubuntu tracker evidence")
+        for ent in res:
+            ent["fix"] = cna_fix(recs.get(ent["id"]), base)
+            if ent["id"] not in recs:
+                ent["vendor_specific"] = vendor_specific(ent["id"], config, doc.get("evidence") or {})
+        ask = [e["id"] for e in res if not e["fix"] and e["classification"] != "not_present"
+               and sev_rank.get(sev[e["id"]], 0) >= sev_rank[a.tracker_severity]]
+        trk = srcs.ubuntu_tracker(ask) if series else {}
+        for ent in res:
+            if not ent["fix"] and ent["id"] in ask:
+                ent["fix"] = tracker_fix(trk.get(ent["id"]), series["codename"], kver)
+            if ent["id"] in trk:
+                ent["ubuntu_tracker"] = {s["release_codename"]: f"{s.get('status')} {s.get('description') or ''}".strip()
+                                         for s in trk[ent["id"]].get("linux") or []
+                                         if s.get("release_codename") in (series["codename"], "upstream")}
     except Fail as e:
         log(f"ERROR: {e}")
         return 2
 
     stmts = []
+    prods = [{"@id": product, "subcomponents": [{"@id": src_purl}, {"@id": mod_purl}]}]
     for ent in res:
         ent["severity"] = sev[ent["id"]]
-        if ent["classification"] != "not_present":
-            continue
-        stmts.append({
-            "vulnerability": {"name": ent["id"]},
-            "products": [{"@id": product, "subcomponents": [{"@id": src_purl}, {"@id": mod_purl}]}],
-            "status": "not_affected",
-            "justification": "vulnerable_code_not_present",
-            "impact_statement": impact_statement(ent, kver),
-            "timestamp": ts,
-        })
+        if ent["fix"]:
+            ent["vex_status"] = "fixed"
+            stmts.append({"vulnerability": {"name": ent["id"]}, "products": prods, "status": "fixed",
+                          "status_notes": fix_statement(ent["id"], ent["fix"], kver, base, series, srcs.notes),
+                          "timestamp": ts})
+        elif ent.get("vendor_specific"):
+            ent["vex_status"] = "not_affected"
+            stmts.append({"vulnerability": {"name": ent["id"]}, "products": prods, "status": "not_affected",
+                          "justification": "vulnerable_code_not_present",
+                          "impact_statement": ent["vendor_specific"], "timestamp": ts})
+        elif ent["classification"] == "not_present":
+            ent["vex_status"] = "not_affected"
+            stmts.append({
+                "vulnerability": {"name": ent["id"]},
+                "products": prods,
+                "status": "not_affected",
+                "justification": "vulnerable_code_not_present",
+                "impact_statement": impact_statement(ent, kver),
+                "timestamp": ts,
+            })
+        else:
+            ent["vex_status"] = "open"
     vex = {"@context": "https://openvex.dev/ns/v0.2.0", "@id": VEX_ID, "author": "beast-booter maintainers",
            "role": "Document Creator", "timestamp": ts, "version": 1,
            "tooling": ("generated by scripts/kernel_vex.py: kernel CNA programFiles "
                        f"({srcs.notes['cve_records'].get('commit') or 'cached'}) vs Ubuntu linux {kver} Kbuild "
-                       f"+ /boot/config-{kabi} + beast-net initramfs modules; do not edit, re-run the script"),
+                       f"+ /boot/config-{kabi} + beast-net initramfs modules (not_affected); CNA fix versions vs "
+                       f"the upstream base {base['tag'] if base else '?'} and Ubuntu's CVE tracker for "
+                       f"{series['codename'] if series else '?'} (fixed); do not edit, re-run the script"),
            "statements": stmts}
     summ: dict[str, dict] = {}
     for ent in res:
@@ -1887,10 +2210,22 @@ def main() -> int:
                 or ["no-record"]
             for k in cats:
                 s["by_reason"][k] = s["by_reason"].get(k, 0) + 1
+    vsum: dict[str, dict] = {}
+    for ent in res:
+        k = ent["vex_status"] + (f" ({ent['fix']['source']})" if ent["fix"] else
+                                 " (vendor-specific)" if ent.get("vendor_specific") else "")
+        s = vsum.setdefault(k, {"total": 0, "by_severity": {}})
+        s["total"] += 1
+        s["by_severity"][ent["severity"]] = s["by_severity"].get(ent["severity"], 0) + 1
+    still_open = [{"id": e["id"], "severity": e["severity"], "classification": e["classification"],
+                   "files": [f["path"] for f in e["files"]][:6], "reason": e.get("reason"),
+                   "ubuntu_tracker": e.get("ubuntu_tracker")}
+                  for e in res if e["vex_status"] == "open" and e["severity"] in ("critical", "high")]
     report = {
         "generated_by": "scripts/kernel_vex.py",
         "timestamp": ts,
-        "kernel": {"source": f"linux {kver}", "flavour": kabi, "modules_deb": deb.name,
+        "kernel": {"source": f"linux {kver}", "flavour": kabi, "modules_deb": deb.name, "upstream_base": base,
+                   "series": series,
                    "initrd_sha256": ir_sha, "initrd_modules": len(initrd), "modules_order": len(order),
                    "modules_builtin": len(builtin)},
         "data_sources": srcs.notes,
@@ -1904,12 +2239,16 @@ def main() -> int:
                            "contradictions": sorted({f["path"] for e in res for f in e["files"]
                                                      if f["category"] == "binary-contradiction"})}},
         "summary": summ,
+        "vex_summary": vsum,
+        "open_critical_high": still_open,
         "cves": res,
     }
     (sbom / "vex.kernel.openvex.json").write_text(json.dumps(vex, indent=2) + "\n")
     (sbom / "kernel-vex-report.json").write_text(json.dumps(report, indent=1) + "\n")
-    log(f"wrote sbom/vex.kernel.openvex.json ({len(stmts)} not_affected) and sbom/kernel-vex-report.json: "
-        + ", ".join(f"{k} {v['total']}" for k, v in sorted(summ.items())))
+    log(f"wrote sbom/vex.kernel.openvex.json ({len(stmts)} statements: "
+        + ", ".join(f"{k} {v['total']}" for k, v in sorted(vsum.items()))
+        + ") and sbom/kernel-vex-report.json: " + ", ".join(f"{k} {v['total']}" for k, v in sorted(summ.items()))
+        + f"; open critical/high: {len(still_open)}")
     return 0
 
 

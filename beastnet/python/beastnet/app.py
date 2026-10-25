@@ -24,7 +24,8 @@ from .ui import UIClosed
 EPILOG = """\
 Inside beast-net this is started by /init with no options; everything comes
 from the kernel command line (beastnet.data=, beastnet.esp=, beastnet.sb=,
-beastnet.debug=1, beastnet.script=). The options below exist for testing on a
+beastnet.debug=1, beastnet.script=,
+beastnet.action=trust-ubuntu). The options below exist for testing on a
 developer machine. Outside beast-net (no /etc/beast-net-release) it never
 touches the network configuration and never reboots: --dry-run and --no-net
 are implied unless --live is given.
@@ -157,7 +158,9 @@ def _run(args, paths: Paths, params, reporter: Reporter, ui, script, live: bool,
             ui_obj = LineUI()
         else:
             ui_obj = ui
-        Interactive(ctx, ui_obj).run(result)
+        # beastnet.action= (a tool entry of the boot menu) opens that action first;
+        # after a script, "stay" goes on with the normal screens.
+        Interactive(ctx, ui_obj).run(result, action=None if script else params.action)
         return 0
     except Quit:
         return 0

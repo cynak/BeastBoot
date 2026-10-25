@@ -56,7 +56,8 @@ SEABIOS_DIR = Path(os.environ.get("BB_SEABIOS_DIR", "/usr/share/seabios"))
 GRUB_EFI_DIR = Path(os.environ.get("BB_GRUB_EFI_DIR", "/usr/lib/grub/x86_64-efi"))
 GRUB_EFI_SIGNED_DIR = Path(os.environ.get("BB_GRUB_EFI_SIGNED_DIR", "/usr/lib/grub/x86_64-efi-signed"))
 GRUB_BIOS_DIR = Path(os.environ.get("BB_GRUB_BIOS_DIR", "/usr/lib/grub/i386-pc"))
-SHIM_DIR = Path(os.environ.get("BB_SHIM_DIR", "/usr/lib/shim"))
+# Debian's shim + MokManager (build/shim/debian-shim.lock, unpacked by scripts/bootstrap-tools.sh)
+SHIM_DIR = Path(os.environ.get("BB_SHIM_DIR", BB_ROOT / ".tools" / "debian" / "root" / "usr" / "lib" / "shim"))
 
 OVMF_CODE = OVMF_DIR / "OVMF_CODE_4M.fd"
 OVMF_CODE_SECBOOT = OVMF_DIR / "OVMF_CODE_4M.secboot.fd"

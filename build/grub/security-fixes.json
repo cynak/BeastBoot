@@ -1,0 +1,134 @@
+{
+  "schema": 1,
+  "comment": "Which GRUB security fixes (and other fixes we depend on, type 'defect') our source-built GRUB contains, and the SBAT generation they earn. build/grub/grubsrc.py proves each fix present by applying its upstream commit (build/grub/upstream/<commit>.patch) IN REVERSE, as a dry run with no fuzz, to the fully patched source tree: that only succeeds when the fixed code is there. If a fix that a claim requires is missing, the GRUB build fails. 'files' limits a check to the hunks for files that exist in 2.14. Generations up to grub,5 are Ubuntu's own claim for this source (debian/sbat.ubuntu.csv.in).",
+  "sbat_claims": [
+    {
+      "component": "grub",
+      "generation": 6,
+      "shim_sbat_level": "2025112400",
+      "level_source": "https://github.com/rhboot/shim/blob/main/SbatLevel_Variable.txt (added by shim commit 8947f069aca02aad6181af202eda6088c9cfb44d 'sbat: bump for November Grub CVEs')",
+      "level_text": "Revocations for: - November 2025 grub CVEs (CVE-2025-54770/54771, CVE-2025-61661/61662/61663/61664) sbat,1,2025112400 shim,4 grub,6",
+      "upstream": "GNU GRUB 2.16 sets GLOBAL_SBAT_LEVEL=6 for the same push (commit 99ab9d04b5d7daf6b942221825b816ecd40801d4); announcement '[SECURITY PATCH 0/8]' https://lists.gnu.org/archive/html/grub-devel/2025-11/msg00155.html (2025-11-18)",
+      "requires": ["CVE-2025-54770", "CVE-2025-54771", "CVE-2025-61661", "CVE-2025-61662", "CVE-2025-61663", "CVE-2025-61664",
+                   "GRUB-2025-11-test-recursion", "GRUB-2025-11-functional-test", "GRUB-2025-11-usbtest-length"]
+    }
+  ],
+  "not_claimed": [
+    {
+      "component": "grub",
+      "generation": 7,
+      "why": "shim PR https://github.com/rhboot/shim/pull/830 (open, not merged) proposes sbat,1,2026092500 shim,4 grub,7 for CVE-2026-97876; GRUB MR https://gitlab.freedesktop.org/gnu-grub/grub/-/merge_requests/295 (open) the matching bump. We carry the fix (patches/0001) but keep grub,6 until shim publishes that level."
+    }
+  ],
+  "fixes": [
+    {
+      "id": "CVE-2025-54771",
+      "summary": "kern/file: use-after-free in grub_file_close() (grub_dl_unref() ran before fs->fs_close())",
+      "cvss31": "4.9 MEDIUM",
+      "sbat": "grub,6",
+      "upstream_commits": ["c4fb4cbc941981894a00ba8e75d634a41967a27f"],
+      "where": "upstream GRUB 2.14 release (grub2_2.14.orig.tar.xz = grub-2.14.tar.xz)",
+      "evidence": [{"commit": "c4fb4cbc941981894a00ba8e75d634a41967a27f"}]
+    },
+    {
+      "id": "CVE-2025-54770",
+      "summary": "net/net: use-after-free, net_set_vlan command not unregistered on module unload",
+      "cvss31": "4.9 MEDIUM",
+      "sbat": "grub,6",
+      "upstream_commits": ["10e58a14db20e17d1b6a39abe38df01fef98e29d"],
+      "where": "upstream GRUB 2.14 release",
+      "evidence": [{"commit": "10e58a14db20e17d1b6a39abe38df01fef98e29d"}]
+    },
+    {
+      "id": "CVE-2025-61662",
+      "summary": "gettext: use-after-free, gettext command not unregistered on module unload",
+      "cvss31": "4.9 MEDIUM (GRUB announcement; Red Hat rates 7.8)",
+      "sbat": "grub,6",
+      "upstream_commits": ["8ed78fd9f0852ab218cc1f991c38e5a229e43807"],
+      "where": "upstream GRUB 2.14 release",
+      "evidence": [{"commit": "8ed78fd9f0852ab218cc1f991c38e5a229e43807"}]
+    },
+    {
+      "id": "CVE-2025-61663",
+      "summary": "normal/main: use-after-free, normal command not unregistered on module unload",
+      "cvss31": "4.9 MEDIUM",
+      "sbat": "grub,6",
+      "upstream_commits": ["05d3698b8b03eccc49e53491bbd75dba15f40917"],
+      "where": "upstream GRUB 2.14 release",
+      "evidence": [{"commit": "05d3698b8b03eccc49e53491bbd75dba15f40917"}]
+    },
+    {
+      "id": "CVE-2025-61664",
+      "summary": "normal/main: use-after-free, normal_exit command not unregistered on module unload (same commit as CVE-2025-61663)",
+      "cvss31": "4.9 MEDIUM",
+      "sbat": "grub,6",
+      "upstream_commits": ["05d3698b8b03eccc49e53491bbd75dba15f40917"],
+      "where": "upstream GRUB 2.14 release",
+      "evidence": [{"commit": "05d3698b8b03eccc49e53491bbd75dba15f40917"}]
+    },
+    {
+      "id": "CVE-2025-61661",
+      "summary": "commands/usbtest: out-of-bounds write in grub_usb_get_string() (wrong string length field)",
+      "cvss31": "4.8 MEDIUM",
+      "sbat": "grub,6",
+      "upstream_commits": ["549a9cc372fd0b96a4ccdfad0e12140476cc62a3"],
+      "where": "upstream GRUB 2.14 release",
+      "evidence": [{"commit": "549a9cc372fd0b96a4ccdfad0e12140476cc62a3"}]
+    },
+    {
+      "id": "GRUB-2025-11-usbtest-length",
+      "summary": "commands/usbtest: ensure the string length is sufficient (hardening that completes CVE-2025-61661; patch 8/8 of the push)",
+      "sbat": "grub,6",
+      "upstream_commits": ["7debdce1e98907e65223a4b4c53a41345ac45e53"],
+      "where": "upstream GRUB 2.14 release",
+      "evidence": [{"commit": "7debdce1e98907e65223a4b4c53a41345ac45e53"}]
+    },
+    {
+      "id": "GRUB-2025-11-test-recursion",
+      "summary": "commands/test: fix the recursion depth calculation (patch 1/8 of the push, no CVE)",
+      "sbat": "grub,6",
+      "upstream_commits": ["cc9d621dd06bfa12eac511b37b4ceda5bd2f8246"],
+      "where": "upstream GRUB 2.14 release",
+      "evidence": [{"commit": "cc9d621dd06bfa12eac511b37b4ceda5bd2f8246"}]
+    },
+    {
+      "id": "GRUB-2025-11-functional-test",
+      "summary": "tests/lib/functional_test: unregister commands on module unload (patch 6/8 of the push, no CVE)",
+      "sbat": "grub,6",
+      "upstream_commits": ["9df1e693e70c5a274b6d60dc76efe2694b89c2fc"],
+      "where": "upstream GRUB 2.14 release",
+      "evidence": [{"commit": "9df1e693e70c5a274b6d60dc76efe2694b89c2fc"}]
+    },
+    {
+      "id": "CVE-2026-97876",
+      "summary": "term/serial: the serial command accepted caller-supplied I/O port / MMIO base addresses under lockdown (memory write primitive, lockdown / Secure Boot bypass for whoever controls grub.cfg)",
+      "cvss31": "6.4 MEDIUM (Canonical CNA, CWE-822)",
+      "sbat": "proposed grub,7 (not claimed)",
+      "advisory": "https://www.openwall.com/lists/oss-security/2026/09/13/5",
+      "upstream_commits": ["26beaa3b2720fefdc4d04c1ae209b776fe6848d6"],
+      "where": "build/grub/patches/0001-term-serial-reject-caller-supplied-port-addresses-under-lockdown.patch (Debian's 2.14 backport; upstream 2.16)",
+      "evidence": [{"commit": "26beaa3b2720fefdc4d04c1ae209b776fe6848d6",
+                    "files": ["grub-core/term/ns8250-spcr.c", "grub-core/term/ns8250.c", "grub-core/term/serial.c", "include/grub/serial.h"],
+                    "skip_hunks_matching": "grub_serial_pl011_add_mmio"}]
+    },
+    {
+      "id": "GRUB-089d0567-shim-insecure-mode",
+      "type": "defect",
+      "summary": "efi/sb: GRUB could not boot kernels after `mokutil --disable-validation` (shim protocols not looked up when MokSBState says insecure, kernel handed to firmware LoadImage); no CVE, needed with shim 16's image loader",
+      "sbat": "none (not a security fix)",
+      "upstream_commits": ["089d0567cee02464268cfc1c29830ab12dd17e68"],
+      "where": "build/grub/patches/0002-efi-sb-fix-boot-failure-when-shim-validation-is-disabled.patch (upstream commit unchanged; upstream 2.16, Debian 2.14-4)",
+      "evidence": [{"commit": "089d0567cee02464268cfc1c29830ab12dd17e68"}]
+    },
+    {
+      "id": "GRUB-DEBIAN-8719ef8a-peimage-loader",
+      "type": "defect",
+      "summary": "efi/peimage: 'error: trying to register different loader.' on every Secure Boot boot with shim 16 (peimage registered a second EFI loader after GRUB registered shim's image loader); peimage now registers only when shim offers no loader protocol (shim 15.x), and unregisters only what it registered",
+      "sbat": "none (not a security fix; grub.peimage unchanged)",
+      "upstream_commits": [],
+      "vendor_commits": ["debian: https://salsa.debian.org/grub-team/grub/-/commit/8719ef8a523f2a89aeff1b86f5e14c3bba7a7d11 (changes debian/patches/secure-boot/efi-peimage.patch; build/grub/upstream/debian-8719ef8a523f2a89aeff1b86f5e14c3bba7a7d11.patch)"],
+      "where": "build/grub/patches/0003-efi-peimage-only-register-loader-when-shim-loader-protocol-absent.patch (Debian's change, applied to the patched peimage.c)",
+      "evidence": [{"patch": "patches/0003-efi-peimage-only-register-loader-when-shim-loader-protocol-absent.patch"}]
+    }
+  ]
+}

@@ -12,9 +12,11 @@ if this document and that file disagree, the file wins and this document is a bu
 ## 1. Principles
 
 1. **Transparent.** Every file that ends up on the drive is either built from
-   source in this repo, or copied unmodified from a named distribution package
-   and recorded (with its SHA-256 and origin) in `dist/manifest.json`. No
-   unexplained binaries.
+   source in this repo, built from pinned, SHA-256-checked source (GRUB:
+   Ubuntu's grub2 source package + `build/grub/patches`, see
+   docs/SECURE_BOOT.md), or copied unmodified from a named distribution
+   package, and recorded (with its SHA-256 and origin) in `dist/manifest.json`.
+   No unexplained binaries.
 2. **Secure Boot is respected, never weakened.**
    - BeastBoot never disables, patches, hooks or overrides firmware or shim
      signature verification. Everything loaded after shim is verified by shim
@@ -24,9 +26,15 @@ if this document and that file disagree, the file wins and this document is a bu
      (copied from the matching distribution build) plus our own product line.
    - Trusting the BeastBoot key requires the user to enroll it themselves in
      MokManager, which requires physical presence at the machine (shim design).
+   - The shim (Debian's) trusts Debian's key, not Canonical's. Trusting
+     Ubuntu's key is opt-in ("Trust Ubuntu's Secure Boot key"): the helper only
+     *requests* it with mokutil, Ubuntu's revocations (MokListX) before
+     Canonical's CA (MokList), and the user confirms each step in MokManager.
+     It never touches the firmware's db/dbx (`build/trust/README.md`).
    - An ISO whose kernel is not signed by a trusted key **fails closed**: the
-     menu explains why and what the user can do (enroll that distro's key via
-     MokManager, or turn Secure Boot off). It does not try to work around it.
+     menu explains why and what the user can do (trust Ubuntu's key for
+     Ubuntu-signed kernels, enroll that distro's key via MokManager, or turn
+     Secure Boot off). It does not try to work around it.
 3. **The drive stays normal storage.** Partition 1 is a plain exFAT (or
    FAT32/NTFS) filesystem that any OS can mount and write. Updating
    BeastBoot rewrites only the boot area and partition 2, never partition 1.
@@ -40,7 +48,8 @@ if this document and that file disagree, the file wins and this document is a bu
 
 ```
 UEFI (Secure Boot on or off)
-  firmware -> ESP:\EFI\BOOT\BOOTX64.EFI   shim, Microsoft-signed (from Ubuntu shim-signed)
+  firmware -> ESP:\EFI\BOOT\BOOTX64.EFI   shim 16.1, Microsoft-signed through UEFI CA 2011 and 2023
+                                         (from Debian shim-signed, docs/SECURE_BOOT.md §1)
            -> ESP:\EFI\BOOT\grubx64.efi   beast-booter GRUB, signed with the beast-booter key
                 (first boot with SB on and key not enrolled: shim shows a verification
                  error and starts MokManager (mmx64.efi); the user picks
@@ -53,10 +62,15 @@ Legacy BIOS
            -> /grub/grub.cfg on the ESP (modules from /grub/i386-pc/) -> same menu
 
 beast-net ("Download an ISO from a link", docs/BEASTNET.md), any mode
-  menu -> linux ESP:/beast-net/vmlinuz (Ubuntu's Canonical-signed kernel, verified
-          by shim with SB on) + initrd ESP:/beast-net/initrd.img [+ firmware/*.cpio]
+  menu -> linux ESP:/beast-net/vmlinuz (Ubuntu's kernel, re-signed with the beast-booter
+          key, verified by shim with SB on) + initrd ESP:/beast-net/initrd.img [+ firmware/*.cpio]
        -> download to DATA:/downloads/ -> bb_oneshot=<path> in ESP:/grub/grubenv
        -> reboot -> menu boots <path> once, through the normal recipes
+
+"Trust Ubuntu's Secure Boot key" (UEFI, docs/BEASTNET.md §8)
+  menu -> same helper with beastnet.action=trust-ubuntu
+       -> mokutil request (MokXNew: Ubuntu's revoked certs, or, once all are in MokListX,
+          MokNew: Canonical's Master CA) -> reboot -> shim starts MokManager -> user confirms
 ```
 
 The EFI GRUB image has every module it needs embedded (with Secure Boot on,
@@ -103,8 +117,8 @@ dist/
   bios/boot.img              stock GRUB i386-pc boot.img (512 bytes)
   bios/core.img              GRUB i386-pc core image (see §2)
   esp/                       copied verbatim into the ESP root
-    EFI/BOOT/BOOTX64.EFI     shim (Microsoft-signed)
-    EFI/BOOT/mmx64.efi       MokManager
+    EFI/BOOT/BOOTX64.EFI     Debian's shim 16.1 (Microsoft-signed, UEFI CA 2011 + 2023)
+    EFI/BOOT/mmx64.efi       Debian's MokManager (signed through shim's Debian key)
     EFI/BOOT/grubx64.efi     beast-booter GRUB x86_64-efi: all modules embedded, SBAT,
                              memdisk with the menu fonts (see below), signed
     ENROLL_THIS_KEY_IN_MOKMANAGER.cer   beast-booter signing cert (DER)
@@ -116,7 +130,7 @@ dist/
     grub/fonts/*.pf2         NotoSans-{Regular-16,Regular-20,Bold-20}, NotoSansMono-Regular-16
                              (grub-mkfont from fonts-noto-core/-mono), unicode.pf2 (GRUB)
     grub/i386-pc/*.mod *.lst BIOS GRUB modules
-    beast-net/vmlinuz        Ubuntu's Canonical-signed kernel, unmodified
+    beast-net/vmlinuz        Ubuntu's kernel, re-signed with the beast-booter key (code unchanged)
     beast-net/initrd.img     helper initramfs (build/beastnet/, docs/BEASTNET.md §5)
     beast-net/VERSION        "beast-net <bb version> kernel <kver>"
     beast-net/catalog.json   firmware pack catalog (docs/BEASTNET.md §6)
@@ -146,7 +160,7 @@ firmware packs.
 {
   "schema": 1,
   "name": "beast-booter",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "source_date_epoch": 1760000000,
   "secure_boot": {
     "cert_sha256": "<sha256 of the DER cert>",
@@ -154,10 +168,12 @@ firmware packs.
     "sbat": "<exact .sbat CSV embedded in grubx64.efi>"
   },
   "files": {
-    "esp/EFI/BOOT/BOOTX64.EFI": {"sha256": "...", "size": 966768,
-       "origin": "deb:shim-signed=1.59+15.8-0ubuntu2:/usr/lib/shim/shimx64.efi.signed.latest"},
+    "esp/EFI/BOOT/BOOTX64.EFI": {"sha256": "...", "size": 1088816,
+       "origin": "deb:shim-signed=1.51+16.1-2:/usr/lib/shim/shimx64.efi.signed"},
     "esp/EFI/BOOT/grubx64.efi": {"sha256": "...", "size": 0,
-       "origin": "built:grub-mkimage from deb:grub-efi-amd64-bin=2.14-2ubuntu1, signed:beast-booter"},
+       "origin": "built:grub-mkimage from grub-src:grub2=2.14-2ubuntu3+bb1:/x86_64-efi + memdisk (build.efi_memdisk), signed:beast-booter"},
+    "esp/grub/i386-pc/normal.mod": {"sha256": "...", "size": 0,
+       "origin": "grub-src:grub2=2.14-2ubuntu3+bb1:/i386-pc/normal.mod"},
     "esp/grub/beast/main.cfg": {"sha256": "...", "size": 0, "origin": "repo:grub/beast/main.cfg"}
   }
 }
@@ -167,9 +183,16 @@ firmware packs.
 refuses to write if a file is missing or its SHA-256 does not match.
 
 The build also records `build_id`, a `build{}` section (tool and package
-versions), and in `secure_boot`: `cert_sha1` (what MokManager shows),
-`sbat_version_check`, `sbat_source`, `shim_sbat_level_latest` and
-`grub_unsigned_sha256`. `sbsign` embeds a signing time, so a re-signed
+versions; for GRUB, which is built from source by `build/grub/grubsrc.py`:
+`grub_version`, `grub_build_key`, `grub_build_info_sha256`, `grub_source`,
+`grub_patches`, `grub_toolchain`), and in `secure_boot`: `cert_sha1` (what
+MokManager shows), `sbat_version_check`, `sbat_source`, `grub_security_fixes`,
+`shim_sbat_level_latest`, `shim_signers`, `shim_authenticode_sha256`,
+`shim_distro`, `grub_unsigned_sha256` and, for the re-signed helper kernel,
+`beastnet_kernel_source`, `beastnet_kernel_authenticode_sha256`,
+`beastnet_kernel_unsigned_sha256` and `beastnet_kernel_replaced_signers`. A `grub-src:` origin names
+a file of that GRUB build; gen_sbom.py and scan_vulns.py check it against the
+build's `build-info.json`. `sbsign` embeds a signing time, so a re-signed
 `grubx64.efi` differs byte-wise; the build keeps the existing signature when the
 unsigned image is unchanged (`BB_RESIGN=1` forces a new one), and
 `build/verify-dist.sh --rebuild` checks that the unsigned image and `core.img`
@@ -377,7 +400,7 @@ beast-booter firmware list    (--device DEV | --image PATH) [--json]
 - `info --json` prints:
 
 ```json
-{"layout": "msdos", "layout_version": 2, "version": "0.1.1", "install_id": "...",
+{"layout": "msdos", "layout_version": 2, "version": "0.1.2", "install_id": "...",
  "disk_sectors": 2097152, "bios_core_lba": 1,
  "data": {"index": 1, "start_lba": 2048, "size_lba": 1046528, "fs": "fat32",
           "uuid": "96BC-D565", "label": "BEASTBOOTER"},
@@ -444,13 +467,14 @@ Environment variables:
 | Variable | Used by | Meaning |
 |---|---|---|
 | `BB_ROOT` | all | repository root (set by `scripts/dev-env.sh`) |
-| `BB_GRUB_EFI_DIR`, `BB_GRUB_EFI_SIGNED_DIR`, `BB_GRUB_BIOS_DIR`, `BB_SHIM_DIR`, `BB_OVMF_DIR`, `BB_SEABIOS_DIR` | build, tests, bb-dev | package directories; `scripts/dev-env.sh` prefers the system location, else `.tools/root/...`; a value set before sourcing wins |
+| `BB_SHIM_DIR`, `BB_OVMF_DIR`, `BB_SEABIOS_DIR` | build, tests, bb-dev | package directories; `scripts/dev-env.sh` prefers the system location, else `.tools/root/...` (`BB_SHIM_DIR`: Debian's pinned shim in `$BB_DEBIAN_DIR/root/usr/lib/shim` first, `build/shim/`); a value set before sourcing wins |
+| `BB_GRUB_EFI_DIR`, `BB_GRUB_BIOS_DIR`, `BB_GRUB_EFI_SIGNED_DIR` | tests, bb-dev (not build.sh) | GRUB module directories, by default the last GRUB source build (`.tools/cache/grub-src/current/<platform>`); Ubuntu's signed GRUB only for the e2e stub images |
+| `BB_GRUB_BUILDER`, `BB_GRUB_CACHE` | build/grub/grubsrc.py | `auto` (native, else docker), `native` or `docker`; cache directory (default `.tools/cache/grub-src`) |
 | `BB_GRUB_DBG_DIR`, `BB_GRUB_PC_DBG_DIR`, `BB_GRUB_EFI_DBG_DIR` | bb-dev gdb | GRUB debug symbols (default `.tools/grub-dbg`) |
 | `BB_MENU_DIR`, `BB_KEY_DIR`, `BB_DIST_DIR` | build.sh | menu source, signing key and output directories |
 | `BB_PROJECT_URL` | build.sh | URL in the `grub.beastbooter` SBAT line |
 | `SOURCE_DATE_EPOCH` | build.sh, portable build | timestamps (default: last git commit time, else mtime of `VERSION`) |
 | `BB_RESIGN=1` | build.sh | always make a fresh signature (§4) |
-| `BB_ALLOW_SBAT_MISMATCH=1` | build.sh | development only: accept differing signed-GRUB and module package versions (recorded in the manifest) |
 | `BB_NOTO_DIR` | build.sh | Noto `.ttf` fonts for the graphical menu |
 | `BB_SKIP_BEASTNET=1` | build.sh | build without `beast-net/` |
 | `BB_BEASTNET_CACHE`, `BB_FIRMWARE_CACHE`, `BB_BEASTNET_APP`, `BB_OFFLINE=1`, `BB_BEASTNET_REVERIFY=1` | build/beastnet/build.sh | caches, app directory, offline mode, re-download every catalog file (header of that script) |

@@ -22,6 +22,7 @@ kmod                  usr/bin/kmod usr/bin/lsmod usr/sbin/depmod usr/sbin/insmod
 kmod                  usr/sbin/modinfo usr/sbin/modprobe usr/sbin/rmmod
 wpasupplicant         usr/sbin/wpa_supplicant usr/sbin/wpa_cli usr/bin/wpa_passphrase
 iw                    usr/sbin/iw
+mokutil               usr/bin/mokutil
 python3.14-minimal    usr/bin/python3.14
 libpython3.14-minimal usr/lib/python3.14/** etc/python3.14/**
 libpython3.14-stdlib  usr/lib/python3.14/**

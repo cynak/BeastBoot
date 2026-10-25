@@ -241,6 +241,34 @@ def pack_entry(pack: FwPack, cat: Catalog, cpio_sha256: str) -> dict:
             "files": [{"path": f.path, "sha256": f.sha256, "size": f.size} for f in pack.files]}
 
 
+def stale_reason(entry: dict, cat: Catalog) -> str | None:
+    """Why an installed pack (its installed.json entry) no longer matches the
+    catalog of the helper on the drive, or None when it does. An update can
+    change the helper's kernel, and with it the files a pack must hold, while
+    the linux-firmware tag stays the same; such packs still load but may lack
+    what the new drivers ask for, so they are flagged for reinstalling."""
+    pack = cat.packs.get(entry.get("id"))
+    if pack is None:
+        return "not in the drive's catalog"
+    tag, kernel = entry.get("catalog_tag"), entry.get("kernel")
+    if kernel and cat.kernel and kernel != cat.kernel:
+        return f"made for kernel {kernel}"
+    if tag != cat.tag:
+        return f"made for linux-firmware tag {tag or '?'}"
+    files = entry.get("files")
+    have = sorted(((f.get("path"), f.get("sha256"), f.get("size")) for f in files if isinstance(f, dict)),
+                  key=repr) \
+        if isinstance(files, list) else None
+    if have != sorted(((f.path, f.sha256, f.size) for f in pack.files), key=repr):
+        return "made for other firmware files than the catalog lists"
+    return None
+
+
+def stale_hint(reason: str) -> str:
+    """What to do about a stale pack (stale_reason)."""
+    return "remove it" if reason.startswith("not in") else "reinstall it"
+
+
 # ---------------------------------------------------------------------------
 # fetch
 # ---------------------------------------------------------------------------
@@ -652,7 +680,9 @@ def _result(st: _FwState, where: str) -> dict:
     "missing" (its .cpio is gone) or "cpio_size", unlisted .cpio files, the
     drive's catalog tag and kernel, and what the GUI needs to check the free
     space before it downloads anything (esp.fw_space): esp_free, esp_cluster,
-    esp_label, installed_json_size."""
+    esp_label, installed_json_size. A pack that no longer matches the drive's
+    catalog (made for another kernel or tag, or other files: stale_reason)
+    also gets "stale": true and "stale_reason"."""
     sizes = {n.lower(): size for n, size in st.files.items()}
     packs = []
     for p in sorted(st.installed["packs"], key=lambda p: p["id"]):
@@ -662,6 +692,9 @@ def _result(st: _FwState, where: str) -> dict:
             p["missing"] = True
         else:
             p["cpio_size"] = size
+        reason = stale_reason(p, st.catalog) if st.catalog is not None else None
+        if reason:
+            p["stale"], p["stale_reason"] = True, reason
         packs.append(p)
     listed = {f"{p['id']}.cpio".lower() for p in packs}
     return {"v": 1, "packs": packs, "target": where,
@@ -776,13 +809,21 @@ def list_installed(image: str | None, device: str | None, rep: Reporter) -> dict
 
 
 def format_installed(d: dict) -> str:
-    lines = [f"Firmware packs on {d['target']} (catalog tag {d['catalog_tag'] or 'none'}, "
+    kernel = f", kernel {d['kernel']}" if d.get("kernel") else ""
+    lines = [f"Firmware packs on {d['target']} (catalog tag {d['catalog_tag'] or 'none'}{kernel}, "
              f"{human_size(d['esp_free'])} free on the boot partition):"]
     if not d["packs"]:
         lines.append("  none installed")
     for p in d["packs"]:
         note = "  (MISSING: its .cpio is gone; remove and reinstall it)" if p.get("missing") else ""
+        if p.get("stale") and not note:
+            reason = p.get("stale_reason") or "made for another catalog"
+            note = f"  (STALE: {reason}; {stale_hint(reason)})"
         lines.append(f"  {p['id']:24} tag {p.get('catalog_tag')}, {len(p.get('files') or [])} files{note}")
     for n in d["unlisted"]:
         lines.append(f"  {n}: not in installed.json")
+    if any(p.get("stale") and not p.get("missing") and stale_hint(p.get("stale_reason") or "") == "reinstall it"
+           for p in d["packs"]):
+        lines.append("  Reinstall a stale pack with `firmware fetch --pack ID` and `firmware install` (or "
+                     "Download and install... on the app's Firmware packs page); that replaces it.")
     return "\n".join(lines)

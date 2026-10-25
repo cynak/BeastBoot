@@ -4,14 +4,17 @@
 #
 # Output (docs/ARCHITECTURE.md section 4):
 #   dist/manifest.json            origin + SHA-256 of every file below
-#   dist/bios/boot.img            stock GRUB i386-pc boot.img
+#   dist/bios/boot.img            GRUB i386-pc boot.img (GRUB built from source, build/grub/)
 #   dist/bios/core.img            GRUB i386-pc core image (prefix (,msdos2)/grub + early-bios.cfg)
 #   dist/esp/...                  copied verbatim into the ESP root
 #
 # Every file is either copied unmodified from a named Debian/Ubuntu package
 # (and checked against that package's md5sums), built here from such files
-# plus repo inputs, or copied from the repo. Only build/beastnet/ downloads,
-# on a cold cache: pinned, hash-checked .debs and linux-firmware catalog data.
+# plus repo inputs, copied from the repo, or - GRUB - built from pinned source
+# (build/grub/: Ubuntu's grub2 source package + our patches, checked against
+# their SHA-256). Downloads happen only on a cold cache: build/grub/ (GRUB
+# source, build-time .debs) and build/beastnet/ (pinned, hash-checked .debs
+# and linux-firmware catalog data).
 #
 # Inputs (environment):
 #   BB_MENU_DIR        menu scripts            (default: $BB_ROOT/grub)
@@ -20,20 +23,21 @@
 #   BB_PROJECT_URL     URL in our SBAT line    (default: https://github.com/cynak/BeastBoot)
 #   SOURCE_DATE_EPOCH  timestamp for the manifest and file mtimes
 #                      (default: last git commit time, else mtime of VERSION)
-#   BB_ALLOW_SBAT_MISMATCH=1  continue although the signed Ubuntu GRUB (SBAT
-#                      source) and the module package versions differ; recorded
-#                      in the manifest. Only for development builds.
 #   BB_RESIGN=1        always make a fresh signature (see "Signing" below)
 #   BB_NOTO_DIR        directory with the Noto .ttf fonts of the graphical menu
 #                      (default: /usr/share/fonts/truetype/noto, then .tools)
-#   BB_GRUB_EFI_DIR BB_GRUB_EFI_SIGNED_DIR BB_GRUB_BIOS_DIR BB_SHIM_DIR
-#                      package directories (set by scripts/dev-env.sh)
+#   BB_GRUB_BUILDER    auto (default) | native | docker: how build/grub/grubsrc.py
+#                      builds GRUB; BB_GRUB_CACHE: its cache (.tools/cache/grub-src)
+#   BB_SHIM_DIR        shim package directory (set by scripts/dev-env.sh)
+#   BB_DEBIAN_DIR      Debian shim packages (build/shim/fetch.py; default $BB_ROOT/.tools/debian)
 #
 # Secure Boot rules this script follows (ARCHITECTURE section 1.2):
 #   - grub-mkimage is never given --disable-shim-lock: our GRUB keeps asking
-#     shim to verify every kernel / EFI binary it loads.
+#     shim to verify every kernel / EFI binary it loads; lockdown stays on.
 #   - only unmodified, currently non-revoked signed binaries are shipped
-#     (shim's own SBAT revocation level is checked against our SBAT).
+#     (shim's own SBAT revocation level is checked against our SBAT); the one
+#     exception is the beast-net helper kernel, whose Canonical signature is
+#     replaced by ours (the code itself is unchanged: same Authenticode digest).
 #   - the SBAT section truthfully describes the code (see "SBAT" below).
 set -euo pipefail
 export LC_ALL=C TZ=UTC
@@ -41,7 +45,7 @@ umask 022
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BB_ROOT="${BB_ROOT:-$(cd "$HERE/.." && pwd)}"
-if [ -z "${BB_GRUB_EFI_DIR:-}" ] && [ -f "$BB_ROOT/scripts/dev-env.sh" ]; then
+if [ -z "${BB_SHIM_DIR:-}" ] && [ -f "$BB_ROOT/scripts/dev-env.sh" ]; then
   # shellcheck source=/dev/null
   source "$BB_ROOT/scripts/dev-env.sh"
 fi
@@ -54,13 +58,13 @@ bbtool() { python3 -I "$HERE/bbtool.py" "$@"; }
 # ---------------------------------------------------------------------------
 # Inputs and preflight
 # ---------------------------------------------------------------------------
-for t in grub-mkimage grub-mkfont sbsign sbverify sbattach objcopy openssl python3 dpkg-query dpkg-deb \
+# (grub-mkimage is not among them: build/grub/grubsrc.py builds the one we use)
+for t in grub-mkfont sbsign sbverify sbattach objcopy objdump openssl python3 dpkg-query dpkg-deb \
          sha256sum md5sum install; do
   command -v "$t" >/dev/null || die "required tool not found: $t (see scripts/bootstrap-tools.sh)"
 done
-for v in BB_GRUB_EFI_DIR BB_GRUB_EFI_SIGNED_DIR BB_GRUB_BIOS_DIR BB_SHIM_DIR; do
-  [ -n "${!v:-}" ] && [ -d "${!v}" ] || die "$v is not set or not a directory (source scripts/dev-env.sh)"
-done
+[ -n "${BB_SHIM_DIR:-}" ] && [ -d "$BB_SHIM_DIR" ] \
+  || die "BB_SHIM_DIR is not set or not a directory (source scripts/dev-env.sh)"
 
 VERSION="$(tr -d ' \t\r\n' < "$BB_ROOT/VERSION")"
 [[ "$VERSION" =~ ^[0-9][0-9A-Za-z.+~-]*$ ]] || die "VERSION has an unexpected format: '$VERSION'"
@@ -219,96 +223,114 @@ tool_origin() {  # <tool>: sets T_ORIGIN to "<pkg>=<ver>:<path>" (or unpackaged:
   if pkg_lookup "$t"; then T_ORIGIN="deb:$P_KEY:$P_PATH"; else T_ORIGIN="unpackaged:$t"; fi
 }
 
-tool_origin grub-mkimage
-extra build.grub_mkimage "$T_ORIGIN ($(grub-mkimage --version | head -n1))"
 tool_origin sbsign
 extra build.sbsign "$T_ORIGIN ($(sbsign --version 2>&1 | head -n1))"
 
 # ---------------------------------------------------------------------------
-# EFI GRUB inputs: modules from grub-efi-amd64-bin, SBAT from the signed build
+# GRUB, built from pinned source by build/grub/grubsrc.py: Ubuntu's grub2
+# source package + build/grub/patches, for x86_64-efi and i386-pc, plus the
+# grub-mkimage of that build. Cached under .tools/cache/grub-src/out/<key>
+# (key = source + patches + security-fixes.json + toolchain); a cache hit
+# only re-checks every file against its build-info.json.
 # ---------------------------------------------------------------------------
-[ -f "$BB_GRUB_EFI_DIR/kernel.img" ] || die "$BB_GRUB_EFI_DIR/kernel.img not found"
-pkg_resolve "$BB_GRUB_EFI_DIR/kernel.img"; EFI_PKG="$P_KEY"     # grub-efi-amd64-bin=<ver>
-GRUB_VERSION="${EFI_PKG#*=}"
+GRUBSRC=(python3 -I "$HERE/grub/grubsrc.py")
+log "GRUB from source (build/grub/grubsrc.py; first build takes a few minutes)"
+GRUB_OUT="$("${GRUBSRC[@]}" build ${BB_GRUB_BUILDER:+--builder "$BB_GRUB_BUILDER"})" \
+  || die "GRUB source build failed (build/grub/grubsrc.py build; logs under .tools/cache/grub-src/work/)"
+GRUB_OUT="${GRUB_OUT##*$'\n'}"
+[ -f "$GRUB_OUT/build-info.json" ] || die "build/grub/grubsrc.py printed no build directory"
+GRUB_EFI_DIR="$GRUB_OUT/x86_64-efi"
+GRUB_BIOS_DIR="$GRUB_OUT/i386-pc"
+GRUB_MKIMAGE="$GRUB_OUT/bin/grub-mkimage"
+{ read -r GRUB_VERSION; read -r GRUB_KEY; read -r GRUB_SRC_VERSION; read -r GRUB_UPSTREAM; } \
+  < <("${GRUBSRC[@]}" info "$GRUB_OUT" version key source_version upstream_version)
+[ -n "$GRUB_UPSTREAM" ] || die "cannot read $GRUB_OUT/build-info.json"
+GRUB_INFO_SHA="$(sha256sum < "$GRUB_OUT/build-info.json")"; GRUB_INFO_SHA="${GRUB_INFO_SHA%% *}"
+# Origin prefix of everything taken from this build (gen_sbom.py checks these
+# files against build-info.json): grub-src:<name>=<version>:<path in the build>
+GRUB_ORIGIN="grub-src:grub2=$GRUB_VERSION"
+log "GRUB $GRUB_VERSION (key $GRUB_KEY) from $GRUB_OUT"
+extra build.grub_version "$GRUB_VERSION"
+extra build.grub_build_key "$GRUB_KEY"
+extra build.grub_build_info_sha256 "$GRUB_INFO_SHA"
+extra build.grub_source "src:grub2=$GRUB_SRC_VERSION (Ubuntu source package, build/grub/source.lock.json) + build/grub/patches/series"
+extra build.grub_patches[] "$(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$HERE/grub/patches/series" | tr '\n' ' ')"
+extra build.grub_toolchain "$("${GRUBSRC[@]}" info "$GRUB_OUT" toolchain.gcc toolchain.ld | paste -sd ';' | sed 's/;/; /')"
+# (--version starts with argv[0]: keep the cache path out of the manifest)
+extra build.grub_mkimage "built:$GRUB_ORIGIN:/bin/grub-mkimage ($("$GRUB_MKIMAGE" --version | head -n1 | sed 's|^[^ ]*/||'))"
+
 mapfile -t EFI_MODULES < <(list_modules "$HERE/modules-efi.lst")
 [ "${#EFI_MODULES[@]}" -gt 0 ] || die "build/modules-efi.lst is empty"
 missing=()
-for m in "${EFI_MODULES[@]}"; do [ -f "$BB_GRUB_EFI_DIR/$m.mod" ] || missing+=("$m"); done
-[ "${#missing[@]}" -eq 0 ] || die "modules in build/modules-efi.lst missing from $BB_GRUB_EFI_DIR: ${missing[*]}"
-verify_files "$BB_GRUB_EFI_DIR"/kernel.img "$BB_GRUB_EFI_DIR"/*.lst "$BB_GRUB_EFI_DIR"/*.mod
-log "x86_64-efi: all $VERIFIED module/image files in $BB_GRUB_EFI_DIR are unmodified $EFI_PKG"
-
-SIGNED_EFI="$BB_GRUB_EFI_SIGNED_DIR/grubx64.efi.signed"
-[ -f "$SIGNED_EFI" ] || die "$SIGNED_EFI not found (package grub-efi-amd64-signed)"
-pkg_resolve "$SIGNED_EFI"; SIGNED_PKG="$P_KEY"
-objcopy -O binary --only-section=.sbat "$SIGNED_EFI" "$WORK/sbat.raw"
-tr -d '\000' < "$WORK/sbat.raw" > "$WORK/sbat-ubuntu.csv"
-[ -s "$WORK/sbat-ubuntu.csv" ] || die "$SIGNED_EFI has no .sbat section"
-bbtool sbat-validate "$WORK/sbat-ubuntu.csv"
+for m in "${EFI_MODULES[@]}"; do [ -f "$GRUB_EFI_DIR/$m.mod" ] || missing+=("$m"); done
+[ "${#missing[@]}" -eq 0 ] || die "modules in build/modules-efi.lst missing from $GRUB_EFI_DIR: ${missing[*]}"
+log "x86_64-efi: $(compgen -G "$GRUB_EFI_DIR/*.mod" | wc -l) modules of GRUB $GRUB_VERSION (verified against build-info.json)"
 
 # --- SBAT -------------------------------------------------------------------
-# Our grubx64.efi contains exactly Ubuntu's GRUB code (kernel.img and modules
-# from grub-efi-amd64-bin, built from the same source package as Ubuntu's
-# signed grubx64.efi), so it must carry Ubuntu's SBAT lines verbatim: when
-# Ubuntu's GRUB is revoked through SBAT (grub, grub.ubuntu, grub.peimage ...
-# generations), ours is revoked with it. That only holds if the signed build
-# and the module package are the same version - checked here. The extra
-# grub.beastbooter line lets beast-booter-specific problems (for example in
-# the module selection or a bad signing) be revoked separately.
-sbat_problems=()
-signed_ver="${SIGNED_PKG#*=}"                       # e.g. 1.215+2.14-2ubuntu1
-[ "${signed_ver##*+}" = "$GRUB_VERSION" ] \
-  || sbat_problems+=("signed package $SIGNED_PKG is not built from $GRUB_VERSION")
-if [ -f "$BB_GRUB_EFI_SIGNED_DIR/version" ]; then
-  v="$(tr -d '[:space:]' < "$BB_GRUB_EFI_SIGNED_DIR/version")"
-  [ "$v" = "$GRUB_VERSION" ] || sbat_problems+=("$BB_GRUB_EFI_SIGNED_DIR/version says $v")
-fi
-upstream="${GRUB_VERSION#*:}"; upstream="${upstream%%-*}"
-while IFS=, read -r comp _gen _vendor _pkg ver _url; do
-  case "$comp" in
-    sbat) ;;
-    grub) [[ "$upstream" == "$ver"* ]] || sbat_problems+=("SBAT 'grub' version $ver vs upstream $upstream") ;;
-    *)    [ "$ver" = "$GRUB_VERSION" ] || sbat_problems+=("SBAT '$comp' version $ver") ;;
-  esac
-done < "$WORK/sbat-ubuntu.csv"
-sbat_why=""; for p in "${sbat_problems[@]}"; do sbat_why+="${sbat_why:+; }$p"; done
-if [ "${#sbat_problems[@]}" -eq 0 ]; then
-  extra secure_boot.sbat_version_check "ok: $SIGNED_PKG matches deb:$EFI_PKG"
-elif [ "${BB_ALLOW_SBAT_MISMATCH:-0}" = 1 ]; then
-  warn "SBAT source does not match the GRUB modules ($sbat_why); continuing because BB_ALLOW_SBAT_MISMATCH=1"
-  extra secure_boot.sbat_version_check "MISMATCH overridden by BB_ALLOW_SBAT_MISMATCH=1: modules deb:$EFI_PKG, SBAT from $SIGNED_PKG: $sbat_why"
-else
-  die "the signed Ubuntu GRUB ($SIGNED_PKG) is not the same build as the GRUB modules ($EFI_PKG):
-       $sbat_why
-       Its SBAT lines would not truthfully describe our GRUB. Install matching
-       grub-efi-amd64-bin / grub-efi-amd64-signed versions (or, for a local
-       development build only, set BB_ALLOW_SBAT_MISMATCH=1)."
-fi
-extra secure_boot.sbat_source "deb:$SIGNED_PKG:${SIGNED_EFI#"$TOOLS_ROOT"}"
+# Our grubx64.efi is built from Ubuntu's grub2 source package plus our
+# patches, so it carries:
+#   sbat,1 + grub,N  N = the generation build/grub/security-fixes.json proves:
+#                    the source build fails unless every fix that generation
+#                    stands for is present (each upstream commit reverse-applies)
+#   grub.ubuntu, grub.ubuntu26, grub.peimage
+#                    Ubuntu's vendor lines (debian/sbat.ubuntu.csv.in), filled in
+#                    as debian/rules does: they describe Ubuntu's patches, which
+#                    we include unchanged, so when Ubuntu's GRUB is revoked through
+#                    them, ours is revoked with it
+#   grub.beastbooter our line (build/sbat-beastbooter.csv): revokes our builds alone
+"${GRUBSRC[@]}" sbat "$GRUB_OUT" > "$WORK/sbat-grub.csv" || die "build/grub/grubsrc.py sbat failed"
+bbtool sbat-validate "$WORK/sbat-grub.csv"
+grub_gen="$(awk -F, '$1 == "grub" {print $2}' "$WORK/sbat-grub.csv")"
+[ -n "$grub_gen" ] || die "no 'grub' SBAT line from build/grub/grubsrc.py sbat"
+extra secure_boot.sbat_version_check "ok: grub,$grub_gen proven for $GRUB_ORIGIN by build/grub/security-fixes.json (all listed fixes present); vendor lines describe src:grub2=$GRUB_SRC_VERSION"
+extra secure_boot.sbat_source "built:build/grub/grubsrc.py sbat from $GRUB_ORIGIN:/sbat.ubuntu.csv.in + build/grub/security-fixes.json"
+extra secure_boot.grub_security_fixes[] "$(python3 -I -c '
+import json, sys
+info = json.load(open(sys.argv[1]))
+print(" ".join(f["id"] for f in info["security_fixes"]["fixes"] if f["present"] and f.get("type") != "defect"))' \
+  "$GRUB_OUT/build-info.json")"
+extra build.grub_other_fixes[] "$(python3 -I -c '
+import json, sys
+info = json.load(open(sys.argv[1]))
+print(" ".join(f["id"] for f in info["security_fixes"]["fixes"] if f["present"] and f.get("type") == "defect"))' \
+  "$GRUB_OUT/build-info.json")"
 
 grep -v '^[[:space:]]*#' "$HERE/sbat-beastbooter.csv" | grep -v '^[[:space:]]*$' \
   | sed -e "s|@GRUB_VERSION@|$GRUB_VERSION|g" -e "s|@VERSION@|$VERSION|g" -e "s|@PROJECT_URL@|$PROJECT_URL|g" \
   > "$WORK/sbat-bb.csv"
 [ "$(wc -l < "$WORK/sbat-bb.csv")" -eq 1 ] || die "build/sbat-beastbooter.csv must contain exactly one SBAT line"
 ! grep -q '@' "$WORK/sbat-bb.csv" || die "unfilled placeholder in build/sbat-beastbooter.csv"
-cat "$WORK/sbat-ubuntu.csv" "$WORK/sbat-bb.csv" > "$WORK/sbat.csv"
+cat "$WORK/sbat-grub.csv" "$WORK/sbat-bb.csv" > "$WORK/sbat.csv"
 bbtool sbat-validate "$WORK/sbat.csv"
 
 # ---------------------------------------------------------------------------
-# shim + MokManager (Ubuntu shim-signed), unmodified
+# shim + MokManager: Debian's shim-signed and shim-helpers-amd64-signed,
+# unmodified (build/shim/debian-shim.lock; build/shim/fetch.py fetches,
+# verifies and unpacks them into $BB_DEBIAN_DIR, see scripts/bootstrap-tools.sh).
+# Debian's shim is signed through both Microsoft UEFI CA 2011 and 2023, so the
+# drive boots on PCs whose db holds either; its built-in key is Debian's.
 # ---------------------------------------------------------------------------
-SHIM="$BB_SHIM_DIR/shimx64.efi.signed.latest"
-MM="$BB_SHIM_DIR/mmx64.efi"
-[ -f "$SHIM" ] && [ -f "$MM" ] || die "shim not found in $BB_SHIM_DIR (package shim-signed)"
-sigs="$(sbverify --list "$SHIM" 2>/dev/null)" || true
-grep -q 'issuer:.*O=Microsoft Corporation/CN=Microsoft Corporation UEFI CA' <<<"$sigs" \
-  || die "$SHIM is not signed by the Microsoft UEFI CA"
-sigs="$(sbverify --list "$MM" 2>/dev/null)" || true
-grep -q '^signature 1' <<<"$sigs" || die "$MM is not signed"
-if [ -x "$BB_SHIM_DIR/is-not-revoked" ]; then   # Ubuntu's list of revoked Canonical signing keys
-  "$BB_SHIM_DIR/is-not-revoked" "$SHIM" "$MM" 2>"$WORK/revoked.log" \
-    || { grep -v '^warning: data remaining' "$WORK/revoked.log" >&2; die "shim/MokManager signed with a revoked key"; }
-fi
+DEBIAN_DIR="${BB_DEBIAN_DIR:-$BB_ROOT/.tools/debian}"
+SHIM="$BB_SHIM_DIR/shimx64.efi.signed"
+MM="$BB_SHIM_DIR/mmx64.efi.signed"
+[ -f "$SHIM" ] && [ -f "$MM" ] \
+  || die "Debian shim not found in $BB_SHIM_DIR (shimx64.efi.signed, mmx64.efi.signed): run scripts/bootstrap-tools.sh"
+efi_inspect() { python3 -I "$BB_ROOT/scripts/efi_inspect.py" "$@"; }
+MS_CA_2011="Microsoft Corporation UEFI CA 2011=$HERE/shim/microsoft-uefi-ca-2011.pem"
+MS_CA_2023="Microsoft UEFI CA 2023=$HERE/shim/microsoft-uefi-ca-2023.pem"
+# Both signatures are checked cryptographically against the CA certificates in
+# build/shim/ (sbverify accepts any --cert for Microsoft-signed images) and
+# must sign the image's own Authenticode digest.
+efi_inspect require "$SHIM" --chains "$MS_CA_2011" --chains "$MS_CA_2023" > "$WORK/shim-sigs.log" 2>&1 \
+  || { cat "$WORK/shim-sigs.log" >&2; die "$SHIM needs signatures chaining to Microsoft UEFI CA 2011 and to Microsoft UEFI CA 2023 over the same Authenticode digest"; }
+sed 's/^/build:   /' "$WORK/shim-sigs.log"
+# MokManager: shim starts it only if it is signed through shim's built-in vendor key.
+efi_inspect require "$MM" --vendor-of "$SHIM" > "$WORK/mm-sigs.log" 2>&1 \
+  || { cat "$WORK/mm-sigs.log" >&2; die "$MM is not signed through the vendor key of $SHIM, or is in its vendor_dbx"; }
+SHIM_ORIGIN="$(python3 -I "$HERE/shim/fetch.py" origin "$SHIM" /usr/lib/shim/shimx64.efi.signed "$DEBIAN_DIR")" \
+  || die "$SHIM is not the file in the locked shim-signed package (build/shim/debian-shim.lock)"
+MM_ORIGIN="$(python3 -I "$HERE/shim/fetch.py" origin "$MM" /usr/lib/shim/mmx64.efi.signed "$DEBIAN_DIR")" \
+  || die "$MM is not the file in the locked shim-helpers-amd64-signed package (build/shim/debian-shim.lock)"
 objcopy -O binary --only-section=.sbatlevel "$SHIM" "$WORK/sbatlevel.raw"
 [ -s "$WORK/sbatlevel.raw" ] || die "$SHIM has no .sbatlevel section"
 objcopy -O binary --only-section=.sbat "$SHIM" "$WORK/shim-sbat.raw"
@@ -320,9 +342,12 @@ bbtool sbat-vs-level "$WORK/shim-sbat.csv" "$WORK/sbatlevel.raw" >/dev/null \
   || die "shim's own SBAT is below its revocation level"
 log "SBAT generations are at or above shim's latest revocation level ($lvl)"
 extra secure_boot.shim_sbat_level_latest "$(bbtool sbatlevel "$WORK/sbatlevel.raw" | tr '\n' ' ' | sed 's/ $//')"
+extra secure_boot.shim_signers "Microsoft Corporation UEFI CA 2011 + Microsoft UEFI CA 2023, one Authenticode digest"
+extra secure_boot.shim_authenticode_sha256 "$(efi_inspect authenticode "$SHIM")"
+extra secure_boot.shim_distro "$(python3 -I "$HERE/shim/fetch.py" distro shim-signed)"
 
-add_deb_file "$SHIM" esp/EFI/BOOT/BOOTX64.EFI
-add_deb_file "$MM"   esp/EFI/BOOT/mmx64.efi
+add_file "$SHIM" esp/EFI/BOOT/BOOTX64.EFI "$SHIM_ORIGIN"
+add_file "$MM"   esp/EFI/BOOT/mmx64.efi "$MM_ORIGIN"
 # Deliberately no fbx64.efi (ARCHITECTURE section 4).
 o="$(path_origin key "$CER")"
 add_file "$CER" esp/ENROLL_THIS_KEY_IN_MOKMANAGER.cer "key:${o#*:}"
@@ -419,10 +444,14 @@ UNSIGNED="$WORK/grubx64.unsigned.efi"
 # NB: no --disable-shim-lock, ever.
 # -m must come before -p: a memdisk implies the prefix (memdisk)/boot/grub
 # unless -p follows it. Our prefix stays /grub on the ESP the image came from.
-grub-mkimage -O x86_64-efi -d "$BB_GRUB_EFI_DIR" -m "$MEMDISK" -p /grub --sbat "$WORK/sbat.csv" \
+"$GRUB_MKIMAGE" -O x86_64-efi -d "$GRUB_EFI_DIR" -m "$MEMDISK" -p /grub --sbat "$WORK/sbat.csv" \
   -o "$UNSIGNED" "${EFI_MODULES[@]}"
 objcopy -O binary --only-section=.sbat "$UNSIGNED" "$WORK/check.sbat"
 cmp -s <(tr -d '\000' < "$WORK/check.sbat") "$WORK/sbat.csv" || die "SBAT section of the built GRUB is not what we asked for"
+# Ubuntu's signed grubx64.efi is marked NX_COMPAT (W^X memory, which shim 16
+# and newer firmware can enforce); grub-mkimage of this source sets it too.
+objdump -p "$UNSIGNED" > "$WORK/pe-headers.txt"
+grep -q 'NX_COMPAT' "$WORK/pe-headers.txt" || die "the built grubx64.efi lacks the PE NX_COMPAT flag"
 UNSIGNED_SHA="$(sha256sum < "$UNSIGNED")"; UNSIGNED_SHA="${UNSIGNED_SHA%% *}"
 
 # Signing. sbsign puts the current time into the signature (a PKCS#7
@@ -450,7 +479,7 @@ if [ "$reused" = 0 ]; then
   log "grubx64.efi: signed with $CERT_SUBJECT"
 fi
 sbverify --cert "$CRT" "$SIGNED" >/dev/null 2>&1 || die "sbverify failed for the signed GRUB"
-add_file "$SIGNED" esp/EFI/BOOT/grubx64.efi "built:grub-mkimage from deb:$EFI_PKG + memdisk (build.efi_memdisk), signed:beast-booter"
+add_file "$SIGNED" esp/EFI/BOOT/grubx64.efi "built:grub-mkimage from $GRUB_ORIGIN:/x86_64-efi + memdisk (build.efi_memdisk), signed:beast-booter"
 extra secure_boot.grub_unsigned_sha256 "$UNSIGNED_SHA"
 extra build.efi_modules[] "${EFI_MODULES[*]}"
 extra build.efi_prefix "/grub"
@@ -459,21 +488,19 @@ extra build.efi_prefix "/grub"
 # BIOS: boot.img + core.img + i386-pc modules for normal mode
 # ---------------------------------------------------------------------------
 for f in boot.img diskboot.img kernel.img lzma_decompress.img moddep.lst normal.mod; do
-  [ -f "$BB_GRUB_BIOS_DIR/$f" ] || die "$BB_GRUB_BIOS_DIR/$f not found (package grub-pc-bin)"
+  [ -f "$GRUB_BIOS_DIR/$f" ] || die "$GRUB_BIOS_DIR/$f not found (GRUB source build incomplete)"
 done
-pkg_resolve "$BB_GRUB_BIOS_DIR/boot.img"; BIOS_PKG="$P_KEY"     # grub-pc-bin=<ver>
-verify_files "$BB_GRUB_BIOS_DIR"/*.img "$BB_GRUB_BIOS_DIR"/*.lst "$BB_GRUB_BIOS_DIR"/*.mod
-log "i386-pc: all $VERIFIED module/image files in $BB_GRUB_BIOS_DIR are unmodified $BIOS_PKG"
-[ "$(stat -c %s "$BB_GRUB_BIOS_DIR/boot.img")" = 512 ] || die "boot.img is not 512 bytes"
-add_deb_file "$BB_GRUB_BIOS_DIR/boot.img" bios/boot.img
+log "i386-pc: $(compgen -G "$GRUB_BIOS_DIR/*.mod" | wc -l) modules of GRUB $GRUB_VERSION (verified against build-info.json)"
+[ "$(stat -c %s "$GRUB_BIOS_DIR/boot.img")" = 512 ] || die "boot.img is not 512 bytes"
+add_file "$GRUB_BIOS_DIR/boot.img" bios/boot.img "$GRUB_ORIGIN:/i386-pc/boot.img"
 
 mapfile -t BIOS_MODULES < <(list_modules "$HERE/modules-bios-core.lst")
 for m in "${BIOS_MODULES[@]}"; do
-  [ -f "$BB_GRUB_BIOS_DIR/$m.mod" ] || die "module $m (build/modules-bios-core.lst) missing from $BB_GRUB_BIOS_DIR"
+  [ -f "$GRUB_BIOS_DIR/$m.mod" ] || die "module $m (build/modules-bios-core.lst) missing from $GRUB_BIOS_DIR"
 done
 # GRUB's rescue parser (used for embedded configs) has no comments: strip them.
 sed -e 's/^[[:space:]]*#.*//' "$HERE/early-bios.cfg" | grep -v '^[[:space:]]*$' > "$WORK/early-bios.cfg"
-grub-mkimage -O i386-pc -d "$BB_GRUB_BIOS_DIR" -p '(,msdos2)/grub' -c "$WORK/early-bios.cfg" \
+"$GRUB_MKIMAGE" -O i386-pc -d "$GRUB_BIOS_DIR" -p '(,msdos2)/grub' -c "$WORK/early-bios.cfg" \
   -o "$WORK/core.img" "${BIOS_MODULES[@]}"
 core_size="$(stat -c %s "$WORK/core.img")"
 core_sectors=$(( (core_size + 511) / 512 ))
@@ -485,13 +512,13 @@ read -r bl_count bl_seg < <(od -An -t u2 -j $((0x1FC)) -N 4 "$WORK/core.img")
 [ "$bl_seg" = $((0x820)) ] || die "core.img blocklist segment is $bl_seg, expected 0x820"
 [ "$bl_count" = $((core_sectors - 1)) ] || die "core.img blocklist count $bl_count != sectors-1 ($((core_sectors - 1)))"
 add_file "$WORK/core.img" bios/core.img \
-  "built:grub-mkimage from deb:$BIOS_PKG + repo:build/early-bios.cfg + repo:build/modules-bios-core.lst"
+  "built:grub-mkimage from $GRUB_ORIGIN:/i386-pc + repo:build/early-bios.cfg + repo:build/modules-bios-core.lst"
 log "core.img: $core_size bytes ($core_sectors sectors, limit $max_sectors)"
 extra build.bios_core_modules[] "${BIOS_MODULES[*]}"
 extra build.bios_core_prefix "(,msdos2)/grub"
 
-for f in "$BB_GRUB_BIOS_DIR"/*.mod "$BB_GRUB_BIOS_DIR"/*.lst; do
-  add_deb_file "$f" "esp/grub/i386-pc/$(basename "$f")"
+for f in "$GRUB_BIOS_DIR"/*.mod "$GRUB_BIOS_DIR"/*.lst; do
+  add_file "$f" "esp/grub/i386-pc/$(basename "$f")" "$GRUB_ORIGIN:/i386-pc/$(basename "$f")"
 done
 
 # ---------------------------------------------------------------------------
@@ -523,22 +550,119 @@ log "menu: $nmenu files from $MENU_DIR"
 
 # ---------------------------------------------------------------------------
 # beast-net: the "download an ISO from a link" helper (docs/BEASTNET.md).
-# Ubuntu's signed kernel + initramfs, built reproducibly by build/beastnet/.
+# Ubuntu's kernel (re-signed with our key, below) + initramfs, built
+# reproducibly by build/beastnet/.
 # BB_SKIP_BEASTNET=1 leaves it out (the menu then hides its entry).
 # ---------------------------------------------------------------------------
+BUILD_ID_EXTRA=()
 if [ "${BB_SKIP_BEASTNET:-0}" != 1 ]; then
   log "beast-net helper (build/beastnet/build.sh)"
   bash "$HERE/beastnet/build.sh" "$WORK/bn" || die "beast-net build failed (BB_SKIP_BEASTNET=1 builds without it)"
   for f in vmlinuz initrd.img VERSION catalog.json; do
     o="$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["beast-net/" + sys.argv[2]])' \
           "$WORK/bn/beast-net.origins.json" "$f")" || die "no origin for beast-net/$f"
+    if [ "$f" = vmlinuz ]; then BN_KERNEL_ORIGIN="$o"; continue; fi
     add_file "$WORK/bn/beast-net/$f" "esp/beast-net/$f" "$o"
   done
+
+  # The helper kernel is Ubuntu's (Canonical-signed). shim's built-in key is
+  # Debian's, so it gets the same treatment as grubx64.efi: every signature
+  # removed, then signed with the beast-booter key (same reuse rule as GRUB:
+  # an existing dist/ copy is kept when ours is its only signature, over the
+  # same unsigned image). The manifest records the source and the Authenticode
+  # digest, which is the same under Canonical's signature and ours.
+  [[ "$BN_KERNEL_ORIGIN" == deb:* ]] || die "beast-net/vmlinuz does not come from a package: $BN_KERNEL_ORIGIN"
+  BN_K="$WORK/bn/beast-net/vmlinuz"
+  # First: it really is Canonical's kernel, signed through Canonical's Master CA
+  # and not by one of the certificates Ubuntu revoked (build/trust/canonical/).
+  # Every file is checked against trust.json first, and the deny list is the one
+  # trust.json names (never a glob: a lost file must fail the build, not shrink it).
+  CANON="$HERE/trust/canonical"
+  python3 -I "$BB_ROOT/scripts/shim_trust.py" check "$CANON" \
+    || die "$CANON does not match its trust.json (scripts/shim_trust.py check; see build/trust/README.md)"
+  bn_dbx="$(python3 -I -c '
+import json, sys
+m = json.load(open(sys.argv[1]))
+if m["vendor_cert"]["file"] != "canonical-master-ca.der":
+    sys.exit("trust.json: the vendor certificate is not canonical-master-ca.der")
+x509 = [c["file"] for c in m["vendor_dbx"]["x509"]]
+if not x509:
+    sys.exit("trust.json lists no revoked certificates")
+for f in x509:
+    if f not in m["files"]:
+        sys.exit(f"trust.json: {f} is not among its checked files")
+    print("x509", f)
+for h in m["vendor_dbx"]["sha256"]:
+    print("sha256", h.lower())
+' "$CANON/trust.json")" || die "cannot read Ubuntu's revocations from $CANON/trust.json"
+  mkdir -p "$WORK/canon"
+  openssl x509 -inform DER -in "$CANON/canonical-master-ca.der" -out "$WORK/canon/ca.pem" \
+    || die "cannot read $CANON/canonical-master-ca.der"
+  bn_denied=(); bn_revoked_sha=()
+  while read -r kind v; do
+    case "$kind" in
+      x509)
+        pem="$WORK/canon/$(basename "$v" .der).pem"
+        openssl x509 -inform DER -in "$CANON/$v" -out "$pem" || die "cannot read $CANON/$v"
+        bn_denied+=(--denied "revoked $(basename "$v" .der)=$pem") ;;
+      sha256) bn_revoked_sha+=("$v") ;;
+      *) die "unexpected line from trust.json: $kind $v" ;;
+    esac
+  done <<<"$bn_dbx"
+  [ "${#bn_denied[@]}" -gt 0 ] || die "no revoked Canonical certificates to check the helper kernel against"
+  log "beast-net/vmlinuz: checked against Canonical's Master CA, $((${#bn_denied[@]} / 2)) revoked certificates and ${#bn_revoked_sha[@]} revoked hashes ($CANON)"
+  efi_inspect require "$BN_K" --chains "Canonical Ltd. Master Certificate Authority=$WORK/canon/ca.pem" \
+    "${bn_denied[@]}" > "$WORK/bn-orig-sigs.log" 2>&1 \
+    || { cat "$WORK/bn-orig-sigs.log" >&2; die "the helper kernel is not signed through Canonical's Master CA (or by a revoked certificate)"; }
+  BN_UNSIGNED="$WORK/vmlinuz.unsigned"
+  cp "$BN_K" "$BN_UNSIGNED"
+  bn_replaced="$(sbverify --list "$BN_K" 2>/dev/null | sed -n 's/^ - subject: .*CN=//p' | paste -sd ';' -)" || true
+  bn_nsig() { local s; s="$(sbverify --list "$1" 2>/dev/null)" || true; grep -c '^signature ' <<<"$s" || true; }
+  for _ in 1 2 3 4 5 6 7 8; do
+    [ "$(bn_nsig "$BN_UNSIGNED")" -gt 0 ] || break
+    sbattach --remove "$BN_UNSIGNED" >/dev/null 2>&1 || die "sbattach --remove failed for the helper kernel"
+  done
+  [ "$(bn_nsig "$BN_UNSIGNED")" = 0 ] || die "could not remove the helper kernel's signatures"
+  BN_AUTH="$(efi_inspect authenticode "$BN_K")"
+  # Ubuntu's vendor_dbx hashes (trust.json vendor_dbx.sha256; none today)
+  for h in ${bn_revoked_sha[@]+"${bn_revoked_sha[@]}"}; do
+    [ "$h" != "${BN_AUTH,,}" ] || die "the helper kernel's Authenticode SHA-256 is revoked by Ubuntu ($CANON/trust.json)"
+  done
+  [ "$(efi_inspect authenticode "$BN_UNSIGNED")" = "$BN_AUTH" ] \
+    || die "removing the helper kernel's signatures changed its Authenticode digest"
+  BN_UNSIGNED_SHA="$(sha256sum < "$BN_UNSIGNED")"; BN_UNSIGNED_SHA="${BN_UNSIGNED_SHA%% *}"
+  BN_SIGNED="$WORK/vmlinuz.signed"
+  PREV="$DIST/esp/beast-net/vmlinuz"
+  reused=0
+  if [ "${BB_RESIGN:-0}" != 1 ] && [ -f "$PREV" ]; then
+    cp "$PREV" "$WORK/prev-k"; cp "$PREV" "$WORK/prev-k-stripped"
+    if sbattach --remove "$WORK/prev-k-stripped" >/dev/null 2>&1 \
+       && cmp -s "$WORK/prev-k-stripped" "$BN_UNSIGNED" \
+       && efi_inspect require "$WORK/prev-k" --only "beast-booter=$CRT" >/dev/null 2>&1; then
+      cp "$WORK/prev-k" "$BN_SIGNED"; reused=1
+      log "beast-net/vmlinuz: unsigned image unchanged, keeping the existing signature (BB_RESIGN=1 to re-sign)"
+    fi
+  fi
+  if [ "$reused" = 0 ]; then
+    sbsign --key "$KEY" --cert "$CRT" --output "$BN_SIGNED" "$BN_UNSIGNED" >/dev/null 2>"$WORK/sbsign.log" \
+      || { cat "$WORK/sbsign.log" >&2; die "sbsign failed for the helper kernel"; }
+    log "beast-net/vmlinuz: replaced the signature of ${bn_replaced:-?} with $CERT_SUBJECT"
+  fi
+  efi_inspect require "$BN_SIGNED" --only "beast-booter=$CRT" > "$WORK/bn-sigs.log" 2>&1 \
+    || { cat "$WORK/bn-sigs.log" >&2; die "the re-signed helper kernel must carry exactly one signature, ours"; }
+  [ "$(efi_inspect authenticode "$BN_SIGNED")" = "$BN_AUTH" ] || die "the re-signed helper kernel has another Authenticode digest"
+  add_file "$BN_SIGNED" esp/beast-net/vmlinuz \
+    "built:$BN_KERNEL_ORIGIN with its signatures removed (sbattach --remove), signed:beast-booter"
+  extra secure_boot.beastnet_kernel_source "$BN_KERNEL_ORIGIN"
+  extra secure_boot.beastnet_kernel_authenticode_sha256 "$BN_AUTH"
+  extra secure_boot.beastnet_kernel_unsigned_sha256 "$BN_UNSIGNED_SHA"
+  extra secure_boot.beastnet_kernel_replaced_signers "${bn_replaced:-none}"
+  BUILD_ID_EXTRA+=(--unsigned "esp/beast-net/vmlinuz=$BN_UNSIGNED_SHA")
 fi
 
 # version.cfg last: its build id covers everything else, the beast-net helper included
 # (grubx64.efi by its unsigned hash), so a drive with other helper files is another build.
-BUILD_ID="$(bbtool build-id "$STAGE" "$VERSION" "$UNSIGNED_SHA")"
+BUILD_ID="$(bbtool build-id "$STAGE" "$VERSION" "$UNSIGNED_SHA" "${BUILD_ID_EXTRA[@]}")"
 cat > "$WORK/version.cfg" <<EOF
 # Generated by build/build.sh - do not edit.
 set bb_version="$VERSION"

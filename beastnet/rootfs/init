@@ -8,7 +8,8 @@
 # failure can never turn into a kernel panic loop.
 #
 # Kernel parameters: beastnet.data=UUID=... beastnet.esp=UUID=...
-# beastnet.debug=1 (see docs/BEASTNET.md section 5; the app reads the rest).
+# beastnet.debug=1 (see docs/BEASTNET.md section 5; the app reads the rest,
+# e.g. beastnet.action=trust-ubuntu).
 
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 HOME=/root
@@ -20,6 +21,11 @@ export PATH HOME LANG PYTHONPATH PYTHONDONTWRITEBYTECODE
 mkdir -p /proc /sys /dev /run /tmp /root /mnt/data /mnt/esp
 mount -t proc -o nosuid,nodev,noexec proc /proc
 mount -t sysfs -o nosuid,nodev,noexec sysfs /sys
+# UEFI only: the EFI variables (Secure Boot state, shim's MokListRT/MokListXRT, the
+# requests mokutil writes for "Trust Ubuntu's Secure Boot key").
+if [ -d /sys/firmware/efi/efivars ] && ! grep -q " /sys/firmware/efi/efivars " /proc/mounts; then
+	mount -t efivarfs -o nosuid,nodev,noexec efivarfs /sys/firmware/efi/efivars 2>/dev/null
+fi
 mount -t devtmpfs -o nosuid,mode=0755 devtmpfs /dev
 mkdir -p /dev/pts /dev/shm
 mount -t devpts -o nosuid,noexec,gid=5,mode=0620 devpts /dev/pts

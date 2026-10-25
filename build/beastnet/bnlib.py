@@ -1,7 +1,8 @@
 """Shared helpers for build/beastnet (Python 3.10+ standard library only).
 
 Used by mkinitrd.py, lock.py and gen_catalog.py. Nothing here touches the
-network or anything outside the paths it is given.
+network (except fetch_deb / apt_suite, through apt) or anything outside the
+paths it is given.
 """
 from __future__ import annotations
 
@@ -38,6 +39,7 @@ class LockEntry:
     arch: str
     sha256: str
     role: str          # kernel | modules | tool | lib | data
+    distro: str = ""   # "ubuntu-26.10" when the package comes from another Ubuntu series (packages.in suite=)
 
     @property
     def key(self) -> str:
@@ -65,13 +67,15 @@ def read_lock(path: str) -> list[LockEntry]:
             if not line:
                 continue
             parts = line.split()
-            if len(parts) != 5:
-                raise BuildError(f"{path}:{n}: expected '<package> <version> <arch> <sha256> <role>'")
+            if len(parts) not in (5, 6):
+                raise BuildError(f"{path}:{n}: expected '<package> <version> <arch> <sha256> <role> [<distro>]'")
             e = LockEntry(*parts)
             if not re.fullmatch(r"[0-9a-f]{64}", e.sha256):
                 raise BuildError(f"{path}:{n}: bad sha256 for {e.name}")
             if e.role not in ROLES:
                 raise BuildError(f"{path}:{n}: unknown role {e.role!r}")
+            if e.distro and not re.fullmatch(r"ubuntu-\d\d\.\d\d", e.distro):
+                raise BuildError(f"{path}:{n}: bad distro {e.distro!r} for {e.name}")
             if e.name in seen:
                 raise BuildError(f"{path}:{n}: {e.name} listed twice")
             seen.add(e.name)
@@ -267,12 +271,57 @@ def deb_field(deb: str, name: str) -> str:
                           text=True).stdout.strip()
 
 
+ARCHIVE_URI = "http://archive.ubuntu.com/ubuntu/"
+ARCHIVE_KEYRING = "/usr/share/keyrings/ubuntu-archive-keyring.gpg"
+RELEASED_POCKETS = ("", "-updates", "-security")       # never -proposed / -backports
+
+
+def apt_suite(work: str, series: str, log=print) -> tuple[list[str], str]:
+    """A private apt configuration (in WORK, no root) that sees only the released pockets
+    of another Ubuntu SERIES (release, -updates, -security; never -proposed), checked
+    against the Ubuntu archive keyring. Runs `apt-get update` and returns the apt
+    options plus the series' purl distro ("ubuntu-26.10"), read from its signed InRelease."""
+    if not re.fullmatch(r"[a-z]+", series):
+        raise BuildError(f"bad Ubuntu series name {series!r}")
+    for d in ("etc/sources.list.d", "etc/preferences.d", "lists/partial", "cache/archives/partial"):
+        os.makedirs(os.path.join(work, d), exist_ok=True)
+    with open(os.path.join(work, "etc/sources.list.d/ubuntu.sources"), "w", encoding="utf-8") as f:
+        f.write(f"Types: deb\nURIs: {ARCHIVE_URI}\nSuites: {' '.join(series + p for p in RELEASED_POCKETS)}\n"
+                f"Components: main restricted\nArchitectures: amd64\nSigned-By: {ARCHIVE_KEYRING}\n")
+    opts = []
+    for k, v in (("Dir::Etc::SourceList", "/dev/null"), ("Dir::Etc::SourceParts", f"{work}/etc/sources.list.d"),
+                 ("Dir::Etc::Preferences", "/dev/null"), ("Dir::Etc::PreferencesParts", f"{work}/etc/preferences.d"),
+                 ("Dir::State::Lists", f"{work}/lists"), ("Dir::Cache", f"{work}/cache"),
+                 ("Dir::State::status", "/dev/null"), ("APT::Architecture", "amd64"),
+                 ("APT::Architectures::", "amd64"), ("Acquire::Languages", "none"), ("Debug::NoLocking", "1")):
+        opts += ["-o", f"{k}={v}"]
+    log(f"apt-get update ({series}{', '.join(RELEASED_POCKETS)})")
+    r = subprocess.run(["apt-get", *opts, "update"], capture_output=True, text=True)
+    if r.returncode != 0 or re.search(r"^(E:|W: GPG error)", r.stdout + r.stderr, re.M):
+        raise BuildError(f"apt-get update for {series} failed:\n{(r.stdout + r.stderr).strip()[-800:]}")
+    rel = os.path.join(work, "lists", ARCHIVE_URI.split("://", 1)[1].replace("/", "_") + f"dists_{series}_InRelease")
+    fields = {}
+    with open(rel, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            if line.startswith(" ") or ":" not in line:
+                continue
+            k, _, v = line.partition(":")
+            fields.setdefault(k.strip(), v.strip())
+    if fields.get("Origin") != "Ubuntu" or fields.get("Codename") != series or \
+            not re.fullmatch(r"\d\d\.\d\d", fields.get("Version", "")):
+        raise BuildError(f"{rel}: unexpected Release fields {fields.get('Origin')}/{fields.get('Codename')}/"
+                         f"{fields.get('Version')}")
+    return opts, "ubuntu-" + fields["Version"]
+
+
 def fetch_deb(cache: str, name: str, version: str | None, arch: str | None = None,
-              sha256: str | None = None, log=print, offline: bool = False) -> str:
+              sha256: str | None = None, log=print, offline: bool = False,
+              apt_opts: list[str] | None = None) -> str:
     """Return the path of NAME_VERSION_ARCH.deb in CACHE, downloading it with
-    `apt-get download` (apt checks it against the signed archive index) or, when
-    the archive no longer carries that version and SHA256 is known, from
-    Launchpad's file store. With SHA256 the file is always checked."""
+    `apt-get download` (apt checks it against the signed archive index; APT_OPTS from
+    apt_suite() for another series) or, when the archive no longer carries that
+    version and SHA256 is known, from Launchpad's file store. With SHA256 the file
+    is always checked."""
     os.makedirs(cache, exist_ok=True)
     if version and arch:
         path = os.path.join(cache, deb_filename(name, version, arch))
@@ -285,7 +334,7 @@ def fetch_deb(cache: str, name: str, version: str | None, arch: str | None = Non
     spec = f"{name}={version}" if version else name
     log(f"downloading {spec}")
     before = set(os.listdir(cache))
-    r = subprocess.run(["apt-get", "download", spec], cwd=cache, capture_output=True, text=True)
+    r = subprocess.run(["apt-get", *(apt_opts or []), "download", spec], cwd=cache, capture_output=True, text=True)
     new = sorted(set(os.listdir(cache)) - before)
     if r.returncode == 0 and not new and version and arch:
         new = [deb_filename(name, version, arch)]

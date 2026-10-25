@@ -3,8 +3,8 @@
   "@id": "https://beast-booter.invalid/vex/beast-booter-vex",
   "author": "beast-booter maintainers",
   "role": "Document Creator",
-  "timestamp": "2026-10-24T00:00:00Z",
-  "version": 3,
+  "timestamp": "2026-10-25T00:00:00Z",
+  "version": 4,
   "tooling": "hand-maintained; see .claude/skills/sbom-vuln/references/remediation.md",
   "statements": [
     {
@@ -16,9 +16,9 @@
           "@id": "file:esp/EFI/BOOT/grubx64.efi"
         }
       ],
-      "status": "affected",
-      "timestamp": "2026-10-23T00:00:00Z",
-      "action_statement": "Maintainer decision 2026-10-23: wait for Ubuntu to publish a grub2 build whose SBAT carries grub,6, then rebuild (make build), re-scan (make vulns) and re-test (make e2e). The grub generation is never raised by hand. Until then Secure Boot boots fail on PCs that applied SbatLevel 2025112400; documented in docs/SECURE_BOOT.md."
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "Fixed in 0.1.2: grubx64.efi is built from source (build/grub/: Ubuntu grub2 2.14-2ubuntu3 + build/grub/patches) and embeds grub,6, which meets shim's SbatLevel 2025112400. build/grub/grubsrc.py proves on every build that each fix grub,6 stands for (CVE-2025-54770, -54771, -61661, -61662, -61663, -61664) is present by reverse-applying its upstream commit, and refuses the claim otherwise (manifest secure_boot.sbat_version_check; build/grub/security-fixes.json)."
     },
     {
       "vulnerability": {
@@ -29,177 +29,9 @@
           "@id": "file:esp/EFI/BOOT/BOOTX64.EFI"
         }
       ],
-      "status": "affected",
-      "timestamp": "2026-10-23T00:00:00Z",
-      "action_statement": "Maintainer decision 2026-10-23: wait for Ubuntu to publish a shim-signed build signed by the Microsoft UEFI CA 2023, then rebuild, re-scan and re-test. Until then Secure Boot boots fail on PCs whose db trusts only the 2023 CA; documented in docs/SECURE_BOOT.md."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2024-45774",
-        "aliases": [
-          "UBUNTU-CVE-2024-45774"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
       "status": "fixed",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "status_notes": "Reviewed 2026-10-24: /usr/share/doc/grub-efi-amd64-bin/changelog.Debian.gz: grub2 (2.12-6): SECURITY UPDATE: video/readers/jpeg: Do not permit duplicate SOF0 markers in JPEG"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2024-45776",
-        "aliases": [
-          "UBUNTU-CVE-2024-45776"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
-      "status": "fixed",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "status_notes": "Reviewed 2026-10-24: /usr/share/doc/grub-efi-amd64-bin/changelog.Debian.gz: grub2 (2.12-6): SECURITY UPDATE: gettext: Integer overflow leads to heap OOB write or read"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2024-45777",
-        "aliases": [
-          "UBUNTU-CVE-2024-45777"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
-      "status": "fixed",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "status_notes": "Reviewed 2026-10-24: /usr/share/doc/grub-efi-amd64-bin/changelog.Debian.gz: grub2 (2.12-6): SECURITY UPDATE: gettext: Integer overflow leads to heap OOB write"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2024-45780",
-        "aliases": [
-          "UBUNTU-CVE-2024-45780"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
-      "status": "fixed",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "status_notes": "Reviewed 2026-10-24: /usr/share/doc/grub-efi-amd64-bin/changelog.Debian.gz: grub2 (2.12-6): SECURITY UPDATE: fs/tar: Integer overflow leads to heap OOB write"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2024-45781",
-        "aliases": [
-          "UBUNTU-CVE-2024-45781"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
-      "status": "fixed",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "status_notes": "Reviewed 2026-10-24: /usr/share/doc/grub-efi-amd64-bin/changelog.Debian.gz: grub2 (2.12-6): SECURITY UPDATE: fs/ufs: `strcpy` use leading to heap OOB write"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2024-45782",
-        "aliases": [
-          "UBUNTU-CVE-2024-45782"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
-      "status": "fixed",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "status_notes": "Reviewed 2026-10-24: /usr/share/doc/grub-efi-amd64-bin/changelog.Debian.gz: grub2 (2.12-6): SECURITY UPDATE: fs/hfs: `strcpy` use leading to potential heap OOB write"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2025-0622",
-        "aliases": [
-          "UBUNTU-CVE-2025-0622"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
-      "status": "fixed",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "status_notes": "Reviewed 2026-10-24: /usr/share/doc/grub-efi-amd64-bin/changelog.Debian.gz: grub2 (2.12-6): SECURITY UPDATE: command/gpg: Use-after-free due to hooks not being removed on module unload"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2025-0690",
-        "aliases": [
-          "UBUNTU-CVE-2025-0690"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
-      "status": "fixed",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "status_notes": "Reviewed 2026-10-24: /usr/share/doc/grub-efi-amd64-bin/changelog.Debian.gz: grub2 (2.12-6): SECURITY UPDATE: read: Integer overflow may lead to out-of-bounds write"
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "Fixed in 0.1.2: BOOTX64.EFI is Debian's shim 16.1 (shim-signed 1.51+16.1-2, SHA-256-pinned in build/shim/debian-shim.lock), carrying two Microsoft signatures over the same Authenticode digest, one chaining to Microsoft Corporation UEFI CA 2011 and one to Microsoft UEFI CA 2023 (build/shim/microsoft-uefi-ca-{2011,2023}.pem). build/build.sh and build/verify-dist.sh refuse a shim without both; the scan's shim CA check sees both chains."
     },
     {
       "vulnerability": {
@@ -208,7 +40,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.1",
+          "@id": "pkg:generic/beast-booter@0.1.2",
           "subcomponents": [
             {
               "@id": "cpe:2.3:a:gnu:grub2:2.14:*:*:*:*:*:*:*"
@@ -224,308 +56,12 @@
     },
     {
       "vulnerability": {
-        "name": "CVE-2024-45775",
-        "aliases": [
-          "UBUNTU-CVE-2024-45775"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
-      "status": "fixed",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "status_notes": "Reviewed 2026-10-24: /usr/share/doc/grub-efi-amd64-bin/changelog.Debian.gz: grub2 (2.12-6): SECURITY UPDATE: commands/extcmd: Missing check for failed allocation"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2024-45778",
-        "aliases": [
-          "UBUNTU-CVE-2024-45778"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
-      "status": "fixed",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "status_notes": "Reviewed 2026-10-24: /usr/share/doc/grub-efi-amd64-bin/changelog.Debian.gz: grub2 (2.12-6): SECURITY UPDATE: fs/bfs: Integer overflow"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2024-45779",
-        "aliases": [
-          "UBUNTU-CVE-2024-45779"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
-      "status": "fixed",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "status_notes": "Reviewed 2026-10-24: /usr/share/doc/grub-efi-amd64-bin/changelog.Debian.gz: grub2 (2.12-6): SECURITY UPDATE: fs/bfs: integer overflow leads to heap OOB read"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2024-45783",
-        "aliases": [
-          "UBUNTU-CVE-2024-45783"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
-      "status": "fixed",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "status_notes": "Reviewed 2026-10-24: /usr/share/doc/grub-efi-amd64-bin/changelog.Debian.gz: grub2 (2.12-6): SECURITY UPDATE: fs/hfsplus: incorrect refcount handling leading to UAF"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2024-56737",
-        "aliases": [
-          "UBUNTU-CVE-2024-56737"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_present",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "impact_statement": "PROPOSED by scan_vulns.py - verify before use. Affected module(s) hfs are not in beast-booter's grubx64.efi (moddep.lst of grub-efi-amd64-bin 2.14-2ubuntu1 (verified against the package)), and beast-booter ships no x86_64-efi modules on the drive (GRUB lockdown would refuse to load them under Secure Boot anyway). The BIOS path is a separate product component (grub-pc-bin) and is not covered by this statement.",
-      "status_notes": "Reviewed 2026-10-24:"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2025-0624",
-        "aliases": [
-          "UBUNTU-CVE-2025-0624"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
-      "status": "fixed",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "status_notes": "Reviewed 2026-10-24: /usr/share/doc/grub-efi-amd64-bin/changelog.Debian.gz: grub2 (2.12-6): SECURITY UPDATE: net: Out-of-bounds write in grub_net_search_config_file()"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2025-0677",
-        "aliases": [
-          "UBUNTU-CVE-2025-0677"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
-      "status": "fixed",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "status_notes": "Reviewed 2026-10-24: /usr/share/doc/grub-efi-amd64-bin/changelog.Debian.gz: grub2 (2.12-6): SECURITY UPDATE: UFS: Integer overflow may lead to heap based out-of-bounds write when handling symlinks"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2025-0678",
-        "aliases": [
-          "UBUNTU-CVE-2025-0678"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
-      "status": "fixed",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "status_notes": "Reviewed 2026-10-24: /usr/share/doc/grub-efi-amd64-bin/changelog.Debian.gz: grub2 (2.12-6): SECURITY UPDATE: squash4: Integer overflow may lead to heap based out-of-bounds write when reading data"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2025-0684",
-        "aliases": [
-          "UBUNTU-CVE-2025-0684"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
-      "status": "fixed",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "status_notes": "Reviewed 2026-10-24: /usr/share/doc/grub-efi-amd64-bin/changelog.Debian.gz: grub2 (2.12-6): SECURITY UPDATE: reiserfs: Integer overflow when handling symlinks may lead to heap based out-of-bounds write when reading data"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2025-0685",
-        "aliases": [
-          "UBUNTU-CVE-2025-0685"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
-      "status": "fixed",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "status_notes": "Reviewed 2026-10-24: /usr/share/doc/grub-efi-amd64-bin/changelog.Debian.gz: grub2 (2.12-6): SECURITY UODATE: jfs: Integer overflow when handling symlinks may lead to heap based out-of-bounds write when reading data"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2025-0686",
-        "aliases": [
-          "UBUNTU-CVE-2025-0686"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
-      "status": "fixed",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "status_notes": "Reviewed 2026-10-24: /usr/share/doc/grub-efi-amd64-bin/changelog.Debian.gz: grub2 (2.12-6): SECURITY UPDATE: romfs: Integer overflow when handling symlinks may lead to heap based out-of-bounds write when reading data"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2025-0689",
-        "aliases": [
-          "UBUNTU-CVE-2025-0689"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
-      "status": "fixed",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "status_notes": "Reviewed 2026-10-24: /usr/share/doc/grub-efi-amd64-bin/changelog.Debian.gz: grub2 (2.12-6): SECURITY UPDATE: udf: Heap based buffer overflow  in grub_udf_read_block() may lead to arbitrary code execution"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2025-1118",
-        "aliases": [
-          "UBUNTU-CVE-2025-1118"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
-      "status": "fixed",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "status_notes": "Reviewed 2026-10-24: /usr/share/doc/grub-efi-amd64-bin/changelog.Debian.gz: grub2 (2.12-6): SECURITY UPDATE: commands/dump: The dump command is not in lockdown when secure boot is enabled"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2025-1125",
-        "aliases": [
-          "UBUNTU-CVE-2025-1125"
-        ]
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-booter@0.1.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            }
-          ]
-        }
-      ],
-      "status": "fixed",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "status_notes": "Reviewed 2026-10-24: /usr/share/doc/grub-efi-amd64-bin/changelog.Debian.gz: grub2 (2.12-6): SECURITY UPDATE: fs/hfs: Integer overflow may lead to heap based out-of-bounds write"
-    },
-    {
-      "vulnerability": {
         "name": "CVE-2024-1048",
         "aliases": []
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.1",
+          "@id": "pkg:generic/beast-booter@0.1.2",
           "subcomponents": [
             {
               "@id": "cpe:2.3:a:gnu:grub2:2.14:*:*:*:*:*:*:*"
@@ -545,23 +81,17 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.1",
+          "@id": "pkg:generic/beast-booter@0.1.2",
           "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            },
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-signed@1.215%2B2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-signed%401.215"
-            },
             {
               "@id": "cpe:2.3:a:gnu:grub2:2.14:*:*:*:*:*:*:*"
             }
           ]
         }
       ],
-      "status": "affected",
-      "action_statement": "Affected: the net module is embedded in grubx64.efi and cannot be removed (grub-mkimage pulls it in for normal/configfile, moddep.lst). Exploiting it needs someone at the GRUB console of the machine. Action: rebuild (make build) when Ubuntu publishes a fixed grub2 2.14 package, then re-scan.",
-      "timestamp": "2026-10-24T00:00:00Z"
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "Upstream GRUB 2.14 contains the fix. Our GRUB source build contains the fix - grub-src:grub2@2.14-2ubuntu3+bb1: CVE-2025-54770: present (upstream 10e58a14db20; upstream GRUB 2.14 release). build/grub/grubsrc.py proved it by reverse-applying the upstream commit to the fully patched source (build/grub/security-fixes.json); the scanner matches by version only."
     },
     {
       "vulnerability": {
@@ -569,23 +99,17 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.1",
+          "@id": "pkg:generic/beast-booter@0.1.2",
           "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            },
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-signed@1.215%2B2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-signed%401.215"
-            },
             {
               "@id": "cpe:2.3:a:gnu:grub2:2.14:*:*:*:*:*:*:*"
             }
           ]
         }
       ],
-      "status": "affected",
-      "action_statement": "Affected: the gettext module is embedded in grubx64.efi and cannot be removed (grub-mkimage pulls it in for normal/configfile, moddep.lst). Exploiting it needs someone at the GRUB console of the machine. Action: rebuild (make build) when Ubuntu publishes a fixed grub2 2.14 package, then re-scan.",
-      "timestamp": "2026-10-24T00:00:00Z"
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "Upstream GRUB 2.14 contains the fix. Our GRUB source build contains the fix - grub-src:grub2@2.14-2ubuntu3+bb1: CVE-2025-61662: present (upstream 8ed78fd9f085; upstream GRUB 2.14 release). build/grub/grubsrc.py proved it by reverse-applying the upstream commit to the fully patched source (build/grub/security-fixes.json); the scanner matches by version only."
     },
     {
       "vulnerability": {
@@ -593,23 +117,17 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.1",
+          "@id": "pkg:generic/beast-booter@0.1.2",
           "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            },
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-signed@1.215%2B2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-signed%401.215"
-            },
             {
               "@id": "cpe:2.3:a:gnu:grub2:2.14:*:*:*:*:*:*:*"
             }
           ]
         }
       ],
-      "status": "affected",
-      "action_statement": "Affected: the normal module is embedded in grubx64.efi and cannot be removed (grub-mkimage pulls it in for normal/configfile, moddep.lst). Exploiting it needs someone at the GRUB console of the machine. Action: rebuild (make build) when Ubuntu publishes a fixed grub2 2.14 package, then re-scan.",
-      "timestamp": "2026-10-24T00:00:00Z"
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "Upstream GRUB 2.14 contains the fix. Our GRUB source build contains the fix - grub-src:grub2@2.14-2ubuntu3+bb1: CVE-2025-61663: present (upstream 05d3698b8b03; upstream GRUB 2.14 release). build/grub/grubsrc.py proved it by reverse-applying the upstream commit to the fully patched source (build/grub/security-fixes.json); the scanner matches by version only."
     },
     {
       "vulnerability": {
@@ -617,23 +135,17 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.1",
+          "@id": "pkg:generic/beast-booter@0.1.2",
           "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
-            },
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-signed@1.215%2B2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-signed%401.215"
-            },
             {
               "@id": "cpe:2.3:a:gnu:grub2:2.14:*:*:*:*:*:*:*"
             }
           ]
         }
       ],
-      "status": "affected",
-      "action_statement": "Affected: the normal module is embedded in grubx64.efi and cannot be removed (grub-mkimage pulls it in for normal/configfile, moddep.lst). Exploiting it needs someone at the GRUB console of the machine. Action: rebuild (make build) when Ubuntu publishes a fixed grub2 2.14 package, then re-scan.",
-      "timestamp": "2026-10-24T00:00:00Z"
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "Upstream GRUB 2.14 contains the fix. Our GRUB source build contains the fix - grub-src:grub2@2.14-2ubuntu3+bb1: CVE-2025-61664: present (upstream 05d3698b8b03; upstream GRUB 2.14 release). build/grub/grubsrc.py proved it by reverse-applying the upstream commit to the fully patched source (build/grub/security-fixes.json); the scanner matches by version only."
     },
     {
       "vulnerability": {
@@ -641,13 +153,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.1",
+          "@id": "pkg:generic/beast-booter@0.1.2",
           "subcomponents": [
             {
               "@id": "cpe:2.3:a:gnu:grub2:2.14:*:*:*:*:*:*:*"
-            },
-            {
-              "@id": "pkg:deb/ubuntu/grub-efi-amd64-bin@2.14-2ubuntu1?arch=amd64&distro=ubuntu-26.04&upstream=grub2-unsigned"
             }
           ]
         }
@@ -663,7 +172,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.1",
+          "@id": "pkg:generic/beast-booter@0.1.2",
           "subcomponents": [
             {
               "@id": "pkg:generic/python@3.13.17"
@@ -682,7 +191,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.1",
+          "@id": "pkg:generic/beast-booter@0.1.2",
           "subcomponents": [
             {
               "@id": "pkg:generic/expat@2.8.5"
@@ -701,7 +210,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.1",
+          "@id": "pkg:generic/beast-booter@0.1.2",
           "subcomponents": [
             {
               "@id": "pkg:generic/python@3.13.17"
@@ -719,7 +228,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.1",
+          "@id": "pkg:generic/beast-booter@0.1.2",
           "subcomponents": [
             {
               "@id": "pkg:generic/zlib@1.3.1"
@@ -737,7 +246,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.1",
+          "@id": "pkg:generic/beast-booter@0.1.2",
           "subcomponents": [
             {
               "@id": "pkg:generic/zlib@1.3.2"
@@ -745,9 +254,10 @@
           ]
         }
       ],
-      "status": "affected",
-      "action_statement": "Portable app runtime, not on the drive; zlib is linked into the runtime. python-build-standalone 20261021 is the newest release: move packaging/portable/runtimes.lock to the first release that includes the fix (asset names, URLs and SHA-256 from its SHA256SUMS), rebuild the portable packages and re-scan.",
-      "timestamp": "2026-10-24T00:00:00Z"
+      "status": "not_affected",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The flaw is in gz_vacate/gzprintf in zlib's gzwrite.c (zlib 1.3.1.2 to 1.3.2). Checked in the four python-build-standalone 20261021 runtimes pinned in packaging/portable/runtimes.lock: Linux and macOS link zlib 1.3.2 statically, but gzwrite.c is not linked in: no file in those archives contains its error strings ('requested length does not fit in int', 'request does not fit in a size_t', 'internal error: deflate stream corrupt') or any gzwrite/gzprintf/gzvprintf name. Windows ships DLLs/zlib1.dll version 1.3.1, below the affected range, and its only importer, tcl86t.dll, imports just deflate/inflate/crc32/adler32/zlibVersion/zError (objdump -p). CPython's zlib module uses only the deflate/inflate API."
     },
     {
       "vulnerability": {
@@ -755,7 +265,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.1",
+          "@id": "pkg:generic/beast-booter@0.1.2",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/zlib1g@1%3A1.3.dfsg%2Breally1.3.1-1ubuntu3.2?arch=amd64&distro=ubuntu-26.04&upstream=zlib"
@@ -767,6 +277,626 @@
       "justification": "vulnerable_code_not_in_execute_path",
       "impact_statement": "The flaw is in gz_vacate (gzwrite with non-blocking writes). None of the 62 ELF files in the beast-net initramfs imports gzwrite, gzopen, gzdopen, gzprintf, gzputs, gzputc, gzflush or gzclose_w (checked with readelf --dyn-syms on dist/esp/beast-net/initrd.img, 0.1.0); CPython's zlib module uses only the deflate/inflate API.",
       "timestamp": "2026-10-24T00:00:00Z"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-3886"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/qemu-system-common@1%3A10.2.1%2Bds-1ubuntu3.3?arch=amd64&distro=ubuntu-26.04&upstream=qemu"
+            },
+            {
+              "@id": "pkg:deb/ubuntu/qemu-system-data@1%3A10.2.1%2Bds-1ubuntu3.3?arch=all&distro=ubuntu-26.04&upstream=qemu"
+            },
+            {
+              "@id": "pkg:deb/ubuntu/qemu-system-gui@1%3A10.2.1%2Bds-1ubuntu3.3?arch=amd64&distro=ubuntu-26.04&upstream=qemu"
+            },
+            {
+              "@id": "pkg:deb/ubuntu/qemu-system-modules-opengl@1%3A10.2.1%2Bds-1ubuntu3.3?arch=amd64&distro=ubuntu-26.04&upstream=qemu"
+            },
+            {
+              "@id": "pkg:deb/ubuntu/qemu-system-x86@1%3A10.2.1%2Bds-1ubuntu3.3?arch=amd64&distro=ubuntu-26.04&upstream=qemu"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Build/test tooling only, never on the drive. The flaw is in QEMU's virtio-gpu device (2D image allocation). beast-booter starts QEMU only from devtools/bbdev/qemu.py (e2e tests, make vm, screenshots), devtools/gdb/demo.py and beastnet/tests/qemu_smoke.py; all use '-nodefaults -device VGA' or the x86 machine default (standard VGA) and never create a virtio-gpu, virtio-vga or virtio-gpu-gl device (grep of every '-device'/'-vga' argument in the repository).",
+      "timestamp": "2026-10-25T00:00:00Z"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-84782"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/ovmf@2025.11-3ubuntu7.3?arch=all&distro=ubuntu-26.04&upstream=edk2"
+            },
+            {
+              "@id": "pkg:deb/ubuntu/ovmf-generic@2025.11-3ubuntu7.3?arch=all&distro=ubuntu-26.04&upstream=edk2"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Test firmware only (OVMF for the QEMU test VMs), never on the drive. The flaw is in OpenSSL's DTLS retransmission. EDK2 builds its OpenSSL with no-dtls, no-dtls1-method, no-dtls1_2-method and no-dgram (CryptoPkg/Library/OpensslLib/configure.py, edk2-stable202511, which ovmf 2025.11 is built from), so no DTLS method or connection exists in the firmware; the tests also never use HTTPS boot, the only TLS user in OVMF.",
+      "timestamp": "2026-10-25T00:00:00Z"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-45447"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/ovmf@2025.11-3ubuntu7.3?arch=all&distro=ubuntu-26.04&upstream=edk2"
+            },
+            {
+              "@id": "pkg:deb/ubuntu/ovmf-generic@2025.11-3ubuntu7.3?arch=all&distro=ubuntu-26.04&upstream=edk2"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
+      "impact_statement": "Test firmware only (OVMF for beast-booter's own QEMU test VMs), never on the drive. EDK2's Pkcs7Verify does call PKCS7_verify, so the code is present; a crafted SignedData with an empty digestAlgorithms SET is needed to reach it. In the e2e tests the firmware verifies only Debian's shim-signed 1.51+16.1-2 (SHA-256-pinned in build/shim/debian-shim.lock), its MokManager, and PE images the tests build themselves. The one other path is a developer chainloading an untrusted ISO's EFI program in `make vm` with Secure Boot on; the use-after-free then stays inside that QEMU guest. Ubuntu's tracker lists edk2 as needs-triage for every release (2026-10-25); re-check when it is triaged.",
+      "timestamp": "2026-10-25T00:00:00Z"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2024-45774"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "debian/changelog of grub2 2.14-2ubuntu3 (GRUB source build 22119e74901610f34d132b7f): grub2 (2.12-6): SECURITY UPDATE: video/readers/jpeg: Do not permit duplicate SOF0 markers in JPEG"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2024-45776"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "debian/changelog of grub2 2.14-2ubuntu3 (GRUB source build 22119e74901610f34d132b7f): grub2 (2.12-6): SECURITY UPDATE: gettext: Integer overflow leads to heap OOB write or read"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2024-45777"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "debian/changelog of grub2 2.14-2ubuntu3 (GRUB source build 22119e74901610f34d132b7f): grub2 (2.12-6): SECURITY UPDATE: gettext: Integer overflow leads to heap OOB write"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2024-45780"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "debian/changelog of grub2 2.14-2ubuntu3 (GRUB source build 22119e74901610f34d132b7f): grub2 (2.12-6): SECURITY UPDATE: fs/tar: Integer overflow leads to heap OOB write"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2024-45781"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "debian/changelog of grub2 2.14-2ubuntu3 (GRUB source build 22119e74901610f34d132b7f): grub2 (2.12-6): SECURITY UPDATE: fs/ufs: `strcpy` use leading to heap OOB write"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2024-45782"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "debian/changelog of grub2 2.14-2ubuntu3 (GRUB source build 22119e74901610f34d132b7f): grub2 (2.12-6): SECURITY UPDATE: fs/hfs: `strcpy` use leading to potential heap OOB write"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-0622"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "debian/changelog of grub2 2.14-2ubuntu3 (GRUB source build 22119e74901610f34d132b7f): grub2 (2.12-6): SECURITY UPDATE: command/gpg: Use-after-free due to hooks not being removed on module unload"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-0690"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "debian/changelog of grub2 2.14-2ubuntu3 (GRUB source build 22119e74901610f34d132b7f): grub2 (2.12-6): SECURITY UPDATE: read: Integer overflow may lead to out-of-bounds write"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-97876"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "Our GRUB source build contains the fix - grub-src:grub2@2.14-2ubuntu3+bb1: CVE-2026-97876: present (upstream 26beaa3b2720; build/grub/patches/0001-term-serial-reject-caller-supplied-port-addresses-under-lockdown.patch (Debian's 2.14 backport; upstream 2.16)). build/grub/grubsrc.py proved it by reverse-applying the upstream commit to the fully patched source (build/grub/security-fixes.json); the scanner matches by version only."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2024-45775"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "debian/changelog of grub2 2.14-2ubuntu3 (GRUB source build 22119e74901610f34d132b7f): grub2 (2.12-6): SECURITY UPDATE: commands/extcmd: Missing check for failed allocation"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2024-45778"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "debian/changelog of grub2 2.14-2ubuntu3 (GRUB source build 22119e74901610f34d132b7f): grub2 (2.12-6): SECURITY UPDATE: fs/bfs: Integer overflow"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2024-45779"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "debian/changelog of grub2 2.14-2ubuntu3 (GRUB source build 22119e74901610f34d132b7f): grub2 (2.12-6): SECURITY UPDATE: fs/bfs: integer overflow leads to heap OOB read"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2024-45783"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "debian/changelog of grub2 2.14-2ubuntu3 (GRUB source build 22119e74901610f34d132b7f): grub2 (2.12-6): SECURITY UPDATE: fs/hfsplus: incorrect refcount handling leading to UAF"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-0624"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "debian/changelog of grub2 2.14-2ubuntu3 (GRUB source build 22119e74901610f34d132b7f): grub2 (2.12-6): SECURITY UPDATE: net: Out-of-bounds write in grub_net_search_config_file()"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-0677"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "debian/changelog of grub2 2.14-2ubuntu3 (GRUB source build 22119e74901610f34d132b7f): grub2 (2.12-6): SECURITY UPDATE: UFS: Integer overflow may lead to heap based out-of-bounds write when handling symlinks"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-0678"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "debian/changelog of grub2 2.14-2ubuntu3 (GRUB source build 22119e74901610f34d132b7f): grub2 (2.12-6): SECURITY UPDATE: squash4: Integer overflow may lead to heap based out-of-bounds write when reading data"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-0684"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "debian/changelog of grub2 2.14-2ubuntu3 (GRUB source build 22119e74901610f34d132b7f): grub2 (2.12-6): SECURITY UPDATE: reiserfs: Integer overflow when handling symlinks may lead to heap based out-of-bounds write when reading data"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-0685"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "debian/changelog of grub2 2.14-2ubuntu3 (GRUB source build 22119e74901610f34d132b7f): grub2 (2.12-6): SECURITY UODATE: jfs: Integer overflow when handling symlinks may lead to heap based out-of-bounds write when reading data"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-0686"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "debian/changelog of grub2 2.14-2ubuntu3 (GRUB source build 22119e74901610f34d132b7f): grub2 (2.12-6): SECURITY UPDATE: romfs: Integer overflow when handling symlinks may lead to heap based out-of-bounds write when reading data"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-0689"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "debian/changelog of grub2 2.14-2ubuntu3 (GRUB source build 22119e74901610f34d132b7f): grub2 (2.12-6): SECURITY UPDATE: udf: Heap based buffer overflow  in grub_udf_read_block() may lead to arbitrary code execution"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-1118"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "debian/changelog of grub2 2.14-2ubuntu3 (GRUB source build 22119e74901610f34d132b7f): grub2 (2.12-6): SECURITY UPDATE: commands/dump: The dump command is not in lockdown when secure boot is enabled"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-1125"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "debian/changelog of grub2 2.14-2ubuntu3 (GRUB source build 22119e74901610f34d132b7f): grub2 (2.12-6): SECURITY UPDATE: fs/hfs: Integer overflow may lead to heap based out-of-bounds write"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-54770"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "Our GRUB source build contains the fix - grub-src:grub2@2.14-2ubuntu3+bb1: CVE-2025-54770: present (upstream 10e58a14db20; upstream GRUB 2.14 release). build/grub/grubsrc.py proved it by reverse-applying the upstream commit to the fully patched source (build/grub/security-fixes.json); the scanner matches by version only."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-54771"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "Our GRUB source build contains the fix - grub-src:grub2@2.14-2ubuntu3+bb1: CVE-2025-54771: present (upstream c4fb4cbc9419; upstream GRUB 2.14 release (grub2_2.14.orig.tar.xz = grub-2.14.tar.xz)). build/grub/grubsrc.py proved it by reverse-applying the upstream commit to the fully patched source (build/grub/security-fixes.json); the scanner matches by version only."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-61661"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "Our GRUB source build contains the fix - grub-src:grub2@2.14-2ubuntu3+bb1: CVE-2025-61661: present (upstream 549a9cc372fd; upstream GRUB 2.14 release). build/grub/grubsrc.py proved it by reverse-applying the upstream commit to the fully patched source (build/grub/security-fixes.json); the scanner matches by version only."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-61662"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "Our GRUB source build contains the fix - grub-src:grub2@2.14-2ubuntu3+bb1: CVE-2025-61662: present (upstream 8ed78fd9f085; upstream GRUB 2.14 release). build/grub/grubsrc.py proved it by reverse-applying the upstream commit to the fully patched source (build/grub/security-fixes.json); the scanner matches by version only."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-61663"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "Our GRUB source build contains the fix - grub-src:grub2@2.14-2ubuntu3+bb1: CVE-2025-61663: present (upstream 05d3698b8b03; upstream GRUB 2.14 release). build/grub/grubsrc.py proved it by reverse-applying the upstream commit to the fully patched source (build/grub/security-fixes.json); the scanner matches by version only."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-61664"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/beastboot/grub2@2.14-2ubuntu3%2Bbb1?arch=amd64&distro=ubuntu-26.10&upstream=grub2-unsigned"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "status_notes": "Our GRUB source build contains the fix - grub-src:grub2@2.14-2ubuntu3+bb1: CVE-2025-61664: present (upstream 05d3698b8b03; upstream GRUB 2.14 release). build/grub/grubsrc.py proved it by reverse-applying the upstream commit to the fully patched source (build/grub/security-fixes.json); the scanner matches by version only."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-98432"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/linux-modules-7.3.0-9-generic@7.3.0-9.9?arch=amd64&distro=ubuntu-26.10&upstream=linux"
+            },
+            {
+              "@id": "pkg:deb/ubuntu/linux@7.3.0-9.9?arch=source&distro=ubuntu-26.10"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
+      "impact_statement": "beast-net helper kernel 7.3.0-9.9 (upstream base v7.3-rc6; the fix landed in v7.3, Ubuntu: pending 7.3.0-10.10). The use-after-free is in TCP request-socket handling (tcp_v4_syn_recv_sock, tcp_check_req, ip_options_build with saved IP options), so it needs a listening TCP socket that receives SYNs with IP options, or request-socket migration (net.ipv4.tcp_migrate_req=1, default 0, or a BPF_SK_REUSEPORT_SELECT_OR_MIGRATE program). The helper never listens on TCP: its processes are init, the beastnet app (outgoing HTTPS only; its only bind() is the AF_UNIX wpa_supplicant control socket, beastnet/python/beastnet/wifi.py), udhcpc and wpa_supplicant; no server program runs (busybox httpd and netstat are removed, build/beastnet/userland.list). A network attacker therefore cannot reach the code. It is reachable only if the person at the console deliberately starts a TCP listener from the helper's maintenance shell (root, with physical access). Re-check, and move to the fixed kernel, when 7.3.0-10.10 reaches stonking-updates/-security.",
+      "timestamp": "2026-10-25T00:00:00Z"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-19411"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-booter@0.1.2",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/shim@16.1-2?arch=source&distro=debian-unstable"
+            }
+          ]
+        }
+      ],
+      "status": "affected",
+      "timestamp": "2026-10-25T00:00:00Z",
+      "action_statement": "No fixed shim exists: Debian tracks CVE-2026-19411 as unfixed in bookworm, trixie, forky and sid (16.1-2), urgency unimportant ('Considered a hardening change by upstream'); RHBZ#2513060 has no upstream commit. Move build/shim/debian-shim.lock to the first Debian shim-signed whose shim checks for NULL in dp.c is_removable_media_path(), once it is signed through both Microsoft UEFI CAs.",
+      "status_notes": "Reviewed 2026-10-25: shim 16.1 dp.c is_removable_media_path() passes DevicePathToStr(li->FilePath) to StrnCaseCmp() without a NULL check, and it runs on every boot of the stick (esp/EFI/BOOT/BOOTX64.EFI is on the removable-media path: shim.c should_use_fallback(), mok.c). DevicePathToStr returns NULL only when the firmware's pool allocation fails; the boot then hangs or crashes, or on firmware without NULL-page protection the removable-path/fallback check may misjudge. Every image shim loads is still verified, so it is no Secure Boot bypass. CVSS 3.1 3.9 (AV:L/AC:H/PR:H), Debian severity negligible. Reaches the drive through deb-src:shim@16.1-2, the Built-Using of shim-signed 1.51+16.1-2."
     }
   ]
 }

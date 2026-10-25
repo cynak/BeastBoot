@@ -101,6 +101,12 @@ such links (`iwlwifi-*.ucode -> intel/iwlwifi/...`).
 
 - New Ubuntu package versions: edit `packages.in`, run `python3 -I build/beastnet/lock.py`
   (`--check` tells whether `packages.lock` is current), rebuild.
+- A package from another Ubuntu series: add `suite=<series>` to its `packages.in` line (the
+  kernel uses `suite=stonking`, Ubuntu 26.10). lock.py then uses a private apt configuration
+  with only that series' release, -updates and -security pockets (never -proposed), checked
+  with the Ubuntu archive keyring, and writes the series' purl distro (`ubuntu-26.10`, from its
+  signed InRelease) as a 6th column of `packages.lock`; the SBOM uses it for the kernel and
+  modules packages. The build fetches such a .deb from Launchpad by its locked SHA-256.
 - New kernel: also update `modules.list` if a pattern stops matching (the build says which).
 - New linux-firmware tag: edit `firmware.lock` (tag + commit), rebuild with network.
 

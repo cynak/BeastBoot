@@ -1,0 +1,12 @@
+# Debian's shim and MokManager for the ESP (build/shim/README.md). Read by
+# build/shim/fetch.py, build/build.sh and scripts/debinfo.py (SBOM).
+#
+# <package> <version> <arch> <sha256 of the .deb> <distro> <url> [<fallback url> ...]
+#
+# Pinned from Debian sid (the trixie shim-signed 1.51~1+deb13u1+16.1-2~deb13u1 is
+# also signed through both Microsoft CAs, but without NX_COMPAT). The SHA-256 values
+# were checked against main/binary-amd64/Packages.xz of dists/sid, whose hash is in
+# the InRelease file signed by the Debian archive keys (2026-10-25).
+# The snapshot.debian.org URLs are the same files, kept after the archive moves on.
+shim-signed 1.51+16.1-2 amd64 993868c31cca3eab054a0c51c124a4a8b3904f49fb002feb4b09cb9415200e74 debian-sid https://deb.debian.org/debian/pool/main/s/shim-signed/shim-signed_1.51+16.1-2_amd64.deb https://snapshot.debian.org/archive/debian/20260622T023321Z/pool/main/s/shim-signed/shim-signed_1.51%2B16.1-2_amd64.deb
+shim-helpers-amd64-signed 1+16.1+2 amd64 6a6d340710ffc067198af33785d1e04836b2cc0d259ec4b080a06604d333a8cb debian-sid https://deb.debian.org/debian/pool/main/s/shim-helpers-amd64-signed/shim-helpers-amd64-signed_1+16.1+2_amd64.deb https://snapshot.debian.org/archive/debian/20260403T203237Z/pool/main/s/shim-helpers-amd64-signed/shim-helpers-amd64-signed_1%2B16.1%2B2_amd64.deb

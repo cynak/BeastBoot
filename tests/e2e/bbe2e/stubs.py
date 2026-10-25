@@ -6,7 +6,8 @@
   written to a disk image exactly the way ARCHITECTURE §3 says the installer
   writes boot code (boot.img at LBA 0, core.img at LBA 1, the layout.py patch
   points). So this also checks those patch points boot under SeaBIOS.
-* Secure Boot stub: Ubuntu's Microsoft-signed shim + MokManager + a GRUB with
+* Secure Boot stub: Debian's Microsoft-signed shim + MokManager (the ones
+  build/build.sh ships, build/shim/debian-shim.lock) + a GRUB with
   every module built in, SBAT copied from Ubuntu's signed GRUB, signed with a
   throwaway key generated here. Its menu reports `sb=` from GRUB's lockdown
   state and then tries to chainload the unsigned fixture payload.
@@ -228,8 +229,8 @@ def extract_sbat(pe: Path) -> bytes:
 
 def sb_stub_status() -> tuple[bool, str]:
     need = {
-        "shim": env.SHIM_DIR / "shimx64.efi.signed.latest",
-        "MokManager": env.SHIM_DIR / "mmx64.efi",
+        "shim": env.SHIM_DIR / "shimx64.efi.signed",
+        "MokManager": env.SHIM_DIR / "mmx64.efi.signed",
         "Ubuntu signed GRUB (for its SBAT)": env.GRUB_EFI_SIGNED_DIR / "grubx64.efi.signed",
         "OVMF secboot code": env.OVMF_CODE_SECBOOT,
         "OVMF MS vars": env.OVMF_VARS_MS,
@@ -267,8 +268,8 @@ def build_sb_stub(out: Path, payload: Path) -> dict[str, Path]:
     signed = out / "sb-stub.signed.efi"
     env.run(["sbsign", "--key", str(key), "--cert", str(crt), "--output", str(signed), str(unsigned)])
     esp = _fat_image(out / "sb-esp.img", {
-        "/EFI/BOOT/BOOTX64.EFI": env.SHIM_DIR / "shimx64.efi.signed.latest",
-        "/EFI/BOOT/mmx64.efi": env.SHIM_DIR / "mmx64.efi",
+        "/EFI/BOOT/BOOTX64.EFI": env.SHIM_DIR / "shimx64.efi.signed",
+        "/EFI/BOOT/mmx64.efi": env.SHIM_DIR / "mmx64.efi.signed",
         "/EFI/BOOT/grubx64.efi": signed,
         "/unsigned.efi": payload,
     })

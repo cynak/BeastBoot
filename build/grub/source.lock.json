@@ -1,0 +1,63 @@
+{
+  "comment": "Pinned inputs of the GRUB build (build/grub/grubsrc.py). Every file is checked against its SHA-256 before use. Change only together with build/grub/security-fixes.json (see docs/SECURE_BOOT.md, 'Where grubx64.efi comes from').",
+  "schema": 1,
+  "source_package": "grub2",
+  "source_version": "2.14-2ubuntu3",
+  "upstream_version": "2.14",
+  "patch_level": 1,
+  "series": "Ubuntu 26.10 stonking / 27.04 tenacious (Launchpad, release pocket)",
+  "purl_distro": "ubuntu-26.10",
+  "purl_distro_comment": "distro qualifier of our GRUB's purl (scripts/gen_sbom.py, via build-info.json): the series this source package comes from, so scanners compare it with that series' grub2-unsigned data - never the build host's series",
+  "source": [
+    {
+      "name": "grub2_2.14-2ubuntu3.dsc",
+      "sha256": "2c697a2d159bc2494f32eafbd6fb67cddf2b3a8ae1088f8108f4276c5a600c07",
+      "size": 7372,
+      "urls": ["https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/grub2/2.14-2ubuntu3/grub2_2.14-2ubuntu3.dsc"]
+    },
+    {
+      "name": "grub2_2.14.orig.tar.xz",
+      "sha256": "bc8d3c73535b8838d8c8e2654d73edc4e6ae8c8acdb45d5df5dc9a1547446d43",
+      "size": 7725668,
+      "note": "byte-identical to the upstream release tarball https://ftp.gnu.org/gnu/grub/grub-2.14.tar.xz",
+      "urls": ["https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/grub2/2.14-2ubuntu3/grub2_2.14.orig.tar.xz",
+               "https://ftp.gnu.org/gnu/grub/grub-2.14.tar.xz"]
+    },
+    {
+      "name": "grub2_2.14-2ubuntu3.debian.tar.xz",
+      "sha256": "5e8cc04300ff891370b9bdfe46f477b17694a97712f36a69c4d33ab19ab3aa91",
+      "size": 1140136,
+      "urls": ["https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/grub2/2.14-2ubuntu3/grub2_2.14-2ubuntu3.debian.tar.xz"]
+    }
+  ],
+  "minilzo": {
+    "comment": "debian/rules copies /usr/share/lzo/minilzo/*.[ch] (liblzo2-dev, newer than GRUB's bundled copy) into grub-core/lib/minilzo/; we take them from this pinned .deb",
+    "package": "liblzo2-dev", "version": "2.10-3build2", "arch": "amd64",
+    "sha256": "e0b7b5601ebcbb7072cb62defd3e05f15c300f423650ac23f9ba886abf93c646", "size": 98808
+  },
+  "unifont": {
+    "comment": "Build-Depends xfonts-unifont: configure finds unifont.pcf.gz and generates the built-in ASCII font (font.mod) and the character width table (normal.mod) from it",
+    "package": "xfonts-unifont", "version": "1:16.0.04-1build1", "arch": "all", "path": "usr/share/fonts/X11/misc/unifont.pcf.gz",
+    "sha256": "bc5810b41993c6b6014a3e57162619b97de1b2aaf4561b24144a44c8fb09a078", "size": 2737918
+  },
+  "host_tools": {
+    "comment": "Code generators GRUB's autogen.sh / build need. Used only when the host lacks them: unpacked without root into the cache (no maintainer scripts). Ubuntu 26.04 versions.",
+    "packages": [
+      {"package": "bison", "version": "2:3.8.2+dfsg-1ubuntu0.26.04.1", "arch": "amd64", "provides": ["bison"],
+       "sha256": "df3c66f15d5736094da21d45506c81027091c5a28f7b8f358bbef616a261a530", "size": 747792},
+      {"package": "flex", "version": "2.6.4-8.2build2", "arch": "amd64", "provides": ["flex"],
+       "sha256": "622d3959e0424ca276a01946a44a30c327d4bd6963f96b070b94e9b80b541bb8", "size": 299894},
+      {"package": "autopoint", "version": "0.23.2-1", "arch": "all", "provides": ["autopoint"],
+       "sha256": "b3b91d457f0bf08b617b09e8d3cfeb619f753e5c1adce6b70654f90254e9236e", "size": 619574},
+      {"package": "gawk", "version": "1:5.3.2-1ubuntu1.1", "arch": "amd64", "provides": ["gawk"],
+       "sha256": "125782ea78a32a9df4e9b7ef49f458dc57f2b81473658c73a5a5930f950ea330", "size": 526516}
+    ]
+  },
+  "docker": {
+    "comment": "Builder used when the host cannot build natively (BB_GRUB_BUILDER=docker forces it). apt resolves the packages against the Ubuntu snapshot archive at 'snapshot', so the toolchain is pinned too.",
+    "image": "docker.io/library/ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944",
+    "snapshot": "20261025T000000Z",
+    "apt": ["gcc", "binutils", "make", "python3", "autoconf", "automake", "autopoint", "gettext", "bison", "flex",
+            "gawk", "pkgconf", "patch", "xz-utils", "dpkg-dev", "ca-certificates", "libfreetype-dev"]
+  }
+}

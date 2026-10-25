@@ -973,23 +973,36 @@ class _UpdateRecords:
                 pass
 
 
-def _warn_firmware_tag(keep: dict[str, bytes], dist: Dist, rep: Reporter) -> None:
-    """Installed packs stay across update; say so when the new boot files'
-    catalog pins another linux-firmware tag than the packs were made for."""
+def _warn_firmware_tag(keep: dict[str, bytes], dist: Dist, rep: Reporter) -> list[str]:
+    """Installed packs stay across update. Warn, naming them, about each kept pack
+    the new boot files' catalog no longer matches: made for another kernel or
+    linux-firmware tag, or holding other files than the catalog now lists for it
+    (firmware.stale_reason; `firmware list` and the app mark the same packs
+    stale). Returns their ids."""
+    from . import firmware  # firmware imports this module
     raw = keep.get(FIRMWARE_INSTALLED_PATH)
     catalog = os.path.join(dist.esp_dir, "beast-net", "catalog.json")
     if raw is None or not os.path.isfile(catalog):
-        return
+        return []
     try:
         packs = json.loads(raw).get("packs") or []
-        with open(catalog, encoding="utf-8") as f:
-            tag = json.load(f)["source"]["tag"]
-        old = sorted({p.get("id", "?") for p in packs if p.get("catalog_tag") != tag})
-    except (ValueError, TypeError, KeyError, AttributeError, OSError):
-        return
-    if old:
-        rep.warn(f"firmware packs {', '.join(old)} were made for another linux-firmware tag than the new "
-                 f"catalog ({tag}); they are kept, reinstall them if a network adapter does not work")
+        cat = firmware.load_catalog(catalog)
+        stale = {p["id"]: r for p in packs
+                 if isinstance(p, dict) and isinstance(p.get("id"), str) and (r := firmware.stale_reason(p, cat))}
+    except (ValueError, TypeError, KeyError, AttributeError, OSError, BeastError):
+        return []
+    redo = sorted(pid for pid, r in stale.items() if firmware.stale_hint(r) == "reinstall it")
+    gone = sorted(pid for pid, r in stale.items() if firmware.stale_hint(r) != "reinstall it")
+    if redo:
+        rep.warn(f"firmware packs {', '.join(f'{pid} ({stale[pid]})' for pid in redo)} do not match the new "
+                 f"helper (linux-firmware tag {cat.tag}, kernel {cat.kernel or '?'}); they are kept, but may lack "
+                 "firmware its drivers ask for. Reinstall them after the update: in the app, Firmware packs, "
+                 "select them and Download and install...; or `firmware fetch --pack ID --out DIR` and "
+                 "`firmware install --from DIR`. `firmware list` marks them STALE until then")
+    if gone:
+        rep.warn(f"firmware packs {', '.join(gone)} are not in the new helper's catalog; they are kept, remove "
+                 "them with `firmware remove --pack ID` (or Remove... in the app)")
+    return sorted(stale)
 
 
 def update(image: str | None, device: str | None, dist_dir: str, *, yes: bool,

@@ -58,12 +58,13 @@ drivers/net/wireless/broadcom/**         # brcmfmac, brcmsmac, b43, b43legacy
 drivers/net/wireless/virtual/mac80211_hwsim   # tests
 # crypto that mac80211/cfg80211 request by algorithm name at run time
 # (crypto_alloc_*() -> request_module("crypto-..."), invisible to modules.dep);
-# aes/gcm/ctr/ghash/sha256/hmac/cbc/ecb are built in
+# aes/gcm/ctr/ghash/sha256/hmac/cbc/ecb are built in. Kernel 7.3 has no
+# michael_mic module (TKIP's Michael MIC is net/wireless/michael-mic.c, part of
+# cfg80211) and no ghash-clmulni-intel (GHASH is the built-in library
+# CRYPTO_LIB_GF128HASH, with its x86 PCLMULQDQ code: CONFIG_..._ARCH=y)
 ccm
 cmac
-michael_mic
 aesni-intel
-ghash-clmulni-intel
 libarc4
 
 # --- USB storage (the beast-booter drive itself) ------------------------------

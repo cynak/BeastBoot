@@ -8,6 +8,10 @@ Both implement the same small set of screens (``UI``), so the flow in
 - ``task``: run a function in a worker thread while showing that we are busy
 - ``download``: run the download job with a progress bar, speed and ETA
 - ``shell``: leave the screen to the user's shell for a while
+- ``document``: a longer text that scrolls, with a few buttons under it
+
+``set_mode`` switches the header and the step bar, e.g. for "Trust Ubuntu's
+Secure Boot key", which is not part of the download steps.
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ from typing import Any
 from collections.abc import Callable
 
 STEPS = ("Network", "Link", "Download", "Done")
+SUBTITLE = "beast-net: download an ISO from a link"
 
 
 @dataclass
@@ -98,9 +103,17 @@ class UI:
 
     def __init__(self) -> None:
         self.step = 0
+        self.subtitle = SUBTITLE
+        self.steps: tuple[str, ...] = STEPS
 
     def set_step(self, step: int) -> None:
         self.step = step
+
+    def set_mode(self, subtitle: str = SUBTITLE, steps: tuple[str, ...] = STEPS) -> tuple[str, tuple[str, ...]]:
+        """Change the header text and the step bar (no steps: no bar). Returns the old ones."""
+        old = (self.subtitle, self.steps)
+        self.subtitle, self.steps = subtitle, tuple(steps)
+        return old
 
     def menu(self, title: str, text: str, items: list[Item], *, kind: str = "",
              back: bool = True) -> Any:
@@ -114,6 +127,10 @@ class UI:
 
     def download(self, title: str, lines: list[str], job: Callable[..., Any]) -> Any:
         raise NotImplementedError
+
+    def document(self, title: str, text: str, items: list[Item], *, kind: str = "") -> Any:
+        """A text too long for ``menu`` (it scrolls), then a choice; None = back."""
+        return self.menu(title, text, items, kind=kind)
 
     def shell(self, fn: Callable[[], Any]) -> Any:
         return fn()

@@ -1,0 +1,62 @@
+Description: efi/peimage: only register loader when shim loader protocol absent
+ No CVE: a functional fix, needed with shim 16.
+ .
+ shim 16 provides an image loader protocol. GRUB uses it and registers it as
+ the EFI loader override (grub-core/kern/efi/sb.c, at EFI init). Ubuntu's
+ peimage module (debian/patches/secure-boot/efi-peimage.patch) then also
+ registered its own loader in GRUB_MOD_INIT, which fails and prints
+ "error: trying to register different loader." on every Secure Boot boot
+ with shim 16 (Debian's shim 16.1, which BeastBoot ships).
+ .
+ With this change peimage registers its loader only when shim offers no image
+ loader protocol (shim 15.x: peimage keeps loading kernels, verified through
+ shim_lock, as before), and GRUB_MOD_FINI unregisters it only if it was
+ registered. Which loader runs is unchanged: with shim 16 it was already
+ shim's (the second registration failed); only the error goes away. No
+ signature check or lockdown decision is touched.
+ .
+ Why we carry it: Ubuntu's grub2 2.14-2ubuntu3 lacks it. It is Debian's fix,
+ salsa grub-team/grub commit 8719ef8a523f2a89aeff1b86f5e14c3bba7a7d11
+ (2026-06-23, Mate Kukri), which changes efi-peimage.patch itself; here the
+ same change is applied to the patched source (grub-core/loader/efi/peimage.c
+ of Ubuntu 2.14-2ubuntu3, same code as Debian's). build/grub/security-fixes.json
+ checks on every build that it is present (and absent from Ubuntu's tree
+ alone). It changes no SBAT generation (grub.peimage stays as Ubuntu has it).
+Origin: vendor, https://salsa.debian.org/grub-team/grub/-/commit/8719ef8a523f2a89aeff1b86f5e14c3bba7a7d11
+Forwarded: not-needed
+Last-Update: 2026-10-25
+---
+diff --git a/grub-core/loader/efi/peimage.c b/grub-core/loader/efi/peimage.c
+--- a/grub-core/loader/efi/peimage.c
++++ b/grub-core/loader/efi/peimage.c
+@@ -910,13 +910,28 @@
+   .unload_image = do_unload_image,
+ };
+ 
++static int registered;
++
+ GRUB_MOD_INIT (peimage)
+ {
+-  grub_efi_register_loader (&peimage_loader);
++  static grub_guid_t shim_loader_guid = GRUB_EFI_SHIM_IMAGE_LOADER_GUID;
++
+   my_mod = mod;
++
++  /*
++   * When shim provides its own image loader protocol grub uses that (see
++   * grub-core/kern/efi/sb.c), which registers it as the override loader. Do
++   * not register a second one.
++   */
++  if (grub_efi_locate_protocol (&shim_loader_guid, 0) != NULL)
++    return;
++
++  grub_efi_register_loader (&peimage_loader);
++  registered = 1;
+ }
+ 
+ GRUB_MOD_FINI (peimage)
+ {
+-  grub_efi_unregister_loader (&peimage_loader);
++  if (registered)
++    grub_efi_unregister_loader (&peimage_loader);
+ }

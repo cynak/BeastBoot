@@ -38,7 +38,9 @@ import ast
 import datetime as dt
 import hashlib
 import json
+import os
 import re
+import subprocess
 import sys
 import uuid
 from pathlib import Path
@@ -58,7 +60,7 @@ SHIPPED_ROLES = ("shipped", "portable")   # CycloneDX scope "required": on the d
 # them with scope "excluded" so they can be scanned without being mistaken for
 # drive content. (package, role, what it is used for)
 TOOLING = [
-    ("grub2-common", "build", "grub-mkimage builds grubx64.efi and core.img"),
+    ("grub2-common", "build", "grub-mkfont makes the menu fonts (grub-mkimage comes from our GRUB source build)"),
     ("sbsigntool", "build", "sbsign/sbverify/sbattach sign and check grubx64.efi"),
     ("openssl", "build", "make keys (key + certificate), certificate checks"),
     ("binutils", "build", "objcopy reads the .sbat/.sbatlevel sections"),
@@ -86,7 +88,11 @@ UPSTREAMS = {
              "vcs": "https://github.com/rhboot/shim", "license": "BSD-2-Clause"},
 }
 SOURCE_FAMILY = {"grub2": "grub2", "grub2-unsigned": "grub2", "grub2-signed": "grub2",
-                 "shim": "shim", "shim-signed": "shim"}
+                 "shim": "shim", "shim-signed": "shim", "shim-helpers-amd64-signed": "shim"}
+VENDOR_NAME = {"ubuntu": "Ubuntu", "debian": "Debian"}
+# A file whose signature build.sh replaced: "built:deb:<pkg>=<ver>:<path> with its signatures
+# removed (sbattach --remove), signed:beast-booter" (the beast-net helper kernel).
+RESIGNED_MARK = "with its signatures removed"
 
 
 def die(msg: str) -> None:
@@ -137,15 +143,92 @@ def os_release() -> dict:
 # prose like "(... from deb:pkg=1.0)" or "deb:a=1, deb:b=2; 497 modules" out of the version.
 ORIGIN_DEB = re.compile(r"deb:([a-z0-9][a-z0-9+.-]*)=([0-9][0-9A-Za-z.+~:-]*?)(?::(/[^\s,;)\]]*))?(?=[\s,;)\]]|$)")
 ORIGIN_REPO = re.compile(r"repo:([^\s,]+)")
+# GRUB built from source by build/grub/grubsrc.py: grub-src:grub2=<version>[:/<path in its build dir>]
+ORIGIN_GRUB = re.compile(r"grub-src:([a-z0-9][a-z0-9+.-]*)=([0-9][0-9A-Za-z.+~:-]*?)(?::(/[^\s,;)\]]*))?(?=[\s,;)\]]|$)")
+
+
+def resigned_origin(path: Path, p: deb.DebPkg, member: str | None) -> str:
+    """A re-signed file (RESIGNED_MARK): its Authenticode digest (code without signatures) must be
+    that of `member` in package `p`."""
+    if not member:
+        return f"MISMATCH: origin names no file inside {p.name}"
+    if p.deb_path is not None:
+        where = f"{p.deb_path.name}:{member}"
+    else:
+        where = f"host {member} ({p.name} {p.version})"
+    try:
+        if p.deb_path is not None:
+            src = deb.deb_member_bytes(p.deb_path, member)
+        else:
+            src = Path(member).read_bytes() if Path(member).is_file() else None
+    except (OSError, subprocess.CalledProcessError) as e:
+        # e.g. /boot/vmlinuz-* is mode 0600 on Ubuntu: not verified, which is not a mismatch
+        return f"unverified: cannot read {where} ({e.__class__.__name__}: {e})"
+    if src is None:
+        return f"MISMATCH: {member} is not in {p.name} {p.version}"
+    try:
+        a = efi.authenticode_digest(efi.parse_pe(src)).hex()
+        b = efi.authenticode_digest(efi.parse_pe(path.read_bytes())).hex()
+    except efi.PEError as e:
+        return f"MISMATCH: not a PE image ({e})"
+    if a != b:
+        return f"MISMATCH: Authenticode digest differs from {where}"
+    return f"authenticode sha256 matches {where} (signature replaced by the beast-booter key)"
 
 
 def parse_origin(origin: str) -> dict:
     kind = origin.split(":", 1)[0] if ":" in origin else "unknown"
     debs = [{"name": m.group(1), "version": m.group(2), "path": m.group(3)}
             for m in ORIGIN_DEB.finditer(origin)]
-    return {"kind": {"deb": "copied"}.get(kind, kind), "debs": debs,
+    grub = [{"name": m.group(1), "version": m.group(2), "path": m.group(3)}
+            for m in ORIGIN_GRUB.finditer(origin)]
+    return {"kind": {"deb": "copied"}.get(kind, kind), "debs": debs, "grub": grub,
             "repo": ORIGIN_REPO.findall(origin), "signed_by_bb": "signed:beast-booter" in origin,
             "raw": origin}
+
+
+def evidence_label(e: dict) -> str:
+    """How a fix of the GRUB source build was proven: its upstream commit, or our patch
+    (build/grub/security-fixes.json evidence of a fix with no upstream GRUB commit)."""
+    return f"upstream {e['commit'][:12]}" if e.get("commit") else (e.get("patch") or "?")
+
+
+def grub_purl(version: str, distro: str) -> str:
+    """purl of our GRUB source build. Scanners (grype) match Debian/Ubuntu data through the
+    upstream (source package) qualifier; Ubuntu tracks GRUB's CVEs under grub2-unsigned."""
+    return (f"pkg:deb/beastboot/grub2@{quote(version, safe='')}?arch=amd64&distro={quote(distro, safe='')}"
+            "&upstream=grub2-unsigned")
+
+
+def grub_purl_distro(root: Path, info: dict) -> str:
+    """distro qualifier of our GRUB's purl: the Ubuntu series its source package comes from
+    (build/grub/source.lock.json purl_distro, recorded in build-info.json), not the build host's."""
+    if info.get("purl_distro"):
+        return info["purl_distro"]
+    return json.loads((root / "build/grub/source.lock.json").read_text())["purl_distro"]
+
+
+def load_grub_build(root: Path, manifest: dict) -> dict | None:
+    """The source-built GRUB the manifest names (build.grub_*): its build-info.json from the
+    build/grub/grubsrc.py cache, accepted only if its SHA-256 is the one the manifest recorded."""
+    b = manifest.get("build", {})
+    ver, key = b.get("grub_version"), b.get("grub_build_key")
+    if not ver or not key:
+        return None
+    cache = Path(os.environ.get("BB_GRUB_CACHE") or root / ".tools/cache/grub-src")
+    out = cache / "out" / key
+    info, note = None, None
+    p = out / "build-info.json"
+    if p.is_file():
+        raw = p.read_bytes()
+        if hashlib.sha256(raw).hexdigest() == b.get("grub_build_info_sha256"):
+            info = json.loads(raw)
+        else:
+            note = f"{p} is not the build-info.json the manifest recorded (grub_build_info_sha256)"
+    else:
+        note = (f"GRUB build {key} is not in {cache.relative_to(root) if cache.is_relative_to(root) else cache}/out "
+                "(`python3 -I build/grub/grubsrc.py build` recreates it)")
+    return {"version": ver, "key": key, "dir": out, "info": info, "note": note}
 
 
 ORIGIN_REPO_FILE = re.compile(r"(?:repo|key):([^\s,]+)")
@@ -340,6 +423,20 @@ class Model:
             self.deps[a].append((b, rel))
 
 
+def beastnet_kernel_distros(root: Path) -> dict[tuple[str, str], str]:
+    """(package, version) -> purl distro of the beast-net kernel and modules packages that
+    build/beastnet/packages.lock takes from another Ubuntu series (its 6th column, e.g.
+    ubuntu-26.10, read by lock.py from that series' signed InRelease)."""
+    out: dict[tuple[str, str], str] = {}
+    lock = root / "build" / "beastnet" / "packages.lock"
+    if lock.is_file():
+        for line in lock.read_text().splitlines():
+            f = line.split("#", 1)[0].split()
+            if len(f) == 6 and f[4] in ("kernel", "modules"):
+                out[(f[0], f[1])] = f[5]
+    return out
+
+
 def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
                 runtimes: Path | None = None) -> tuple[Model, dict]:
     mpath = dist / "manifest.json"
@@ -353,6 +450,7 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
     tools_root = root / ".tools" / "root"
     resolve = deb.Resolver(root)
     beastnet_pkgs = set(resolve.lock)
+    kernel_distro = beastnet_kernel_distros(root)
     m = Model()
     version = manifest["version"]
     root_ref = f"beast-booter@{version}"
@@ -424,6 +522,7 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
                      "grub-efi-modules": " ".join(manifest.get("build", {}).get("efi_modules", [])),
                      "grub-efi-prefix": manifest.get("build", {}).get("efi_prefix"),
                      "grub-bios-core-modules": " ".join(manifest.get("build", {}).get("bios_core_modules", [])),
+                     "grub-build-key": manifest.get("build", {}).get("grub_build_key"),
                      "sbat-version-check": sb.get("sbat_version_check")}})
 
     # ---- licenses + package components ----------------------------------------------------
@@ -438,7 +537,7 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
         license_refs.update({k: v.replace(str(root) + "/", "") for k, v in lic["refs"].items()})
         maint = re.match(r"\s*(.*?)\s*<([^>]+)>", p.maintainer or "")
         item = {"ref": ref, "kind": "package", "role": role, "name": p.name, "version": p.version,
-                "purl": deb.purl(p, distro), "arch": p.arch,
+                "purl": deb.purl(p, kernel_distro.get((p.name, p.version), distro)), "arch": p.arch,
                 "supplier": maint.group(1) if maint else (p.maintainer or None),
                 "supplier_email": maint.group(2) if maint else None,
                 "homepage": p.homepage or None, "license": lic["expression"],
@@ -459,7 +558,7 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
                 item["props"]["upstream"] = up
         return ref
 
-    def add_upstream(fam: str, ver: str | None, p: deb.DebPkg) -> str | None:
+    def add_upstream(fam: str, ver: str | None, p: deb.DebPkg | None, of: str | None = None) -> str | None:
         u = UPSTREAMS[fam]
         if ver is None:          # shim: version from Built-Using (shim-signed embeds shim X)
             bu = dict(p.built_using)
@@ -475,9 +574,11 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
                "cpe": f"cpe:2.3:a:{u['cpe_vendor']}:{u['cpe_product']}:{ver}:*:*:*:*:*:*:*",
                "homepage": u["website"], "vcs": u["vcs"], "license": u["license"],
                "license_source": "upstream project (also stated in README.md)",
-               "description": f"{u['title']} {ver} upstream source, as packaged by Ubuntu",
+               "description": (f"{u['title']} {ver} upstream source, as packaged by "
+                               f"{VENDOR_NAME.get(p.vendor, p.vendor)}") if p is not None else
+                              f"{u['title']} {ver} upstream source, built by beast-booter ({of})",
                "props": {"role": "shipped", "upstream-of": []}})
-        m.items[ref]["props"]["upstream-of"].append(p.name)
+        m.items[ref]["props"]["upstream-of"].append(of or p.name)
         return ref
 
     for name in sorted(pkgs):
@@ -486,7 +587,13 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
             continue
         used = {"grub-efi-amd64-signed": "only its SBAT CSV is copied into grubx64.efi's .sbat; "
                                          "its signed grubx64.efi.signed is NOT shipped",
-                "grub2-common": "shipped: grub/fonts/unicode.pf2; build: grub-mkimage"}.get(name, "")
+                "grub2-common": "shipped: grub/fonts/unicode.pf2; build: grub-mkfont",
+                "shim-signed": "shipped: esp/EFI/BOOT/BOOTX64.EFI (Debian's shim, signed through Microsoft "
+                               "UEFI CA 2011 and Microsoft UEFI CA 2023)",
+                "shim-helpers-amd64-signed": "shipped: esp/EFI/BOOT/mmx64.efi (MokManager, signed with "
+                                             "Debian's shim key); its fbx64.efi is NOT shipped"}.get(name, "")
+        if pkgs[name].vendor != "ubuntu":
+            used = (used + "; " if used else "") + "pinned in build/shim/debian-shim.lock"
         ref = add_pkg(pkgs[name], role, used)
         p = pkgs[name]
         if role == "shipped":
@@ -494,13 +601,98 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
             for src, sver in p.built_using:          # code embedded in this binary package
                 bref = f"deb-src:{src}@{sver}"
                 m.add({"ref": bref, "kind": "source", "role": "shipped", "name": src, "version": sver,
-                       "purl": deb.source_purl(src, sver, distro), "supplier": "Ubuntu",
+                       "purl": deb.source_purl(src, sver, kernel_distro.get((p.name, p.version)) or p.distro or distro, namespace=p.vendor),
+                       "supplier": VENDOR_NAME.get(p.vendor, p.vendor),
                        "license": "NOASSERTION", "license_source": "source package (see binary package)",
                        "description": f"source package built into {p.name} (Built-Using)",
                        "props": {"role": "shipped", "built-using-of": p.name}})
                 m.dep(ref, bref, "GENERATED_FROM")
         else:
             m.dep(ref, root_ref, "BUILD_DEPENDENCY_OF")
+
+    # ---- GRUB built from source (build/grub/grubsrc.py) -----------------------------------
+    # One component for our build (the code on the drive), DESCENDANT_OF upstream GNU GRUB
+    # (CPE: NVD ranges apply to the upstream version) and GENERATED_FROM Ubuntu's source
+    # package. Its purl names that source package with our patch level as the version, so
+    # scanners match Ubuntu's tracker data for grub2 against exactly this build.
+    grub = load_grub_build(root, manifest)
+    grub_ref = None
+    if grub:
+        info = grub["info"] or {}
+        grub_ref = f"grub-src:grub2@{grub['version']}"
+        if grub["note"]:
+            m.notes.append(grub["note"])
+        src_ver = info.get("source_version") or grub["version"].rsplit("+bb", 1)[0]
+        up_ver = info.get("upstream_version") or src_ver.split("-", 1)[0]
+        fixes = (info.get("security_fixes") or {}).get("fixes", [])
+        claims = (info.get("security_fixes") or {}).get("sbat_claims", [])
+        patches = info.get("beast_booter_patches", [])
+        pedigree_patches = []
+        for p_ in patches:
+            fixed = [f for f in fixes if f["where"].startswith(f"build/grub/patches/{p_['name']}")]
+            pedigree_patches.append({"type": "backport", "diff": {"url": f"build/grub/patches/{p_['name']}"},
+                                     "resolves": [{"type": "defect" if f.get("type") == "defect" else "security",
+                                                   "id": f["id"]} for f in fixed]})
+        dsc = next((s for s in info.get("source", []) if s["name"].endswith(".dsc")), None)
+        grub_distro = grub_purl_distro(root, info)
+
+        def fix_label(f: dict) -> str:
+            return f"{f['id']} ({', '.join(evidence_label(e) for e in f['evidence'])}; {f['where']})"
+        sec_fixes = [f for f in fixes if f["present"] and f.get("type", "security") != "defect"]
+        defect_fixes = [f for f in fixes if f["present"] and f.get("type") == "defect"]
+        m.add({"ref": grub_ref, "kind": "source-build", "role": "shipped", "name": "grub2",
+               "version": grub["version"], "purl": grub_purl(grub["version"], grub_distro),
+               "supplier": "beast-booter maintainers", "homepage": UPSTREAMS["grub2"]["website"],
+               "license": "GPL-3.0-or-later", "license_source": "GNU GRUB (debian/copyright of the grub2 source package)",
+               "description": (f"GNU GRUB {up_ver} built by beast-booter (build/grub/grubsrc.py) from Ubuntu's grub2 "
+                               f"{src_ver} source package with its {info.get('ubuntu_patches', '?')} Ubuntu patches "
+                               f"plus {len(patches)} beast-booter patch(es); x86_64-efi (grubx64.efi) and i386-pc"),
+               "pedigree": {"patches": pedigree_patches,
+                            "notes": (f"Ubuntu grub2 {src_ver} (debian/patches/series, applied unchanged) + "
+                                      "build/grub/patches/series. Each fix is proven present by reverse-applying "
+                                      "its evidence to the patched source (patch -R --dry-run -F0): its upstream "
+                                      "commit, or, for a fix with no upstream GRUB commit, our patch (which must "
+                                      "not reverse-apply to Ubuntu's tree alone). Security fixes: " +
+                                      ("; ".join(fix_label(f) for f in sec_fixes) or "none") +
+                                      (". Defect fixes (no SBAT generation): " + "; ".join(fix_label(f) for f in defect_fixes)
+                                       if defect_fixes else ""))}
+               if info else None,
+               "props": {"role": "shipped", "source-package": "grub2", "source-version": src_ver,
+                         "upstream": f"upstream:gnu-grub@{up_ver}",
+                         "grub-build-key": grub["key"],
+                         "grub-build-info-sha256": manifest.get("build", {}).get("grub_build_info_sha256"),
+                         "built-by": "build/grub/grubsrc.py (inputs: build/grub/source.lock.json, patches/, "
+                                     "security-fixes.json)",
+                         "toolchain": "; ".join(f"{k}: {info['toolchain'][k]}" for k in ("gcc", "ld", "bison")
+                                                if k in info.get("toolchain", {})) or None,
+                         "beast-booter-patches": [f"{p_['name']} sha256:{p_['sha256']}" for p_ in patches],
+                         "security-fixes": [f"{f['id']}: {'present' if f['present'] else 'MISSING'} "
+                                            f"({', '.join(evidence_label(e) for e in f['evidence'])}; {f['where']})"
+                                            for f in fixes],
+                         "sbat-claims": [f"{c['component']},{c['generation']} (SbatLevel {c['shim_sbat_level']}): "
+                                         f"{'proven' if c['proven'] else 'NOT proven'}" for c in claims],
+                         "vulnerability-tracking": (
+                             f"purl: vendor beastboot, distro {grub_distro} (the series of the grub2 source package, "
+                             "build/grub/source.lock.json), upstream=grub2-unsigned - Ubuntu's CVE "
+                             "tracker records GRUB's state under grub2-unsigned (the source package of Ubuntu's EFI "
+                             "GRUB, built from the same grub2 source), so scanners compare that data with our build "
+                             f"version; the upstream:gnu-grub@{up_ver} component carries the CPE (NVD)")}})
+        m.dep(root_ref, grub_ref, "CONTAINS")
+        up = add_upstream("grub2", up_ver, None, of=f"grub2 {grub['version']} (source build)")
+        m.dep(grub_ref, up, "DESCENDANT_OF")
+        sref = f"deb-src:grub2@{src_ver}"
+        m.add({"ref": sref, "kind": "source", "role": "shipped", "name": "grub2", "version": src_ver,
+               "supplier": "Ubuntu", "license": "GPL-3.0-or-later",
+               "license_source": "debian/copyright of the grub2 source package",
+               "distribution": dsc["url"] if dsc else None,
+               "hashes": {"SHA-256": dsc["sha256"]} if dsc else None,
+               "description": f"Ubuntu grub2 {src_ver} source package (.dsc + orig + debian tarballs, SHA-256 in "
+                              "build/grub/source.lock.json) that our GRUB is built from",
+               "props": {"role": "shipped", "source-files": [f"{s['name']} sha256:{s['sha256']}"
+                                                             for s in info.get("source", [])],
+                         "vulnerability-tracking": f"on {grub_ref} (this exact source plus our patches); "
+                                                   "no purl here so findings are not reported twice"}})
+        m.dep(grub_ref, sref, "GENERATED_FROM")
 
     # ---- tooling (build / install / test) ---------------------------------------------------
     for name, role, used in TOOLING:
@@ -571,6 +763,25 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
                 m.notes.append(f"{rel}: {item['props']['origin-verified']}")
                 m.provenance_errors.append(f"{rel}: {item['props']['origin-verified']}")
             m.dep(fref, item["parent"], "CONTAINED_BY")
+        elif o["kind"] == "grub-src":
+            g = o["grub"][0] if o["grub"] else {}
+            if grub_ref is None or g.get("version") != grub["version"] or not g.get("path"):
+                item["props"]["origin-verified"] = "MISMATCH: origin names no file of the manifest's GRUB build"
+            elif grub["info"] is None:
+                item["props"]["origin-verified"] = f"UNVERIFIED: {grub['note']}"
+            else:
+                want = grub["info"]["files"].get(g["path"].lstrip("/"))
+                item["props"]["origin-verified"] = (
+                    f"sha256 matches build-info.json of GRUB build {grub['key']} ({g['path'].lstrip('/')})"
+                    if want == f["sha256"] else
+                    f"MISMATCH: differs from {g['path'].lstrip('/')} of GRUB build {grub['key']}")
+                item["props"]["package-path"] = g["path"]
+            if grub_ref:
+                item["parent"] = grub_ref
+                m.dep(fref, grub_ref, "CONTAINED_BY")
+            if item["props"]["origin-verified"].startswith("MISMATCH"):
+                m.notes.append(f"{rel}: {item['props']['origin-verified']}")
+                m.provenance_errors.append(f"{rel}: {item['props']['origin-verified']}")
         elif o["kind"] == "built":
             item["props"]["built-from"] = o["raw"].removeprefix("built:")
             tools = []
@@ -581,9 +792,21 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
             item["props"]["built-with"] = tools
             for d in o["debs"]:
                 m.dep(fref, pkg_ref(d["name"], d["version"]), "GENERATED_FROM")
+            if grub_ref and any(g["version"] == grub["version"] for g in o["grub"]):
+                m.dep(fref, grub_ref, "GENERATED_FROM")
+                if rel.endswith("grubx64.efi"):
+                    item["props"]["sbat-source"] = sb.get("sbat_source")
             if rel.endswith("grubx64.efi") and sbat_src:
                 m.dep(fref, pkg_ref(sbat_src.group(1), sbat_src.group(2)), "GENERATED_FROM")
                 item["props"]["sbat-source"] = sb.get("sbat_source")
+            if RESIGNED_MARK in o["raw"] and o["debs"]:
+                v = resigned_origin(dist / rel, pkgs[o["debs"][0]["name"]], o["debs"][0]["path"])
+                item["props"]["origin-verified"] = v
+                item["props"]["re-signed"] = ("the package's signature was removed and the file signed with the "
+                                              "beast-booter key; the code (Authenticode digest) is unchanged")
+                if v.startswith("MISMATCH"):
+                    m.notes.append(f"{rel}: {v}")
+                    m.provenance_errors.append(f"{rel}: {v}")
         elif o["kind"] == "local":
             item["props"]["provenance-warning"] = (
                 "built from a local path outside the repository; not reproducible from the repo - "
@@ -593,7 +816,7 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
             item["props"]["origin-verified"] = verify_repo_origin(root, dist / rel, o["raw"])
             if not item["props"]["origin-verified"].startswith("sha256 matches"):
                 m.notes.append(f"{rel}: {item['props']['origin-verified']}")
-        if o["kind"] != "copied":
+        if o["kind"] not in ("copied", "grub-src") or (o["kind"] == "grub-src" and grub_ref is None):
             m.dep(root_ref, fref, "CONTAINS")
         # EFI binaries: SBAT, Authenticode, signers
         if rel.lower().endswith(".efi"):
@@ -635,7 +858,7 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
             item["props"]["manifest-cert-matches"] = str(c["sha256"] == sb.get("cert_sha256")).lower()
         # Linux kernel images (beast-net): the kernel itself as a component, with the identity
         # syft derives from the bzImage header (pkg:generic/linux-kernel@<release>).
-        kv = kernel_version_string(dist / rel) if o["kind"] == "copied" else None
+        kv = kernel_version_string(dist / rel) if o["kind"] == "copied" or RESIGNED_MARK in o["raw"] else None
         if kv:
             release = kv.split()[0]
             p = pkgs[o["debs"][0]["name"]]
@@ -692,7 +915,7 @@ def to_cyclonedx(m: Model, ctx: dict, distro: str, osr: dict) -> dict:
         c: dict = {"type": {"package": "application", "upstream": "application", "source": "application",
                             "installer": "application", "root": "application", "file": "file",
                             "portable": "application", "runtime": "application", "runtime-lib": "library",
-                            "cert": "cryptographic-asset"}[i["kind"]],
+                            "source-build": "application", "cert": "cryptographic-asset"}[i["kind"]],
                    "bom-ref": i["ref"]}
         if i.get("supplier"):
             c["supplier"] = {"name": i["supplier"]}
@@ -727,6 +950,8 @@ def to_cyclonedx(m: Model, ctx: dict, distro: str, osr: dict) -> dict:
             refs.append({"type": "distribution", "url": i["distribution"]})
         if refs:
             c["externalReferences"] = refs
+        if i.get("pedigree"):
+            c["pedigree"] = i["pedigree"]
         if i["kind"] == "cert":
             ce = i["cert"]
             c["cryptoProperties"] = {"assetType": "certificate", "certificateProperties": {
@@ -777,7 +1002,8 @@ def to_cyclonedx(m: Model, ctx: dict, distro: str, osr: dict) -> dict:
         workflow("make-build", "make build (build/build.sh)", "build",
                  by_rel("BUILD_TOOL_OF") + by_rel("BUILD_DEPENDENCY_OF") +
                  [i["ref"] for i in m.items.values() if i.get("props", {}).get("also-build-tool")],
-                 "Builds dist/ from Ubuntu packages and repo files; signs grubx64.efi with the beast-booter key."),
+                 "Builds dist/ from Ubuntu packages, Debian's shim packages and repo files; signs grubx64.efi "
+                 "and the beast-net helper kernel with the beast-booter key."),
         workflow("install", "beast-booter install / update (installer)", "deploy",
                  inst + by_rel("RUNTIME_DEPENDENCY_OF"),
                  "Partitions and formats a drive and copies dist/ onto it."),

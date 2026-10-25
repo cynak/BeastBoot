@@ -10,7 +10,7 @@ from conftest import fsck, info_json, needs_fsck, read_events, run_cli, sha_regi
 from fakebackend import FakeBackend
 from fwhelpers import TAG, contents, make_bn_dist, make_catalog, make_fetched
 
-from beastbooter import commands
+from beastbooter import commands, firmware
 from beastbooter.blockio import ImageTarget
 from beastbooter.cpio import FILE_MODE, build_pack, header, trailer
 from beastbooter.fatfs import FatVolume
@@ -182,13 +182,81 @@ def test_drive_without_catalog_uses_dist(tmp_path, fake_dist, bn_dist, packs, ca
     assert read_events(progress)[-1]["info"]["catalog"]["source"] == "dist"
 
 
-def test_update_keeps_installed_packs(image, packs, bn_dist, tmp_path):
+def test_update_keeps_installed_packs(image, packs, bn_dist, tmp_path, capsys):
     assert fw("install", "--image", image, "--from", packs / "both") == 0
     before = esp_read(image, FIRMWARE_INSTALLED_PATH)
+    capsys.readouterr()
     assert run_cli("update", "--image", image, "--dist", bn_dist, "--quiet") == 0
+    assert "warning" not in capsys.readouterr().err  # the same catalog: nothing stale
     assert esp_read(image, FIRMWARE_INSTALLED_PATH) == before
     assert esp_read(image, "beast-net/firmware/acme-wifi.cpio") == (packs / "both/acme-wifi.cpio").read_bytes()
     assert esp_read(image, "beast-net/catalog.json") is not None
+    assert fw("list", "--image", image, "--json") == 0
+    assert not any(p.get("stale") for p in json.loads(capsys.readouterr().out)["packs"])
+
+
+NEW_KERNEL = "9.9.10-2-generic"
+
+
+def new_kernel_catalog() -> dict:
+    """The catalog of boot files whose helper moved to another kernel with the same
+    linux-firmware tag (0.1.1 -> 0.1.2): acme-wifi's drivers ask for other files."""
+    cat = make_catalog(CATALOG["source"]["url_template"], kernel=NEW_KERNEL)
+    acme = next(p for p in cat["packs"] if p["id"] == "acme-wifi")
+    acme["files"] = [f for f in acme["files"] if f["path"] != "odd/name with space.txt"]
+    acme["size"] = sum(f["size"] for f in acme["files"])
+    return cat
+
+
+def test_update_flags_packs_made_for_another_kernel(image, packs, tmp_path, capsys):
+    assert fw("install", "--image", image, "--from", packs / "both") == 0
+    new = new_kernel_catalog()
+    assert new["source"]["tag"] == TAG  # only the kernel and the file lists differ
+    dist2 = make_bn_dist(tmp_path / "dist2", new)
+    capsys.readouterr()
+    assert run_cli("update", "--image", image, "--dist", dist2, "--quiet") == 0
+    err = capsys.readouterr().err
+    assert ("firmware packs acme-wifi (made for kernel 9.9.9-1-generic), tiny-eth (made for kernel "
+            "9.9.9-1-generic) do not match the new helper") in err
+    assert f"kernel {NEW_KERNEL}" in err and "Reinstall them" in err and "firmware install" in err
+    assert esp_read(image, "beast-net/firmware/acme-wifi.cpio") == (packs / "both/acme-wifi.cpio").read_bytes()
+
+    assert fw("list", "--image", image, "--json") == 0
+    listed = json.loads(capsys.readouterr().out)
+    assert listed["kernel"] == NEW_KERNEL
+    assert {p["id"]: p.get("stale_reason") for p in listed["packs"] if p.get("stale")} == {
+        "acme-wifi": "made for kernel 9.9.9-1-generic", "tiny-eth": "made for kernel 9.9.9-1-generic"}
+    assert fw("list", "--image", image) == 0
+    out = capsys.readouterr().out
+    assert "(STALE: made for kernel 9.9.9-1-generic; reinstall it)" in out and "replaces it" in out
+
+    # reinstalling, fetched with the new catalog, replaces the pack made for the old kernel
+    src = make_fetched(tmp_path / "new", new, "acme-wifi",
+                       files={k: v for k, v in contents("acme-wifi").items() if k != "odd/name with space.txt"})
+    assert fw("install", "--image", image, "--from", src) == 0
+    assert esp_read(image, "beast-net/firmware/acme-wifi.cpio") == (src / "acme-wifi.cpio").read_bytes()
+    entry = next(p for p in json.loads(esp_read(image, FIRMWARE_INSTALLED_PATH))["packs"] if p["id"] == "acme-wifi")
+    assert entry["kernel"] == NEW_KERNEL and "odd/name with space.txt" not in {f["path"] for f in entry["files"]}
+    capsys.readouterr()
+    assert fw("list", "--image", image, "--json") == 0
+    listed = json.loads(capsys.readouterr().out)
+    assert [p["id"] for p in listed["packs"] if p.get("stale")] == ["tiny-eth"]
+
+
+def test_stale_reason():
+    cat = firmware.parse_catalog(json.dumps(CATALOG).encode(), "test")
+    entry = firmware.pack_entry(cat.packs["acme-wifi"], cat, "0" * 64)
+    assert firmware.stale_reason(entry, cat) is None
+    assert firmware.stale_reason({**entry, "kernel": ""}, cat) is None  # an entry without a kernel: by its files
+    assert firmware.stale_reason({**entry, "kernel": "1.0"}, cat) == "made for kernel 1.0"
+    assert firmware.stale_reason({**entry, "catalog_tag": "20000101"}, cat) == "made for linux-firmware tag 20000101"
+    other = {**entry, "files": entry["files"][1:]}  # same tag and kernel, other files
+    assert firmware.stale_reason(other, cat) == "made for other firmware files than the catalog lists"
+    assert firmware.stale_reason({**entry, "id": "gone-pack"}, cat) == "not in the drive's catalog"
+    assert firmware.stale_hint("not in the drive's catalog") == "remove it"
+    # a valid-JSON but malformed installed.json (mixed types) is "other files", never a crash
+    bad = {**entry, "files": [{"path": None}, {"path": "a", "size": "x"}, "junk"]}
+    assert firmware.stale_reason(bad, cat) == "made for other firmware files than the catalog lists"
 
 
 # ---------------------------------------------------------------------------

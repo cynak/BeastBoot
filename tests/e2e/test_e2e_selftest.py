@@ -2,7 +2,7 @@
 
 Unit tests for the serial parser and the screen emulator, plus real QEMU boots
 of stand-in GRUB images (bbe2e/stubs.py) under SeaBIOS, OVMF and OVMF with
-Secure Boot (Ubuntu's real shim, a throwaway-signed GRUB stub, MOK pre-seeded
+Secure Boot (Debian's real shim, a throwaway-signed GRUB stub, MOK pre-seeded
 with virt-fw-vars).
 """
 

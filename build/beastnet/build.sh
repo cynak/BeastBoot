@@ -28,7 +28,6 @@
 #   BB_OFFLINE=1        fail instead of downloading anything
 #   BB_BEASTNET_REVERIFY=1  download every firmware file of the catalog from kernel.org
 #                       again and compare its SHA-256 (release check; needs network)
-#   BB_SHIM_DIR         shim-signed directory: the kernel is verified against the Canonical CA
 #                       embedded in that shim (set by scripts/dev-env.sh)
 set -euo pipefail
 export LC_ALL=C TZ=UTC
@@ -47,7 +46,7 @@ die()  { echo "beastnet: error: $*" >&2; exit 1; }
 py()   { python3 -I "$@"; }
 
 [ $# -eq 1 ] || die "usage: $0 OUT_DIR"
-for t in python3 dpkg-deb tar sha256sum sbverify objcopy openssl; do
+for t in python3 dpkg-deb tar sha256sum sbverify objcopy openssl git; do
   command -v "$t" >/dev/null || die "required tool not found: $t"
 done
 py -c 'import lzma, sys; sys.exit(sys.version_info < (3, 10))' || die "python3 >= 3.10 with lzma required"
@@ -84,7 +83,7 @@ KVER="${KPKG#linux-image-}"
 KDEB="$DEBS/${KPKG}_${KVERSION//:/%3a}_${KARCH}.deb"
 
 # ---------------------------------------------------------------------------
-# vmlinuz: unmodified, Canonical-signed, chains to the CA in the shim we ship
+# vmlinuz: unmodified, Canonical-signed, chains to Canonical's Master CA
 # ---------------------------------------------------------------------------
 VMLINUZ_PATH="/boot/vmlinuz-$KVER"
 mkdir -p "$WORK/out/beast-net"
@@ -97,31 +96,18 @@ sigs="$(sbverify --list "$WORK/out/beast-net/vmlinuz" 2>/dev/null)" || true
 KSIGNER="$(sed -n 's/^ - subject: .*CN=//p' <<<"$sigs" | head -n1)"
 grep -q 'issuer: .*O=Canonical Ltd\./CN=Canonical Ltd\. Master Certificate Authority' <<<"$sigs" \
   || die "vmlinuz is not signed by a Canonical Ltd. Master Certificate Authority certificate"
-SHIM="${BB_SHIM_DIR:-/usr/lib/shim}/shimx64.efi.signed.latest"
 KCHECK="signer CN=$KSIGNER"
-if [ -f "$SHIM" ]; then
-  # The Canonical CA that shim trusts (its .vendor_cert section) must verify the kernel.
-  objcopy -O binary --only-section=.vendor_cert "$SHIM" "$WORK/vendor_cert.raw"
-  py - "$WORK/vendor_cert.raw" "$WORK/vendor.der" <<'EOF'
-import struct, sys
-d = open(sys.argv[1], "rb").read()
-size, _dsize, off, _doff = struct.unpack_from("<IIII", d, 0)
-open(sys.argv[2], "wb").write(d[off:off + size])
-EOF
-  openssl x509 -inform DER -in "$WORK/vendor.der" -out "$WORK/vendor.pem" 2>/dev/null \
-    || die "$SHIM: .vendor_cert is not a single X.509 certificate"
-  vsubj="$(openssl x509 -in "$WORK/vendor.pem" -noout -subject -nameopt RFC2253 | sed 's/^subject=//')"
-  sbverify --cert "$WORK/vendor.pem" "$WORK/out/beast-net/vmlinuz" >/dev/null 2>&1 \
-    || die "vmlinuz does not verify against the vendor certificate of $SHIM ($vsubj)"
-  KCHECK="$KCHECK; verifies against shim's vendor cert $vsubj"
-  if [ -x "${BB_SHIM_DIR:-/usr/lib/shim}/is-not-revoked" ]; then
-    "${BB_SHIM_DIR:-/usr/lib/shim}/is-not-revoked" "$WORK/out/beast-net/vmlinuz" 2>"$WORK/revoked.log" \
-      || { cat "$WORK/revoked.log" >&2; die "vmlinuz is signed with a revoked Canonical key"; }
-    KCHECK="$KCHECK; not revoked (shim-signed is-not-revoked)"
-  fi
-else
-  warn "$SHIM not found: kernel signature checked by issuer name only"
-fi
+# The drive boots through Debian's shim, so Canonical's CA is not built into it;
+# check against the copy Ubuntu's own shim trusts (build/trust/canonical, see
+# build/trust/README.md). build/build.sh then replaces this signature with the
+# MOK one and also checks the 8 certificates Ubuntu revoked.
+CANON_CA="$BB_ROOT/build/trust/canonical/canonical-master-ca.der"
+[ -f "$CANON_CA" ] || die "$CANON_CA is missing (build/trust/README.md)"
+openssl x509 -inform DER -in "$CANON_CA" -out "$WORK/canonical-ca.pem" 2>/dev/null \
+  || die "$CANON_CA is not an X.509 certificate"
+sbverify --cert "$WORK/canonical-ca.pem" "$WORK/out/beast-net/vmlinuz" >/dev/null 2>&1 \
+  || die "vmlinuz does not verify against Canonical's Master CA ($CANON_CA)"
+KCHECK="$KCHECK; verifies against Canonical's Master CA (build/trust/canonical)"
 log "vmlinuz: $KPKG=$KVERSION, $KCHECK"
 
 # ---------------------------------------------------------------------------

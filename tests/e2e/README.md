@@ -66,6 +66,7 @@ bbe2e/trees.py              data-partition trees and the listings they must prod
 bbe2e/checks.py             shared assertions (ready line, listing, interactive browse flow)
 bbe2e/beastnet.py           beast-net helpers: BEASTNET: lines, ESP/grubenv access, fake firmware packs, host HTTP(S) server
 bbe2e/stubs.py              stand-in GRUB images for the self-test (incl. a shim + throwaway-signed GRUB)
+bbe2e/sbtrust.py            Secure Boot trust fixtures: 2023-only db, MokList/MokListX stores, Canonical-signed kernel, test CA
 fixtures/build_fixtures.py  fixture ISOs (python3 tests/e2e/fixtures/build_fixtures.py [--force] [NAME...])
 test_e2e_*.py               the tests
 ```
@@ -96,9 +97,11 @@ They cover "Download an ISO from a link" (docs/BEASTNET.md) end to end, about
 - **Menu** (GRUB only, dry run): with no ISOs on the data partition the root
   menu is `System: ...`, then **Download an ISO from a link**; selecting it
   prints `BEAST: boot beast-net recipe=beast-net` and the exact helper command
-  line (data and ESP UUIDs, `beastnet.sb`, serial console) and initrds.
+  line (data and ESP UUIDs, `beastnet.sb`, serial console) and initrds. On UEFI
+  the next entry, **Trust Ubuntu's Secure Boot key**, gives the same command line
+  plus `beastnet.action=trust-ubuntu` (absent under BIOS).
 - **Helper boot** on BIOS, UEFI and UEFI + Secure Boot (MOK enrolled): Ubuntu's
-  signed kernel starts through our GRUB (shim verifies it) and prints
+  kernel, re-signed with the beast-booter key, starts through our GRUB (shim verifies it) and prints
   `BEASTNET: ready kernel=<kver> sb=<0|1>`.
 - **Download and one-shot** in script mode (`bb_beastnet_script` in config.cfg
   -> `beastnet.script=`): DHCP on a virtio NIC, HTTP download from a server on
@@ -156,5 +159,9 @@ The quick check without a VM is `make net-sources`
   `OVMF_CODE_4M.secboot.fd`, and vars from `OVMF_VARS_4M.ms.fd`.
   "Enrolled" means `virt-fw-vars --add-mok <guid> <cert>`, which pre-seeds MokList
   exactly as MokManager enrollment would. Nothing else about verification is changed.
+  test_e2e_secureboot.py also builds stores at test time (bbe2e/sbtrust.py): a
+  "2023-only" db (`--enroll-generate ... --microsoft-kek 2023 --microsoft-db uefi23 --sb`,
+  no 2011 CA), and MokListX entries (built as a MokList, renamed in a JSON dump,
+  set with `--set-json`). They skip when virt-fw-vars lacks those options.
 - `-chardev stdio,signal=off -serial chardev:ser0`, `-qmp unix:...`, `-no-reboot`.
   A watchdog kills QEMU after a hard timeout.

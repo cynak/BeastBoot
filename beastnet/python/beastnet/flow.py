@@ -6,7 +6,7 @@ import os
 import re
 from urllib.parse import urlsplit
 
-from . import grubenv
+from . import grubenv, trust
 from .context import Context, Quit, make_request
 from .download import DownloadResult, Plan, human_size
 from .errors import TLS, WIFI_AUTH, BeastNetError, Cancelled
@@ -25,6 +25,9 @@ def looks_like_iso(path: str) -> bool:
         return False
 
 
+TRUST_TITLE = "Trust Ubuntu's Secure Boot key"
+
+
 class Interactive:
     def __init__(self, ctx: Context, ui: UI) -> None:
         self.ctx = ctx
@@ -33,8 +36,14 @@ class Interactive:
         self.url = "https://"
         self.checksum = ""
 
+    def make_trust(self) -> trust.TrustUbuntu:
+        return trust.TrustUbuntu(self.ctx.paths, reporter=self.ctx.reporter, dry_run=self.ctx.dry_run,
+                                 runner=self.ctx.system.runner, say=self.ctx.notes.append)
+
     # -- top level ------------------------------------------------------------------
-    def run(self, result: DownloadResult | None = None) -> None:
+    def run(self, result: DownloadResult | None = None, action: str | None = None) -> None:
+        if action == "trust-ubuntu":
+            self.trust_ubuntu(entry=True)
         if result is not None:
             self.ui.set_step(3)
             self.done_step(result)
@@ -72,9 +81,14 @@ class Interactive:
         items = [Item("Back to the link", None)]
         if self.ctx.net is not None:
             items.append(Item("Change the network", "network"))
+        items.append(Item(TRUST_TITLE, "trust", hint="Lets this computer start boot loaders and "
+                          "kernels signed by Ubuntu (Canonical) with Secure Boot on (two steps, "
+                          "confirmed in MokManager)."))
         choice = self.ui.menu("More", "", items + self.common_items())
         if choice == "network":
             self.netinfo = None
+        elif choice == "trust":
+            self.trust_ubuntu()
         elif choice:
             self.common(choice)
 
@@ -380,3 +394,89 @@ class Interactive:
                                    kind="error"):
                 return
         self.common("reboot")
+
+    # -- Trust Ubuntu's Secure Boot key (build/trust/README.md) ---------------------
+    def trust_ubuntu(self, entry: bool = False) -> None:
+        """The action's screens. ``entry``: opened by the boot menu entry
+        (beastnet.action=trust-ubuntu) instead of from the helper's own menu."""
+        old = self.ui.set_mode("beast-net: Ubuntu's Secure Boot key", ())
+        try:
+            self._trust_loop(self.make_trust(), entry)
+        finally:
+            self.ui.set_mode(*old)
+
+    def _trust_loop(self, tr: trust.TrustUbuntu, entry: bool) -> None:
+        while True:
+            try:
+                st = self.ui.task(TRUST_TITLE, "Reading the Secure Boot key lists (MokListRT, "
+                                  "MokListXRT)...", tr.status)
+            except BeastNetError as e:
+                self.show_error(e, TRUST_TITLE)
+                return
+            items: list[Item] = []
+            step = st.next_step
+            if step:
+                items.append(Item(trust.STEP_LABEL[step], step, hint=_STEP_HINT[step]))
+            if st.can_delete:
+                items.append(Item(trust.STEP_LABEL[trust.DELETE], trust.DELETE,
+                                  hint="Asks MokManager to remove Canonical's CA from MokList. "
+                                       "Ubuntu's revocations stay in MokListX."))
+            if st.pending:
+                items.append(Item("Reboot now to confirm it in MokManager", "reboot"))
+            items.append(Item("What does this do?", "about"))
+            items.append(Item("Download an ISO from a link", None) if entry else Item("Back", None))
+            items += [it for it in self.common_items() if not (st.pending and it.value == "reboot")]
+            kind = {trust.TRUSTED: "ok", trust.PARTIAL: "warn", trust.UNAVAILABLE: "warn"}.get(st.state, "")
+            choice = self.ui.menu(TRUST_TITLE, trust.state_text(st), items, kind=kind, back=not entry)
+            if choice is None:
+                return
+            if choice == "about":
+                self.ui.document("What does this do?", trust.ABOUT, [Item("Back", True)])
+            elif choice in (trust.REVOCATIONS, trust.CA, trust.DELETE):
+                self._trust_request(tr, st, choice)
+            else:
+                self.common(choice)
+
+    def _trust_request(self, tr: trust.TrustUbuntu, st: trust.Status, step: str) -> None:
+        try:
+            req = tr.plan(st, step)
+        except BeastNetError as e:
+            self.show_error(e, TRUST_TITLE)
+            return
+        go = self.ui.document(trust.STEP_LABEL[step], trust.request_text(req),
+                              [Item("Continue", True), Item("Back", False)],
+                              kind="warn" if step == trust.CA else "")
+        if go is not True:
+            return
+        error = ""
+        while True:
+            v = self.ui.form("One-time password", "MokManager asks for this password once, after "
+                             "the reboot, to confirm the request. Choose a new one; it is used "
+                             "only for this request.",
+                             [Field("pw", "One-time password", secret=True,
+                                    hint="4-32 letters or digits. MokManager may use a US keyboard."),
+                              Field("again", "Type it again", secret=True)], error=error)
+            if v is None:
+                return
+            error = trust.check_password(v["pw"], v["again"])
+            if not error:
+                break
+        try:
+            req = self.ui.task(TRUST_TITLE, f"Requesting it with mokutil ({req.var})...",
+                               lambda: tr.request(step, v["pw"], v["again"]))
+        except BeastNetError as e:
+            self.show_error(e, TRUST_TITLE)
+            return
+        choice = self.ui.menu("Requested: reboot to confirm", trust.next_text(req),
+                              [Item("Reboot now", "reboot"), Item("Back", None)], kind="ok")
+        if choice:
+            self.common(choice)
+
+
+_STEP_HINT = {
+    trust.REVOCATIONS: "Puts the certificates Ubuntu revoked into MokListX first, so they stay "
+                       "refused. Confirm it in MokManager after a reboot.",
+    trust.CA: "Adds Canonical's Master CA to MokList (all revocations are in MokListX): shim "
+              "then accepts boot loaders and kernels signed by Ubuntu (Canonical). Confirm it "
+              "in MokManager after a reboot.",
+}

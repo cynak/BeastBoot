@@ -2,11 +2,19 @@
 # Fetch the build/test/debug toolchain into .tools/ WITHOUT root.
 #
 # On Debian/Ubuntu you can instead install the same packages system-wide:
-#   sudo apt install grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed shim-signed \
+#   sudo apt install grub-efi-amd64-signed \
 #        sbsigntool mtools dosfstools exfatprogs ntfs-3g xorriso squashfs-tools socat \
-#        qemu-system-x86 qemu-system-gui ovmf python3-pytest python3-virt-firmware \
-#        grub-pc-dbg grub-efi-amd64-dbg gdb
-# (grub-*-dbg must be the same version as grub-pc-bin / grub-efi-amd64-bin.)
+#        qemu-system-x86 qemu-system-gui ovmf python3-pytest python3-virt-firmware gdb
+#
+# GRUB itself (the modules, kernel.img, boot images and grub-mkimage dist/ is
+# built from, with their debug symbols) is built from pinned source by
+# build/grub/grubsrc.py; this script runs it once (BB_SKIP_GRUB_BUILD=1 skips
+# it, `make build` does it anyway). It needs gcc, make, autoconf, automake,
+# python3, pkg-config and libfreetype-dev on the host; bison, flex, autopoint
+# and gawk it unpacks itself when missing. Ubuntu's grub-efi-amd64-signed is
+# still fetched: only the e2e stub images use it (its SBAT).
+# shim and MokManager are always Debian's (build/shim/debian-shim.lock), fetched
+# by step 3b below into .tools/debian whatever the host has installed.
 #
 # How it works: packages missing on the host (and the dependencies apt says
 # they need, from a rootless `apt-get install -s` simulation) are downloaded
@@ -19,9 +27,11 @@
 #   - QEMU UI modules (qemu-system-gui: GTK/SDL, qemu-system-modules-opengl)
 #     must be the same build as the qemu-system-x86 binary that runs; when that
 #     binary comes from .tools they are fetched at exactly its version.
-#   - GRUB debug symbols (grub-pc-dbg, grub-efi-amd64-dbg) must be the same
-#     build as the GRUB modules dist/ is built from (BB_GRUB_BIOS_DIR,
-#     BB_GRUB_EFI_DIR). They are fetched at exactly the module package's
+#   - GRUB debug symbols must be the same build as the GRUB modules in
+#     BB_GRUB_BIOS_DIR / BB_GRUB_EFI_DIR. The source build has them next to the
+#     modules (kernel.exec, *.module). Only for module directories from Ubuntu
+#     packages (grub-pc-bin, grub-efi-amd64-bin, chosen by the user) are
+#     grub-pc-dbg / grub-efi-amd64-dbg fetched at exactly the module package's
 #     version into .tools/debs-dbg, unpacked into .tools/grub-dbg (not
 #     .tools/root, so build provenance is unaffected), and their code is
 #     compared with the modules (devtools/gdb/grubsyms.py verify). If the
@@ -57,8 +67,8 @@ for t in apt-get apt-cache dpkg dpkg-deb dpkg-query python3; do
 done
 
 PKGS=(
-  # boot chain (build/build.sh)
-  grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed shim-signed sbsigntool
+  # boot chain (build/build.sh; GRUB is built from source, the signed GRUB is for the e2e stubs)
+  grub-efi-amd64-signed sbsigntool
   # images, filesystems, ISOs
   mtools dosfstools exfatprogs ntfs-3g libntfs-3g89t64
   xorriso libisoburn1t64 libisofs6t64 libburn4t64
@@ -187,6 +197,13 @@ done
 [ "$n" -eq 0 ] || log "unpacked $n package(s) into ${SYSROOT#"$ROOT"/}"
 
 # ---------------------------------------------------------------------------
+# 3b. Debian's shim + MokManager (build/shim/debian-shim.lock): downloaded from
+# deb.debian.org (snapshot.debian.org fallback), checked against the pinned
+# SHA-256, unpacked into .tools/debian/root (BB_DEBIAN_DIR, BB_SHIM_DIR).
+# ---------------------------------------------------------------------------
+python3 -I "$ROOT/build/shim/fetch.py" fetch "$TOOLS/debian"
+
+# ---------------------------------------------------------------------------
 # 4. Wrappers in .tools/bin (only ones this script owns)
 # ---------------------------------------------------------------------------
 LIBDIR="$SYSROOT/usr/lib/x86_64-linux-gnu"
@@ -234,7 +251,7 @@ done
 [ "$written" -eq 0 ] || log "wrote $written wrapper(s) in .tools/bin"
 
 # ---------------------------------------------------------------------------
-# 5. GRUB debug symbols, locked to the module packages dist/ is built from
+# 5. GRUB debug symbols, locked to the modules in BB_GRUB_*_DIR (helpers; run below)
 # ---------------------------------------------------------------------------
 # module_pkg_version DIR PKG: version of PKG that provides DIR (host or .tools)
 module_pkg_version() {
@@ -265,7 +282,7 @@ grub_dbg() {  # <platform dir name> <module dir> <module pkg> <dbg pkg> <variabl
     return 0
   fi
   if [ -f "$moddir/kernel.exec" ]; then
-    log "$dbgpkg: installed on the host next to the modules ($moddir)"
+    log "GRUB $plat debug symbols: next to the modules ($moddir)"
     return 0
   fi
   ver="$(module_pkg_version "$moddir" "$binpkg")"
@@ -321,6 +338,19 @@ grub_dbg() {  # <platform dir name> <module dir> <module pkg> <dbg pkg> <variabl
        Bring both to one version (make tools && make build), or remove ${DBG_DEBS#"$ROOT"/}/${dbgpkg}_*.deb to fetch it again."
   fi
 }
+
+# ---------------------------------------------------------------------------
+# 5a. GRUB from source: the modules dist/ ships (scripts/dev-env.sh then points
+#     BB_GRUB_EFI_DIR / BB_GRUB_BIOS_DIR at them, debug symbols included)
+# ---------------------------------------------------------------------------
+if [ "${BB_SKIP_GRUB_BUILD:-0}" != 1 ] && [ -f "$ROOT/build/grub/grubsrc.py" ]; then
+  log "GRUB from source (build/grub/grubsrc.py; a few minutes the first time, then cached)"
+  if gout="$(python3 -I "$ROOT/build/grub/grubsrc.py" build --quiet)"; then
+    log "GRUB: ${gout##*$'\n'}"
+  else
+    warn "GRUB source build failed (see above; logs in .tools/cache/grub-src/work/). make build retries it."
+  fi
+fi
 
 if [ "${BB_SKIP_GRUB_DBG:-0}" = 1 ]; then
   log "BB_SKIP_GRUB_DBG=1: skipping GRUB debug symbols"

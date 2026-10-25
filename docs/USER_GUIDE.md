@@ -133,6 +133,7 @@ The tools at the bottom of the root menu:
 |---|---|
 | `System: <maker> <model> · UEFI · Secure Boot on` | System information: firmware, CPU, memory, boot mode, Secure Boot state, BeastBoot version, the drive's partitions |
 | Download an ISO from a link | the network helper ([section 8](#8-download-an-iso-from-a-link)); only when it is on the drive |
+| Trust Ubuntu's Secure Boot key | UEFI: let this computer start Ubuntu and Ubuntu-based ISOs with Secure Boot on ([section 6](#ubuntu-isos-with-secure-boot-on)); only when the network helper is on the drive |
 | Secure Boot status / help | whether Secure Boot is on and what that means for your ISOs |
 | Enroll a key (MokManager) | UEFI: enroll a distribution's signing key |
 | UEFI firmware settings | UEFI: reboot into the firmware setup, if supported |
@@ -155,13 +156,64 @@ at the machine.
    the release's `CERTIFICATE.txt` for official drives. Then **Continue** >
    **Yes** > **Reboot**.
 
-From then on the computer starts the menu directly. ISOs signed by Ubuntu's
-key (Ubuntu, its flavours, Linux Mint) boot right away; other distributions
-need their own key enrolled with **Enroll a key (MokManager)**, and unsigned
-ISOs (for example Arch Linux) boot only with Secure Boot off.
+From then on the computer starts the menu directly. BeastBoot starts on
+PCs that trust Microsoft's old (2011) or new (2023) UEFI certificate.
+
+Which ISOs then boot with Secure Boot on:
+
+- **Debian** ISOs: right away (they are signed with Debian's key, which the
+  drive's shim has built in).
+- **Ubuntu and ISOs based on it** (Kubuntu, Xubuntu, Linux Mint and others
+  that use Ubuntu's signed kernel): only after you let this computer trust
+  Ubuntu's key once ([below](#ubuntu-isos-with-secure-boot-on)), or with
+  Secure Boot off. Until then the menu says "Secure Boot stopped this ISO
+  from starting".
+- **Other distributions** (Fedora, openSUSE, ...): after you enroll their
+  own key with **Enroll a key (MokManager)**, if they publish one.
+- **Unsigned ISOs** (for example Arch Linux): only with Secure Boot off.
 
 Screens, how to check the key first, how to remove it again, and how to use
 your own key: [SECURE_BOOT.md](SECURE_BOOT.md).
+
+### Ubuntu ISOs with Secure Boot on
+
+Since 0.1.2 the drive starts through Debian's shim, which does not trust
+Ubuntu's key by itself. Either turn Secure Boot off in the firmware settings,
+or let this computer trust Ubuntu's key. That takes two steps, each confirmed
+in MokManager after a reboot:
+
+1. In the BeastBoot menu choose **Trust Ubuntu's Secure Boot key** (with the
+   other tools at the bottom of the root menu; the network helper's **More**
+   menu has it too).
+2. **Step 1 of 2: add Ubuntu's revocations.** The screen lists the eight
+   older Ubuntu certificates that Ubuntu itself revoked, with their
+   fingerprints. Choose **Continue** and type a new one-time password twice
+   (4 to 32 letters or digits; MokManager may use a US keyboard layout).
+3. Reboot from the stick. A blue **Perform MOK management** screen appears:
+   press a key within 10 seconds, choose **Enroll MOKX**, then **Continue**
+   and **Yes**, type the password, and choose **Reboot**.
+4. Choose **Trust Ubuntu's Secure Boot key** again. It now says *revocations
+   only (step 1 of 2 done)*. Choose **Step 2 of 2: trust Ubuntu's Secure Boot
+   key** and do the same; in MokManager choose **Enroll MOK**. Before you
+   confirm, choose **View key** and compare it with the fingerprint below.
+
+Ubuntu's key, as MokManager shows it:
+
+- Subject: **Canonical Ltd. Master Certificate Authority**
+- SHA-1: `76 A0 92 06 58 00 BF 37 69 01 C3 72 CD 55 A9 0E 1F DE D2 E0`
+- SHA-256: `ed1fe72cb9ca31c9af5b757afcd733323d675825032e6ced7fe1ae9eb767998c`
+
+Ubuntu-signed ISOs now start with Secure Boot on. Very old releases (signed
+before about mid-2022) may still be refused, because their keys are among
+the ones Ubuntu revoked.
+
+This setting belongs to the **computer, not the stick**: other systems
+installed on it (an installed Ubuntu, Fedora, Debian...) trust Ubuntu-signed
+software too. To undo it, open the same entry and choose **Stop trusting
+Ubuntu's key**, then confirm **Delete MOK** in MokManager. If MokManager
+times out or you choose **Continue boot**, nothing changes; the screen shows
+whether a request is still waiting. Details:
+[SECURE_BOOT.md](SECURE_BOOT.md#trust-ubuntus-secure-boot-key-optional).
 
 ## 7. Update the boot files
 
@@ -184,9 +236,17 @@ the card just says *BeastBoot drive*. From the command line:
 `./beast-booter list-devices --check-installed`.
 
 Installed firmware packs and a pending one-time download boot are carried
-over. If the new boot files are signed with a different key (for example,
-you move from boot files you built yourself to a release), enroll the new
-key once more as in [section 6](#6-first-boot-with-secure-boot-on).
+over (for packs installed before 0.1.2, see
+[Firmware packs](#firmware-packs)). If the new boot files are signed with a
+different key (for example, you move from boot files you built yourself to
+a release), enroll the new key once more as in
+[section 6](#6-first-boot-with-secure-boot-on).
+
+**Updating a drive from 0.1.1 or older to 0.1.2** changes its shim: the
+drive now also starts on PCs that trust only Microsoft's 2023 certificate,
+but with Secure Boot on, Ubuntu and Ubuntu-based ISOs that booted before are
+refused until you trust Ubuntu's key on that computer
+([section 6](#ubuntu-isos-with-secure-boot-on)) or turn Secure Boot off.
 
 A drive made by BeastBoot before layout 2 (512 MiB boot partition) cannot
 be updated: `update` stops with `reinstall-needed`. Copy your files off,
@@ -205,8 +265,8 @@ update.
 ## 8. Download an ISO from a link
 
 Choose **Download an ISO from a link** in the root menu. A small Linux
-environment starts (Ubuntu's signed kernel, so this works with Secure Boot
-on):
+environment starts (Ubuntu's kernel, signed with the BeastBoot key, so this
+works with Secure Boot on once that key is enrolled):
 
 1. **Network.** Ethernet is configured automatically (DHCP). For WiFi, pick
    the network and type its passphrase.
@@ -254,6 +314,17 @@ sudo ./beast-booter firmware list --device /dev/sdX              # what is insta
 sudo ./beast-booter firmware remove --device /dev/sdX --pack intel-wifi
 ```
 
+**Packs installed before 0.1.2.** 0.1.2 moved the helper to a newer Linux
+kernel (7.3 instead of 7.0). An update keeps the installed packs and they
+still load, but they hold the files the old kernel's drivers asked for, so
+the update warns and names them, and the Firmware packs page and
+`firmware list` mark each one "Made for kernel 7.0... - reinstall" (STALE).
+After the update, install those packs again: select them and click
+**Download and install...** (or `firmware fetch` and `firmware install`
+above); that replaces the old copy. `firmware install` refuses packs that
+were fetched for another kernel or `linux-firmware` tag than the drive's
+helper uses (`pack-mismatch`): update the drive first, then fetch them again.
+
 Details: [BEASTNET.md](BEASTNET.md).
 
 ## 9. Menu settings
@@ -284,7 +355,7 @@ With `set bb_debug=1` in `config.cfg`, the menu also prints a `BEAST: error
 
 | Code | Meaning | What to do |
 |---|---|---|
-| `sb-verify-failed` | Secure Boot refused the ISO's kernel: it is not signed by a key this computer trusts | enroll the distribution's key with **Enroll a key (MokManager)** if it publishes one, or turn Secure Boot off for this ISO. BeastBoot never retries without verification. |
+| `sb-verify-failed` | Secure Boot refused the ISO's kernel: it is not signed by a key this computer trusts | Ubuntu or based on it: **Trust Ubuntu's Secure Boot key** ([section 6](#ubuntu-isos-with-secure-boot-on)). Other distributions: enroll their key with **Enroll a key (MokManager)** if they publish one. Or turn Secure Boot off for this ISO. BeastBoot never retries without verification. |
 | `no-recipe` | BeastBoot does not recognise how this ISO boots | check [ISO_SUPPORT.md](ISO_SUPPORT.md#recipes); report the ISO |
 | `unsupported-windows` | a Windows installer ISO | not supported in 0.1 |
 | `no-data-partition` | the menu cannot find the storage partition | with Secure Boot on and NTFS, see below; otherwise the partition was deleted or reformatted: reinstall |
@@ -311,20 +382,23 @@ or boot with Secure Boot off.
 ### Secure Boot refuses BeastBoot itself
 
 If the blue shim screen keeps coming back after you enrolled the key, or
-shim reports an SBAT violation, your computer hit one of the two known
-limits of 0.1:
+shim reports an SBAT violation, check the drive's BeastBoot version (the app
+shows it on the drive's card). BeastBoot 0.1.1 and older hit two known
+limits, both fixed in 0.1.2:
 
 - **SBAT `grub,6`.** Since November 2025, shim's revocation level can require
-  GRUB generation 6. Our GRUB is Ubuntu's 2.14 build and truthfully says
-  `grub,5`, so a computer that applied that level (through a newer shim, OS
-  or firmware update) refuses it.
-- **Only the 2023 Microsoft CA.** Our shim is signed only by Microsoft's UEFI
-  CA 2011. A computer whose firmware trusts only the 2023 CA refuses it.
+  GRUB generation 6. Up to 0.1.1 our GRUB was Ubuntu's 2.14 build and
+  truthfully said `grub,5`, so a computer that applied that level (through a
+  newer shim, OS or firmware update) refuses it. 0.1.2 builds GRUB from
+  source with the fixes and proves them before it says `grub,6`; the SBAT
+  number is never raised by hand.
+- **Only the 2023 Microsoft CA.** Up to 0.1.1 our shim was signed only by
+  Microsoft's UEFI CA 2011, so a computer whose firmware trusts only the 2023
+  CA refuses it. 0.1.2 ships Debian's shim, signed through both.
 
-Both are fixed by a release built from Ubuntu's updated GRUB and shim; the
-SBAT number is never raised by hand. Until then, boot with Secure Boot off
-on such computers. Details:
-[SECURE_BOOT.md](SECURE_BOOT.md#known-compatibility-limits-in-01-found-by-make-vulns-2026-10-23).
+Update the drive's boot files ([section 7](#7-update-the-boot-files)); until
+then, boot with Secure Boot off on such computers. Details:
+[SECURE_BOOT.md](SECURE_BOOT.md#known-compatibility-limits-of-011-and-older-found-by-make-vulns-2026-10-23).
 
 ### Download helper
 

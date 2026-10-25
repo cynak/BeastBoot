@@ -18,7 +18,7 @@ from typing import Any
 from collections.abc import Callable
 
 from ..download import Progress, human_size
-from . import STEPS, UI, Field, Item, Worker, bars_text, human_time, lock_text
+from . import UI, Field, Item, Worker, bars_text, human_time, lock_text
 
 MIN_W, MIN_H = 40, 14
 SPINNER = "|/-\\"
@@ -158,12 +158,12 @@ class TUI(UI):
         a = self.a
         self._put(0, 0, " " * w, a["header"])
         self._put(0, 1, "beast-booter", a["header"])
-        self._put(0, 14, "| beast-net: download an ISO from a link"[: max(0, w - 16 - len(self.brand_right))],
+        self._put(0, 14, f"| {self.subtitle}"[: max(0, w - 16 - len(self.brand_right))],
                   a["header"])  # bright white on red: readable on the console
         if self.brand_right:
             self._put(0, w - len(self.brand_right) - 1, self.brand_right, a["header"])
         x = 2
-        for i, name in enumerate(STEPS):
+        for i, name in enumerate(self.steps):
             label = f" {i + 1} {name} "
             if i == self.step:
                 attr = a["sel"] | curses.A_BOLD
@@ -173,7 +173,7 @@ class TUI(UI):
                 attr = a["dim"]
             self._put(2, x, label, attr)
             x += len(label)
-            if i < len(STEPS) - 1:
+            if i < len(self.steps) - 1:
                 self._put(2, x, " > ", a["dim"])
                 x += 3
         box_attr = {"error": a["error"], "warn": a["warn"], "ok": a["ok"]}.get(kind, a["accent"])
@@ -243,6 +243,56 @@ class TUI(UI):
                 return None
             elif k and len(k) == 1 and k.isdigit() and 1 <= int(k) <= min(9, len(items)):
                 sel = int(k) - 1
+
+    def document(self, title: str, text: str, items: list[Item], *, kind: str = "") -> Any:
+        """Scrolling text with a row of buttons under it."""
+        if not items:
+            raise ValueError("document without items")
+        top, sel = 0, 0
+        help_ = "Up/Down/PgUp/PgDn scroll   Left/Right choose   Enter select   Esc back"
+        while True:
+            area = self._frame(title, help_, kind)
+            if area is None:
+                if self._wait_resize() == "esc":
+                    return None
+                continue
+            y0, x0, ah, aw = area
+            lines = wrap(text, aw)
+            rows = max(1, ah - 2)
+            top = max(0, min(top, len(lines) - rows))
+            for i, line in enumerate(lines[top:top + rows]):
+                self._put(y0 + i, x0, line)
+            if top > 0:
+                self._put(y0, x0 + aw - 6, " more^", self.a["dim"])
+            if top + rows < len(lines):
+                self._put(y0 + rows - 1, x0 + aw - 6, " morev", self.a["dim"])
+            x = x0
+            for i, it in enumerate(items):
+                label = f"[ {it.label} ]"
+                self._put(y0 + ah - 1, x, label, self.a["sel"] if i == sel else self.a["accent"])
+                x += len(label) + 2
+            self.scr.refresh()
+            k = self._key()
+            if k == "up":
+                top -= 1
+            elif k == "down":
+                top += 1
+            elif k == "pgup":
+                top -= rows
+            elif k in ("pgdn", " "):
+                top += rows
+            elif k == "home":
+                top = 0
+            elif k == "end":
+                top = len(lines)
+            elif k in ("left", "btab"):
+                sel = max(0, sel - 1)
+            elif k in ("right", "tab"):
+                sel = min(len(items) - 1, sel + 1)
+            elif k == "enter":
+                return items[sel].value
+            elif k == "esc":
+                return None
 
     def _item(self, y: int, x: int, w: int, it: Item, selected: bool) -> None:
         a = self.a

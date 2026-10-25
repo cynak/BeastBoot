@@ -11,6 +11,14 @@ types take an optional ``"iface"``. ``then`` is reboot (write the one-shot
 entry and reboot), poweroff or stay (continue interactively).
 Extensions (proposed): ``"on_error"`` (stay, reboot, poweroff or shell;
 default stay) and ``"overwrite"`` (replace an existing different file).
+
+For automated tests, a plan can run "Trust Ubuntu's Secure Boot key" instead
+of a download (no network)::
+
+    {"action": "trust-ubuntu", "step": "next", "password": "1234abcd", "then": "poweroff"}
+
+``step`` is next (the one request the two-step rule allows now) or delete.
+The password sits in plain text on the stick: use this for tests only.
 """
 
 from __future__ import annotations
@@ -19,7 +27,7 @@ import json
 import os
 from dataclasses import dataclass
 
-from . import grubenv
+from . import grubenv, trust
 from .checksums import normalize_sha256
 from .context import Context
 from .download import DownloadRequest, DownloadResult
@@ -30,12 +38,18 @@ THEN = ("reboot", "poweroff", "stay")
 ON_ERROR = ("stay", "reboot", "poweroff", "shell")
 
 
+TRUST_STEPS = ("next", "delete")
+
+
 @dataclass
 class ScriptPlan:
     network: dict
-    request: DownloadRequest
+    request: DownloadRequest | None  # None for an action plan
     then: str = "stay"
     on_error: str = "stay"
+    action: str | None = None  # "trust-ubuntu"
+    password: str = ""
+    step: str = "next"
 
 
 def _bad(text: str) -> BeastNetError:
@@ -45,6 +59,8 @@ def _bad(text: str) -> BeastNetError:
 def parse_plan(data: object) -> ScriptPlan:
     if not isinstance(data, dict):
         raise _bad("the plan must be a JSON object")
+    if data.get("action") is not None:
+        return _parse_action(data)
     net = data.get("network", {"type": "ethernet"})
     if not isinstance(net, dict) or net.get("type") not in ("ethernet", "wifi"):
         raise _bad('network.type must be "ethernet" or "wifi"')
@@ -71,18 +87,39 @@ def parse_plan(data: object) -> ScriptPlan:
             raise _bad(f"dest must be a file under {DOWNLOADS}/") from None
         if dest == DOWNLOADS:
             raise _bad(f"dest must be a file under {DOWNLOADS}/")
-    then = data.get("then", "stay")
-    if then not in THEN:
-        raise _bad(f"then must be one of {', '.join(THEN)}")
-    on_error = data.get("on_error", "stay")
-    if on_error not in ON_ERROR:
-        raise _bad(f"on_error must be one of {', '.join(ON_ERROR)}")
+    then, on_error = _then(data)
     overwrite = data.get("overwrite", False)
     if not isinstance(overwrite, bool):
         raise _bad("overwrite must be true or false")
     req = DownloadRequest(url=url.strip(), sha256=sha, sha256_url=data.get("sha256_url") or None,
                           dest=dest, overwrite=overwrite)
     return ScriptPlan(net, req, then, on_error)
+
+
+def _then(data: dict) -> tuple[str, str]:
+    then = data.get("then", "stay")
+    if then not in THEN:
+        raise _bad(f"then must be one of {', '.join(THEN)}")
+    on_error = data.get("on_error", "stay")
+    if on_error not in ON_ERROR:
+        raise _bad(f"on_error must be one of {', '.join(ON_ERROR)}")
+    return then, on_error
+
+
+def _parse_action(data: dict) -> ScriptPlan:
+    if data["action"] != "trust-ubuntu":
+        raise _bad('action must be "trust-ubuntu"')
+    step = data.get("step", "next")
+    if step not in TRUST_STEPS:
+        raise _bad(f"step must be one of {', '.join(TRUST_STEPS)}")
+    password = data.get("password")
+    if not isinstance(password, str):
+        raise _bad("password is required for trust-ubuntu")
+    problem = trust.check_password(password, password)
+    if problem:
+        raise _bad(f"password: {problem}")
+    then, on_error = _then(data)
+    return ScriptPlan({}, None, then, on_error, action="trust-ubuntu", password=password, step=step)
 
 
 def load_plan(data_root: str, script_path: str) -> ScriptPlan:
@@ -115,6 +152,10 @@ def run_script(ctx: Context, script_path: str) -> tuple[str, DownloadResult | No
     try:
         plan = load_plan(ctx.paths.data, script_path)
         on_error = plan.on_error
+        if plan.action == "trust-ubuntu":
+            _run_trust(ctx, plan)
+            return _finish(ctx, plan.then), None
+        assert plan.request is not None
         if ctx.net is not None:
             ctx.net.probe()
             if plan.network["type"] == "ethernet":
@@ -146,3 +187,26 @@ def run_script(ctx: Context, script_path: str) -> tuple[str, DownloadResult | No
         if on_error == "shell":
             return "shell", None
         return "stay", None
+
+
+def _run_trust(ctx: Context, plan: ScriptPlan) -> None:
+    tr = trust.TrustUbuntu(ctx.paths, reporter=ctx.reporter, dry_run=ctx.dry_run,
+                           runner=ctx.system.runner, say=ctx.notes.append)
+    st = tr.status()
+    step = trust.DELETE if plan.step == "delete" else st.next_step
+    if step is None:
+        if st.state == trust.TRUSTED and not st.pending:
+            return  # nothing left to do
+        tr.plan(st, trust.CA)  # raises why not: pending request, unavailable, built in
+        return
+    tr.request(step, plan.password)
+
+
+def _finish(ctx: Context, then: str) -> str:
+    if then == "reboot":
+        ctx.system.reboot()
+        return "done"
+    if then == "poweroff":
+        ctx.system.poweroff()
+        return "done"
+    return "stay"

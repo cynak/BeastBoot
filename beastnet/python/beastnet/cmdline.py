@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+# beastnet.action=: open one of the helper's actions directly (the boot menu's tool entries).
+ACTIONS = ("trust-ubuntu",)  # "Trust Ubuntu's Secure Boot key" (build/trust/README.md)
+
 
 def split_cmdline(text: str) -> list[tuple[str, str | None]]:
     """Split a kernel command line into (name, value) pairs like the kernel does.
@@ -53,6 +56,7 @@ class BootParams:
     debug: bool = False
     script: str | None = None  # path on the data partition
     ui: str | None = None  # "plain" forces the line-based interface (extension)
+    action: str | None = None  # one of ACTIONS; anything else is ignored (kept in raw)
     consoles: list[str] = field(default_factory=list)  # console= values, in order
     raw: dict[str, str] = field(default_factory=dict)  # every beastnet.* parameter
 
@@ -95,6 +99,8 @@ def parse_cmdline(text: str) -> BootParams:
             p.script = value or None
         elif key == "ui":
             p.ui = value or None
+        elif key == "action":
+            p.action = value if value in ACTIONS else None
     return p
 
 

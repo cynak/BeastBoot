@@ -2,7 +2,9 @@
 
 Packages come from the host dpkg database (`dpkg-query`) or, for packages that
 scripts/bootstrap-tools.sh unpacked rootless into .tools/root, from the .deb
-files in .tools/debs (`dpkg-deb`). Licenses come from DEP-5 copyright files;
+files in .tools/debs (`dpkg-deb`). Debian's shim packages (build/shim/debian-shim.lock)
+come from the locked .debs in $BB_DEBIAN_DIR/debs and get Debian purls. Licenses come
+from DEP-5 copyright files;
 anything that is not machine-readable is NOASSERTION, never a guess.
 """
 from __future__ import annotations
@@ -34,6 +36,8 @@ class DebPkg:
     built_using: list[tuple[str, str]] = field(default_factory=list)
     origin: str = "dpkg"            # "dpkg" (host) or "deb:<path>" (.tools/debs)
     deb_path: Path | None = None
+    vendor: str = "ubuntu"          # purl namespace: "ubuntu", or "debian" (build/shim/debian-shim.lock)
+    distro: str = ""                # distro of a locked Debian package, as the lock names it (e.g. debian-sid)
 
     @property
     def upstream_version(self) -> str:
@@ -131,19 +135,51 @@ def beastnet_lock(root: Path) -> dict[str, tuple[str, str]]:
     return out
 
 
+def debian_dir(root: Path) -> Path:
+    """Where build/shim/fetch.py keeps Debian's shim packages (BB_DEBIAN_DIR)."""
+    return Path(os.environ.get("BB_DEBIAN_DIR") or root / ".tools" / "debian")
+
+
+def debian_lock(root: Path) -> dict[str, tuple[str, str, str]]:
+    """build/shim/debian-shim.lock -> {package: (version, sha256 of the .deb, purl distro)}."""
+    out: dict[str, tuple[str, str, str]] = {}
+    lock = root / "build" / "shim" / "debian-shim.lock"
+    if lock.is_file():
+        for line in lock.read_text().splitlines():
+            f = line.split("#", 1)[0].split()
+            if len(f) >= 6:
+                out[f[0]] = (f[1], f[3], f[4])
+    return out
+
+
 class Resolver:
     """Finds the package a file came from, in this order:
     1. beast-net packages (build/beastnet/packages.lock): the locked .deb in the beast-net
        cache whose SHA-256 matches the lock - exactly what build/beastnet/build.sh unpacked,
        so the SBOM is the same on any build host;
-    2. the host dpkg database (same version);
-    3. .tools/debs, then the beast-net cache (any .deb of that version)."""
+    2. Debian's shim packages (build/shim/debian-shim.lock): the locked .deb in
+       $BB_DEBIAN_DIR/debs whose SHA-256 matches, with Debian purls;
+    3. the host dpkg database (same version);
+    4. .tools/debs, then the beast-net cache (any .deb of that version)."""
 
     def __init__(self, root: Path):
         self.root = root
-        self.debs_dirs = [root / ".tools" / "debs", beastnet_cache(root)]
+        self.debs_dirs = [root / ".tools" / "debs", beastnet_cache(root), debian_dir(root) / "debs"]
         self.lock = beastnet_lock(root)
+        self.debian = debian_lock(root)
         self.cache: dict[tuple[str, str | None], DebPkg | None] = {}
+
+    def _debian(self, name: str, version: str | None) -> DebPkg | None:
+        import hashlib
+        lv = self.debian.get(name)
+        if not lv or (version is not None and version != lv[0]):
+            return None
+        d = find_deb(self.debs_dirs[2], name, lv[0])
+        if d is None or hashlib.sha256(d.read_bytes()).hexdigest() != lv[1]:
+            return None
+        p = deb_fields(d)
+        p.vendor, p.distro = "debian", lv[2]
+        return p
 
     def _locked(self, name: str, version: str | None) -> DebPkg | None:
         import hashlib
@@ -162,7 +198,8 @@ class Resolver:
     def __call__(self, name: str, version: str | None) -> DebPkg | None:
         key = (name, version)
         if key not in self.cache:
-            p = self._locked(name, version) or resolve_pkg(name, version, self.debs_dirs[0])
+            p = self._locked(name, version) or self._debian(name, version) \
+                or resolve_pkg(name, version, self.debs_dirs[0])
             if p is None or (version is not None and p.version != version):
                 d = find_deb(self.debs_dirs[1], name, version)
                 p = deb_fields(d) if d else p
@@ -183,9 +220,24 @@ def compare_versions(a: str, op: str, b: str) -> bool:
     return subprocess.run(["dpkg", "--compare-versions", a, op, b]).returncode == 0
 
 
+# Distro qualifiers the scanners do not match, and the name they do. grype 0.120 matches a
+# Debian purl only with distro=debian-<number>, debian-<codename of a release> or
+# debian-unstable: distro=debian-sid (build/shim/debian-shim.lock) gets no matches at all,
+# so Debian's shim would never be checked against the Debian tracker. sid IS unstable.
+PURL_DISTRO = {"debian-sid": "debian-unstable"}
+
+
+def purl_distro(distro: str) -> str:
+    """The distro qualifier written into a purl for this distro name."""
+    return PURL_DISTRO.get(distro, distro)
+
+
 def purl(pkg: DebPkg, distro: str, namespace: str = "ubuntu") -> str:
-    """Same shape syft emits: qualifiers sorted, upstream=<src>[@<srcver>] when it differs."""
-    q = {"arch": pkg.arch, "distro": distro}
+    """Same shape syft emits: qualifiers sorted, upstream=<src>[@<srcver>] when it differs.
+    A locked Debian package (pkg.vendor "debian") gets its own namespace and distro."""
+    if pkg.vendor != "ubuntu":
+        namespace, distro = pkg.vendor, pkg.distro or distro
+    q = {"arch": pkg.arch, "distro": purl_distro(distro)}
     if pkg.source != pkg.name or pkg.source_version != pkg.version:
         up = pkg.source if pkg.source_version == pkg.version else f"{pkg.source}@{pkg.source_version}"
         q["upstream"] = up
@@ -195,7 +247,7 @@ def purl(pkg: DebPkg, distro: str, namespace: str = "ubuntu") -> str:
 
 def source_purl(name: str, version: str, distro: str, namespace: str = "ubuntu") -> str:
     return (f"pkg:deb/{namespace}/{quote(name, safe='')}@{quote(version, safe='')}"
-            f"?arch=source&distro={quote(distro, safe='')}")
+            f"?arch=source&distro={quote(purl_distro(distro), safe='')}")
 
 
 # --------------------------------------------------------------------------- files in packages

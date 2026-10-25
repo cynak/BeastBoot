@@ -80,7 +80,7 @@ def test_python_version(fake):
 
 def test_grub_efi(fake):
     r = doctor.check_grub_efi(fake.ctx())
-    assert r.status == FAIL and "make tools" in r.fix and "grub-efi-amd64-bin" in r.fix and r.action == doctor.TOOLS
+    assert r.status == FAIL and "make build" in r.fix and "grubsrc.py" in r.fix and r.action == doctor.TOOLS
     fake.dir("BB_GRUB_EFI_DIR", "kernel.img", "moddep.lst", "normal.mod", "linux.mod")
     (fake.repo / "build").mkdir()
     (fake.repo / "build" / "modules-efi.lst").write_text("# comment\nnormal\nlinux\n")
@@ -94,21 +94,42 @@ def test_grub_bios(fake):
     assert doctor.check_grub_bios(fake.ctx()).status == FAIL
     fake.dir("BB_GRUB_BIOS_DIR", "boot.img", "diskboot.img", "kernel.img", "lzma_decompress.img", "moddep.lst")
     r = doctor.check_grub_bios(fake.ctx())
-    assert r.status == FAIL and "normal.mod" in r.detail and "grub-pc-bin" in r.fix
+    assert r.status == FAIL and "normal.mod" in r.detail and "grubsrc.py" in r.fix
     (Path(fake.env["BB_GRUB_BIOS_DIR"]) / "normal.mod").write_text("x")
     assert doctor.check_grub_bios(fake.ctx()).status == OK
 
 
-def test_grub_signed_version_must_match_modules(fake):
-    assert doctor.check_grub_signed(fake.ctx()).status == FAIL
+def test_grub_dirs_of_the_source_build_say_so(fake):
+    d = fake.dir("BB_GRUB_BIOS_DIR", "boot.img", "diskboot.img", "kernel.img", "lzma_decompress.img", "moddep.lst",
+                 "normal.mod")
+    (d.parent / "build-info.json").write_text('{"version": "2.14-2ubuntu3+bb1", "key": "abc"}')
+    r = doctor.check_grub_bios(fake.ctx())
+    assert r.status == OK and "2.14-2ubuntu3+bb1 built from source" in r.detail
+
+
+def test_grub_signed_only_for_e2e_stubs(fake):
+    r = doctor.check_grub_signed(fake.ctx())
+    assert r.status == WARN and "e2e" in r.detail and "grub-efi-amd64-signed" in r.fix
     d = fake.dir("BB_GRUB_EFI_SIGNED_DIR", "grubx64.efi.signed")
-    fake.dir("BB_GRUB_EFI_DIR", "kernel.img")
-    fake.outputs["dpkg-query"] = cp("2.14-2ubuntu1")
     (d / "version").write_text("2.14-2ubuntu1\n")
     assert doctor.check_grub_signed(fake.ctx()).status == OK
-    (d / "version").write_text("2.14-2ubuntu3\n")
-    r = doctor.check_grub_signed(fake.ctx())
-    assert r.status == FAIL and "SBAT" in r.detail and "grub-efi-amd64-signed" in r.fix
+
+
+def test_grub_src(fake):
+    fake.env["BB_GRUB_CACHE"] = str(fake.repo / "gcache")
+    r = doctor.check_grub_src(fake.ctx())
+    assert r.status == WARN and "make build" in r.fix
+    cur = fake.repo / "gcache" / "current"
+    cur.mkdir(parents=True)
+    info = {"version": "2.14-2ubuntu3+bb1", "key": "k1",
+            "security_fixes": {"sbat_claims": [{"component": "grub", "generation": 6, "proven": True}],
+                               "fixes": [{"id": "CVE-2025-61662", "present": True}]}}
+    (cur / "build-info.json").write_text(json.dumps(info))
+    r = doctor.check_grub_src(fake.ctx())
+    assert r.status == OK and "grub,6" in r.detail and "1 security fixes" in r.detail
+    info["security_fixes"]["sbat_claims"][0]["proven"] = False
+    (cur / "build-info.json").write_text(json.dumps(info))
+    assert doctor.check_grub_src(fake.ctx()).status == FAIL
 
 
 def test_module_pkg_version_from_tools_debs(fake):
@@ -126,7 +147,7 @@ def test_module_pkg_version_from_tools_debs(fake):
 
 def test_shim_ovmf_seabios(fake):
     assert doctor.check_shim(fake.ctx()).status == FAIL
-    fake.dir("BB_SHIM_DIR", "shimx64.efi.signed.latest", "mmx64.efi")
+    fake.dir("BB_SHIM_DIR", "shimx64.efi.signed", "mmx64.efi.signed")
     assert doctor.check_shim(fake.ctx()).status == OK
     r = doctor.check_ovmf(fake.ctx())
     assert r.status == FAIL and "ovmf" in r.fix
@@ -357,7 +378,7 @@ def test_every_problem_has_a_fix(fake):
     assert bad, "an empty host should have problems"
     assert all(r.fix for r in bad), [r.name for r in bad if not r.fix]
     names = {r.name for r in rs}
-    for required in ("python", "grub-efi", "grub-bios", "grub-signed", "shim", "ovmf", "seabios", "qemu",
+    for required in ("python", "grub-src", "grub-efi", "grub-bios", "grub-signed", "shim", "ovmf", "seabios", "qemu",
                      "qemu-gtk", "kvm", "mtools", "xorriso", "sfdisk", "mkfs.fat", "mkfs.exfat", "mkfs.ntfs",
                      "sbsigntool", "openssl", "virt-fw-vars", "udisks", "gdb", "grub-dbg-pc", "grub-dbg-efi",
                      "venv", "keys", "dist", "disk"):

@@ -22,11 +22,17 @@ implement it and propose changes in their reports instead of editing it.
 Missing WiFi firmware is reported by driver name, with the pack to install from
 the desktop app ("Install the Intel WiFi firmware pack").
 
+The helper also runs **Trust Ubuntu's Secure Boot key** (UEFI only): from its
+own **More** menu, or straight away when the boot menu's Tools entry of that
+name starts it ([§8](#8-trust-ubuntus-secure-boot-key)).
+
 ## 2. Principles
 
-- **Secure Boot stays intact.** The helper kernel is Ubuntu's Canonical-signed
-  kernel, unmodified, verified by shim like any distro kernel; its modules are
-  the unmodified Canonical-signed `.ko` files of that same kernel build. The
+- **Secure Boot stays intact.** The helper kernel is Ubuntu's kernel with its
+  code unchanged; the build checks Canonical's signature, then replaces it with
+  the beast-booter key's (§5), and shim verifies it like `grubx64.efi`. Its
+  modules are the unmodified Canonical-signed `.ko` files of that same kernel
+  build. The
   helper never kexecs into another kernel when Secure Boot is on; the hand-off
   is always "reboot into the menu".
 - **No closed firmware by default.** Firmware packs are optional, installed by
@@ -38,7 +44,7 @@ the desktop app ("Install the Intel WiFi firmware pack").
 ## 3. Files on the ESP (layout version 2: 512 MiB FAT32 ESP)
 
 ```
-beast-net/vmlinuz                 Ubuntu signed kernel (linux-image-<kver>), unmodified
+beast-net/vmlinuz                 Ubuntu's kernel (linux-image-<kver>), re-signed with the beast-booter key (code unchanged)
 beast-net/initrd.img              base initramfs (compressed cpio; see §5)
 beast-net/VERSION                 "beast-net <bb version> kernel <kver>"
 beast-net/catalog.json            firmware pack catalog (§6)
@@ -52,7 +58,8 @@ grub/grubenv                      1024-byte GRUB environment block, created by t
 ```
 linux  ($bb_esp)/beast-net/vmlinuz beastnet.data=UUID=$bb_data_uuid_linux \
        beastnet.esp=UUID=<ESP volume id> beastnet.sb=$bb_sb [beastnet.debug=1] \
-       console=tty0 [console=ttyS0,115200 when bb_serial=1] quiet
+       console=tty0 [console=ttyS0,115200 when bb_serial=1] beastnet.ui=[plain when bb_serial=1] \
+       beastnet.script=[$bb_beastnet_script] [beastnet.action=trust-ubuntu] quiet
 initrd ($bb_esp)/beast-net/initrd.img ($bb_esp)/beast-net/firmware/<every installed .cpio>
 ```
 
@@ -68,15 +75,41 @@ under `/downloads/`, and shows the normal menu. The tools entry is
 shown only when `beast-net/vmlinuz` and `beast-net/initrd.img` are on the ESP;
 installed packs are passed as extra initrds via `beast-net/firmware/*.cpio`.
 
+The next Tools entry, **Trust Ubuntu's Secure Boot key** (UEFI only, also only
+with the helper on the ESP), runs the same `bb_beastnet` with the argument
+`trust-ubuntu`: the command line is the same plus `beastnet.action=trust-ubuntu`,
+and GRUB logs `BEAST: boot beast-net recipe=beast-net action=trust-ubuntu`.
+When GRUB refuses a kernel under Secure Boot, the error text names this entry
+as the first remedy for Ubuntu-signed kernels (`bb_fail`, `bb_sb_help` in
+`grub/beast/lib.cfg`).
+
 ## 5. The helper environment (initramfs)
 
-Built by `build/beastnet/` from pinned Ubuntu 26.04 packages, all versions
-recorded in the manifest:
+Built by `build/beastnet/` from pinned Ubuntu 26.04 packages, except the
+kernel, which comes from Ubuntu 26.10 (released pockets only; its fixes for
+the kernel CVEs that 26.04's 7.0 kernel still has open, see sbom/README.md),
+all versions recorded in the manifest:
 
 - kernel `linux-image-<kver>-generic` + `linux-modules-<kver>-generic` (module
   subset: wired NICs incl. USB adapters, WiFi drivers, cfg80211/mac80211,
   crypto deps, USB/xhci/usb-storage/uas/sd_mod, exfat/vfat/ntfs3/iso9660/loop,
   nls, virtio + e1000 for tests, mac80211_hwsim for tests), resolved with modules.dep;
+  The drive's shim (Debian's) trusts Debian's key, not Canonical's, so
+  `build/build.sh` treats the kernel like `grubx64.efi`: it checks that the
+  kernel is signed through Canonical's Master CA and not by a certificate or
+  hash Ubuntu revoked (`build/trust/canonical/`), removes every signature
+  (`sbattach --remove`) and signs it with the beast-booter key. The code is
+  unchanged: the Authenticode digest is the same before and after. An
+  existing `dist/` copy is kept when ours is its only signature and the
+  unsigned image is unchanged; `BB_RESIGN=1` forces a fresh signature. The
+  manifest records `secure_boot.beastnet_kernel_source`
+  (`deb:<pkg>=<ver>:/boot/vmlinuz-...`), `beastnet_kernel_authenticode_sha256`,
+  `beastnet_kernel_unsigned_sha256` and `beastnet_kernel_replaced_signers`;
+  the build id counts the kernel by its unsigned hash. `build/verify-dist.sh`
+  checks that the kernel carries only the beast-booter signature and that its
+  digest matches the manifest (and the kernel in the `.deb`, when that is in
+  the beast-net cache). The SBOM lists it under its `linux-image` package,
+  marked re-signed.
 - `busybox` (sh, mount, udhcpc, ip, mdev, findfs …; the dynamic build, linked
   against the shipped libc6), `kmod` (modprobe),
   `wpasupplicant` (wpa_supplicant, wpa_cli), `iw`, `ca-certificates`,
@@ -117,6 +150,7 @@ Kernel command line parameters read by the helper:
 | `beastnet.debug=1` | print `BEASTNET:` lines (below) on the console and serial |
 | `beastnet.script=/path` | non-interactive run from a JSON file on the data partition (tests, power users); the menu passes it when `/beast-booter/config.cfg` sets `bb_beastnet_script=/path` |
 | `beastnet.ui=plain` | line-based prompts instead of the curses screens (serial consoles) |
+| `beastnet.action=trust-ubuntu` | open "Trust Ubuntu's Secure Boot key" first (§8; set by the Tools menu entry). Other values are ignored. Its "Download an ISO from a link" item then leads to the normal screens |
 
 Script file (`beastnet.script`):
 ```json
@@ -141,11 +175,15 @@ BEASTNET: download done path=<path> bytes=<n> sha256=<hex>
 BEASTNET: verify ok sha256=<hex>
 BEASTNET: verify fail expected=<hex> got=<hex>
 BEASTNET: handoff oneshot=<path>
+BEASTNET: trust state=<state> sb=<0|1|unknown> ca=<0|1> revoked=<n>/<total> pending=<vars or none>
+BEASTNET: trust request step=<revocations|ca|delete> var=<MokXNew|MokNew|MokDel> certs=<n> hashes=<n>
+BEASTNET: trust requested step=<step> var=<var>
 BEASTNET: error <code> <text>
 ```
 Error codes: `no-network`, `wifi-auth`, `dhcp`, `tls`, `http`, `refused-plain-http`
 (also for an HTTPS -> HTTP redirect), `checksum-mismatch`, `no-space`, `mount`,
-`grubenv`, `script`, `exists`, `internal`.
+`grubenv`, `script`, `exists`, `internal`, `trust` ("Trust Ubuntu's Secure Boot
+key" refused or failed, §8).
 
 Initramfs notes: `/lib` is a real directory, not a symlink (the kernel replaces
 a `/lib` symlink when a firmware pack cpio brings `lib/`); busybox finds programs
@@ -186,9 +224,22 @@ so GRUB can pass it as an extra initrd.
 
 `installed.json`:
 ```json
-{"v": 1, "packs": [{"id": "intel-wifi", "catalog_tag": "<tag>",
+{"v": 1, "packs": [{"id": "intel-wifi", "catalog_tag": "<tag>", "kernel": "<kver>",
   "cpio_sha256": "<hex>", "files": [{"path": "...", "sha256": "...", "size": 1}]}]}
 ```
+
+A pack is made for one catalog: its linux-firmware tag and the helper kernel
+whose modules chose the files. `firmware install` refuses a pack fetched for
+another tag or kernel than the target's catalog (`pack-mismatch`: fetch it
+again with that catalog, or update the drive first). `update` keeps installed
+packs; it warns, naming them, about each kept pack the new catalog no longer
+matches: made for another tag or kernel, or holding other files than the
+catalog now lists for it (installer/beastbooter/firmware.py `stale_reason`).
+0.1.2 moved the kernel from 7.0 to 7.3 with the same tag, so packs installed
+with 0.1.1 still load but hold the files the 7.0 drivers asked for: the update
+warns, `firmware list` and the GUI mark them stale ("made for kernel X -
+reinstall"), and installing them again (fetched with the new catalog)
+replaces them.
 
 Installer CLI (installer/beastbooter, implemented with the cross-platform installer):
 ```
@@ -210,7 +261,8 @@ exact source URL and tag, and the SHA-256s, before anything is downloaded.
 
 `list --json` (and the `done` event of `install`/`remove`, as `info.installed`)
 is installed.json plus: per pack `cpio_size` (or `missing: true` when its .cpio
-is gone), `unlisted` .cpio files, `esp_free`, `esp_cluster`, `esp_label`,
+is gone), `stale: true` and `stale_reason` when the pack no longer matches the
+drive's catalog, `unlisted` .cpio files, `esp_free`, `esp_cluster`, `esp_label`,
 `installed_json_size`, and the drive's `catalog_tag` and `kernel`.
 
 **Room on the ESP.** One formula (installer/beastbooter/esp.py `fw_space`): each
@@ -294,3 +346,55 @@ the catalog needs updating, not that beast-net is broken.
 Windows ISOs download fine but do not boot from BeastBoot 0.1 (the menu
 says so, `unsupported-windows`); they are larger than 4 GiB, so the drive
 needs exFAT or NTFS for them.
+
+## 8. Trust Ubuntu's Secure Boot key
+
+The user side and the reasons: [SECURE_BOOT.md](SECURE_BOOT.md#trust-ubuntus-secure-boot-key-optional);
+the interface between the parts: `build/trust/README.md`.
+
+Code: `beastnet/python/beastnet/trust.py` (screens in `flow.py`). Data:
+`/usr/share/beastnet/trust/canonical/` in the initramfs, copied by
+`build/beastnet/mkinitrd.py` from `build/trust/canonical/`. Every file is
+checked against `trust.json` at build time and again before use; any mismatch
+is refused (error code `trust`).
+
+**State** comes from shim's runtime copies `MokListRT` and `MokListXRT` (from
+`/sys/firmware/efi/mok-variables/`, otherwise efivarfs, including split
+`NAME1`, `NAME2`... variables) and from the pending `MokNew`, `MokXNew`,
+`MokDel` and `MokXDel`. The states: not trusted, revocations only (step 1 of 2
+done), trusted, partly set up, built into this drive's shim (a shim with
+Canonical's CA built in, such as Ubuntu's: nothing to enroll), and cannot be
+checked here (legacy BIOS, or no efivarfs). With Secure Boot off the action
+still works, and the screen says the keys matter only with Secure Boot on.
+`/init` mounts efivarfs at `/sys/firmware/efi/efivars` on UEFI machines, and
+the app mounts it if it is missing.
+
+**Requests.** Step 1 requests every revoked certificate (and hash) missing
+from MokListX with `mokutil --mokx --import`; step 2, only once all are
+there, Canonical's Master CA with `mokutil --import`; "Stop trusting Ubuntu's
+key" the CA's deletion with `mokutil --delete` (the revocations stay).
+Nothing is requested while an earlier request still waits for MokManager.
+Each request is read back from its EFI variable and cancelled unless it holds
+exactly the requested files.
+
+**Password.** The user types a one-time password (4-32 letters or digits)
+twice. The helper hashes it with `mokutil --generate-hash` on stdin and passes
+`--hash-file` (a 0600 file in `/run/beastnet`, deleted afterwards), so the
+password never appears on a command line or in `commands.log`. mokutil is
+called with `--ignore-keyring`, because the helper kernel's built-in keyring
+says nothing about MokList.
+
+**Script mode** (tests only: the password sits in plain text on the data
+partition):
+```json
+{"action": "trust-ubuntu", "step": "next", "password": "1234abcd", "then": "poweroff", "on_error": "poweroff"}
+```
+`step` is `next` (the one request the two-step rule allows now) or `delete`.
+
+**Tests:** `beastnet/tests/test_trust.py` (a fake efivarfs folder and a stub
+mokutil, `beastnet/tests/stub_mokutil.py`) and
+`tests/e2e/test_e2e_trust_ubuntu.py`. The e2e test boots the helper under OVMF
+with Secure Boot, powers off, and reads the VM's variable store with
+`virt-fw-vars`; it needs KVM. On a drive whose shim has Canonical's CA built in
+(the 0.1.1 chain), set `BB_E2E_DEBIAN_SHIM` to Debian's pinned
+`shimx64.efi.signed` so the test can run the two-step check.

@@ -91,7 +91,7 @@ support the data partition's filesystem:
 | Data filesystem | GRUB can read it | ISO initramfs can mount it |
 |---|---|---|
 | FAT32 | yes | yes, every Linux initramfs supports vfat (expected) |
-| exFAT (default) | yes | **Ubuntu desktop: tested** with Ubuntu 26.04.1 (UEFI, UEFI with Secure Boot, legacy BIOS), through the [exFAT add-on](#the-exfat-add-on). Other casper ISOs with a `minimal.squashfs` or `filesystem.squashfs` (official flavours, Linux Mint) and Debian live-boot ISOs: expected through the same add-on, unverified. **Ubuntu Server ISOs are not covered** (their layers are named `ubuntu-server-*.squashfs`): use FAT32 for them if they fit. Other distributions need the `exfat` module in their own initramfs (Linux 5.7 or later); unverified per distribution. |
+| exFAT (default) | yes | **Ubuntu desktop: tested** with Ubuntu 26.04.1 (UEFI, UEFI with Secure Boot, legacy BIOS; with Secure Boot on, 0.1.2 first needs [Ubuntu's key trusted](#secure-boot)), through the [exFAT add-on](#the-exfat-add-on). Other casper ISOs with a `minimal.squashfs` or `filesystem.squashfs` (official flavours, Linux Mint) and Debian live-boot ISOs: expected through the same add-on, unverified. **Ubuntu Server ISOs are not covered** (their layers are named `ubuntu-server-*.squashfs`): use FAT32 for them if they fit. Other distributions need the `exfat` module in their own initramfs (Linux 5.7 or later); unverified per distribution. |
 | NTFS | yes, **but not under Secure Boot**: GRUB 2.14 switches its NTFS driver off in lockdown mode, so with Secure Boot on the menu cannot see an NTFS data partition at all | needs `ntfs3` (Linux 5.15+) in the initramfs; many distributions do not include it there. Unverified. |
 
 If an ISO is not covered by the add-on below and you are unsure, use FAT32
@@ -150,13 +150,15 @@ lower case; the menu converts them to upper case like `/dev/disk/by-uuid`).
 With Secure Boot on, BeastBoot's GRUB is started by shim and every kernel
 or EFI program it starts is verified through shim: against the firmware's
 `db`, the MOK list (keys you enrolled with MokManager), or the vendor
-certificate built into shim. BeastBoot ships Ubuntu's Microsoft-signed
-shim, whose vendor certificate is Canonical's.
+certificate built into shim. Since 0.1.2 BeastBoot ships Debian's
+Microsoft-signed shim 16.1, whose vendor certificate is Debian's (0.1.1 and
+older shipped Ubuntu's shim, whose vendor certificate is Canonical's).
 
 | ISO kernel signed by | Boots with Secure Boot on? |
 |---|---|
-| Canonical (Ubuntu, official Ubuntu flavours, distributions that reuse Ubuntu's signed kernel, such as Linux Mint) | yes, through Ubuntu's shim vendor certificate (expected) |
-| another distribution's key (Fedora/Red Hat, Debian, openSUSE/SUSE, ...) | only after you enroll that distribution's signing certificate with MokManager ("Enroll a key (MokManager)" in the menu), if the distribution publishes one; otherwise turn Secure Boot off |
+| Debian | yes, through Debian's shim vendor certificate (expected) |
+| Canonical (Ubuntu, official Ubuntu flavours, distributions that reuse Ubuntu's signed kernel, such as Linux Mint) | only after you run "Trust Ubuntu's Secure Boot key" in the menu once on that computer (it adds Ubuntu's revocations to MokListX, then Canonical's CA to MokList, each confirmed in MokManager; see [SECURE_BOOT.md](SECURE_BOOT.md#trust-ubuntus-secure-boot-key-optional)); otherwise turn Secure Boot off |
+| another distribution's key (Fedora/Red Hat, openSUSE/SUSE, ...) | only after you enroll that distribution's signing certificate with MokManager ("Enroll a key (MokManager)" in the menu), if the distribution publishes one; otherwise turn Secure Boot off |
 | nobody (Arch Linux ISO, many smaller distributions) | no: turn Secure Boot off in the firmware settings |
 
 These distributions' own shims are Microsoft-signed too, but BeastBoot
@@ -164,8 +166,10 @@ does not chain-load other distributions' shims: it boots their kernels
 directly, so their kernel signing keys must be trusted by our shim.
 
 When a kernel is refused, the menu prints the GRUB error, then
-`BEAST: error sb-verify-failed ...` and an explanation with these three
-options, and returns to the menu. It never retries without verification.
+`BEAST: error sb-verify-failed ...` and an explanation with these options
+(Ubuntu-signed: "Trust Ubuntu's Secure Boot key"; another distribution:
+enroll its key; a release that supports Secure Boot; or Secure Boot off),
+and returns to the menu. It never retries without verification.
 Depending on the shim and GRUB versions, the refusal is reported when the
 kernel is loaded (`linux`) or when it is started (`boot`); both are handled.
 
@@ -185,7 +189,9 @@ QEMU with OVMF (UEFI, Secure Boot off) and SeaBIOS (legacy BIOS) using
 `bb_dryrun=1` and `bb_debug=1`, and checked for the `BEAST: boot` and
 `BEAST: dryrun` lines, for paths with spaces, and for the `loopback.cfg` case
 (the fixture's `loopback.cfg` prints `$iso_path`). Secure Boot rejection was
-checked with OVMF in Secure Boot mode (Microsoft keys), Ubuntu's signed shim
-and GRUB: an unsigned EFI program and a dummy kernel are both refused by shim
-(`error: bad shim lock signature.`) and reported as `sb-verify-failed`. The
-end-to-end tests in `tests/e2e/` repeat this with BeastBoot's own build.
+first checked with OVMF in Secure Boot mode (Microsoft keys), Ubuntu's signed
+shim and GRUB: an unsigned EFI program and a dummy kernel are both refused by
+shim (`error: bad shim lock signature.`) and reported as `sb-verify-failed`.
+The end-to-end tests in `tests/e2e/` repeat this with BeastBoot's own build
+(Debian's shim 16.1 since 0.1.2), and check that Ubuntu's Canonical-signed
+kernel is refused until Canonical's CA is in MokList.

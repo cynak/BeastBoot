@@ -1,7 +1,8 @@
 """beast-net: "Download an ISO from a link" end to end (docs/BEASTNET.md).
 
-The chain: the root menu's tool entry -> Ubuntu's signed helper kernel boots
-through our GRUB (also under Secure Boot, verified by shim) -> DHCP on a
+The chain: the root menu's tool entry -> the helper kernel (Ubuntu's, re-signed
+with the beast-booter key by build.sh) boots through our GRUB (also under
+Secure Boot, verified by shim) -> DHCP on a
 virtio NIC (QEMU slirp) -> HTTP download from a host-side server with SHA-256
 verification -> one-shot entry in ESP:/grub/grubenv -> reboot -> the menu
 boots the downloaded ISO once (through the normal recipes) and clears the entry.
@@ -103,14 +104,41 @@ def test_menu_entry_dryrun(mode, bn_drive, vm_factory, request):
     assert token_value(lin, "beastnet.esp").upper() == f"UUID={bn.esp_uuid(drive)}".upper(), str(lin)
     for tok in ("beastnet.sb=0", "beastnet.debug=1", "console=ttyS0,115200", "beastnet.ui=plain"):
         assert lin.has_token(tok), f"missing {tok} in {lin}"
+    assert not [t for t in lin.tokens if t.startswith("beastnet.action")], str(lin)
     ini = vm.wait_record("dryrun", r"^dryrun initrd ", after=boot.start)
     assert len(ini.tokens) == 3 and ini.tokens[2].endswith("/beast-net/initrd.img"), \
         f"no firmware packs installed: only the base initrd expected: {ini}"
     assert not vm.records("error", after=boot.start), [str(r) for r in vm.records("error")]
 
 
+@pytest.mark.parametrize("mode", BOTH)
+def test_trust_ubuntu_entry_dryrun(mode, bn_drive, vm_factory, request):
+    """ "Trust Ubuntu's Secure Boot key" (UEFI only) boots the helper like the
+    download entry, plus beastnet.action=trust-ubuntu (build/trust/README.md)."""
+    drive = bn_drive(bn.config(dryrun=True))
+    vm = boot_vm(vm_factory, request, mode, drive)
+    vm.wait_record("dir", r"^dir /$", timeout=120)
+    menu = vm.wait_menu(timeout=120)
+    if mode == "bios":
+        assert bn.TRUST_ENTRY not in menu.entries, f"no MokList under BIOS:\n{menu}"
+        return
+    assert menu.entries[1:3] == [bn.ENTRY, bn.TRUST_ENTRY], f"{menu}\n--- screen ---\n{vm.screen.text()}"
+    mark = vm.mark()
+    vm.keys("down", "down", "enter")
+    boot = vm.wait_record("boot", r"^boot beast-net recipe=beast-net action=trust-ubuntu$", timeout=60, after=mark)
+    lin = vm.wait_record("dryrun", r"^dryrun linux ", after=boot.start)
+    assert lin.tokens[2].endswith("/beast-net/vmlinuz"), str(lin)
+    assert token_value(lin, "beastnet.action") == "trust-ubuntu", str(lin)
+    assert token_value(lin, "beastnet.data") == f"UUID={drive.data_uuid}", str(lin)
+    for tok in ("beastnet.sb=0", "beastnet.debug=1", "console=ttyS0,115200", "beastnet.ui=plain"):
+        assert lin.has_token(tok), f"missing {tok} in {lin}"
+    ini = vm.wait_record("dryrun", r"^dryrun initrd ", after=boot.start)
+    assert ini.tokens[2].endswith("/beast-net/initrd.img"), str(ini)
+    assert not vm.records("error", after=boot.start), [str(r) for r in vm.records("error")]
+
+
 # ---------------------------------------------------------------------------
-# 2. The real helper boots (shim verifies Ubuntu's kernel under Secure Boot)
+# 2. The real helper boots (shim verifies the re-signed kernel under Secure Boot)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("mode", ALL)

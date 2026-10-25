@@ -296,6 +296,31 @@ def select_modules(moddir: str, listfile: str) -> tuple[list[str], dict[str, lis
 
 
 # ---------------------------------------------------------------------------
+TRUST_SRC = os.path.join(ROOT, "build", "trust", "canonical")
+TRUST_DST = "usr/share/beastnet/trust/canonical"
+
+
+def add_trust_files(st: Stage) -> int:
+    """build/trust/canonical/ (what Ubuntu's shim trusts and revokes) for the
+    helper's "Trust Ubuntu's Secure Boot key"; every file must match trust.json."""
+    try:
+        with open(os.path.join(TRUST_SRC, "trust.json"), encoding="utf-8") as f:
+            listed = json.load(f)["files"]
+    except (OSError, ValueError, KeyError) as e:
+        raise BuildError(f"{TRUST_SRC}/trust.json: {e}") from None
+    found = {rel for rel, _ in bnlib.walk_files(TRUST_SRC)} - {"trust.json"}
+    if found != set(listed):
+        raise BuildError(f"{TRUST_SRC}: files differ from trust.json: {sorted(found ^ set(listed))}")
+    for rel in ["trust.json", *sorted(listed)]:
+        src = os.path.join(TRUST_SRC, rel)
+        if os.path.islink(src):
+            raise BuildError(f"{src}: symlinks are not allowed in the trust files")
+        if rel != "trust.json" and bnlib.sha256_file(src) != listed[rel]:
+            raise BuildError(f"{src}: SHA-256 differs from trust.json")
+        st.add_file(f"{TRUST_DST}/{rel}", src, "repo:" + os.path.relpath(src, ROOT), mode=0o644)
+    return len(listed) + 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--lock", required=True)
@@ -435,6 +460,7 @@ def main() -> int:
                 raise BuildError(f"{src}: symlinks are not allowed in the Python package")
             st.add_file(dst, src, "repo:" + os.path.relpath(src, ROOT), mode=0o644)
             app_files += 1
+        app_files += add_trust_files(st)
         init = st.e.get("init")
         if init is None or init.kind != "file":
             raise BuildError("beastnet/rootfs/init must be a regular file")

@@ -137,12 +137,25 @@ def _missing(d: Path, names) -> list[str]:
     return [n for n in names if not (d / n).exists()]
 
 
+GRUB_SRC_FIX = ("run `make build` (or `make tools`): build/grub/grubsrc.py builds GRUB from source into "
+                ".tools/cache/grub-src (a few minutes the first time)")
+
+
+def grub_src_version(d: Path) -> str:
+    """'GRUB <version> built from source' when D is a platform dir of our GRUB source build."""
+    try:
+        info = json.loads((Path(d).parent / "build-info.json").read_text())
+    except (OSError, ValueError):
+        return ""
+    return f"GRUB {info.get('version', '?')} built from source (key {info.get('key', '?')})"
+
+
 def check_grub_efi(ctx: Ctx) -> Check:
     d = ctx.dir("BB_GRUB_EFI_DIR")
     miss = _missing(d, ("kernel.img", "moddep.lst", "normal.mod"))
     if miss or not d.is_dir():
         return Check("grub-efi", FAIL, f"GRUB x86_64-efi modules not found in {d} ({', '.join(miss) or 'no dir'})",
-                     tools_fix("grub-efi-amd64-bin"), TOOLS, "boot")
+                     GRUB_SRC_FIX, TOOLS, "boot")
     lst = ctx.repo / "build" / "modules-efi.lst"
     absent = []
     if lst.is_file():
@@ -152,9 +165,12 @@ def check_grub_efi(ctx: Ctx) -> Check:
                 absent.append(line)
     if absent:
         return Check("grub-efi", FAIL, f"{d} lacks modules listed in build/modules-efi.lst: {' '.join(absent)}",
-                     "install a complete grub-efi-amd64-bin (`make tools`)", TOOLS, "boot")
+                     GRUB_SRC_FIX, TOOLS, "boot")
+    src = grub_src_version(d)
+    if src:
+        return ok("grub-efi", f"{short(d, ctx)} ({src})", "boot")
     ver = module_pkg_version(ctx, d, "grub-efi-amd64-bin")
-    return ok("grub-efi", f"{d} (grub-efi-amd64-bin {ver or '?'})", "boot")
+    return ok("grub-efi", f"{d} (grub-efi-amd64-bin {ver or '?'}; dist/ uses the source build, not these)", "boot")
 
 
 def check_grub_bios(ctx: Ctx) -> Check:
@@ -162,34 +178,57 @@ def check_grub_bios(ctx: Ctx) -> Check:
     miss = _missing(d, ("boot.img", "diskboot.img", "kernel.img", "lzma_decompress.img", "moddep.lst", "normal.mod"))
     if miss or not d.is_dir():
         return Check("grub-bios", FAIL, f"GRUB i386-pc modules not found in {d} ({', '.join(miss) or 'no dir'})",
-                     tools_fix("grub-pc-bin"), TOOLS, "boot")
+                     GRUB_SRC_FIX, TOOLS, "boot")
+    src = grub_src_version(d)
+    if src:
+        return ok("grub-bios", f"{short(d, ctx)} ({src})", "boot")
     ver = module_pkg_version(ctx, d, "grub-pc-bin")
-    return ok("grub-bios", f"{short(d, ctx)} (grub-pc-bin {ver or '?'})", "boot")
+    return ok("grub-bios", f"{short(d, ctx)} (grub-pc-bin {ver or '?'}; dist/ uses the source build, not these)",
+              "boot")
 
 
 def check_grub_signed(ctx: Ctx) -> Check:
+    """Ubuntu's signed GRUB: only the e2e stub images need it (their SBAT). dist/'s SBAT comes from
+    the GRUB source build (build/grub/security-fixes.json), see check_grub_src."""
     d = ctx.dir("BB_GRUB_EFI_SIGNED_DIR")
     f = d / "grubx64.efi.signed"
     if not f.is_file():
-        return Check("grub-signed", FAIL, f"{f} not found (its .sbat section is the source of our SBAT)",
-                     tools_fix("grub-efi-amd64-signed"), TOOLS, "boot")
-    modules = module_pkg_version(ctx, ctx.dir("BB_GRUB_EFI_DIR"), "grub-efi-amd64-bin")
+        return Check("grub-signed", WARN, f"{f} not found (the e2e stub images use its SBAT)",
+                     tools_fix("grub-efi-amd64-signed"), TOOLS, "test")
     vfile = d / "version"
     signed = vfile.read_text().strip() if vfile.is_file() else ""
-    if signed and modules and signed != modules:
-        return Check("grub-signed", FAIL,
-                     f"signed GRUB is {signed} but the modules are {modules}: SBAT would not describe our GRUB",
-                     "install matching grub-efi-amd64-bin and grub-efi-amd64-signed versions "
-                     "(sudo apt install grub-efi-amd64-bin grub-efi-amd64-signed)", SYSTEM, "boot")
-    return ok("grub-signed", f"{f} ({signed or 'version ?'}, same build as the modules: SBAT ok)", "boot")
+    return ok("grub-signed", f"{f} ({signed or 'version ?'}; e2e stub images only)", "test")
+
+
+def check_grub_src(ctx: Ctx) -> Check:
+    """The GRUB source build dist/ is made from (build/grub/grubsrc.py, last build)."""
+    cur = Path(ctx.env.get("BB_GRUB_CACHE") or ctx.repo / ".tools/cache/grub-src") / "current"
+    try:
+        info = json.loads((cur / "build-info.json").read_text())
+    except (OSError, ValueError):
+        return Check("grub-src", WARN, f"GRUB not built from source yet ({short(cur, ctx)} missing)",
+                     GRUB_SRC_FIX, TOOLS, "boot")
+    claims = [c for c in info.get("security_fixes", {}).get("sbat_claims", [])]
+    bad = [f"{c['component']},{c['generation']}" for c in claims if not c.get("proven")]
+    if bad:
+        return Check("grub-src", FAIL, f"GRUB {info.get('version')}: SBAT claim(s) {', '.join(bad)} not proven",
+                     "fix build/grub/security-fixes.json or the patches, then `make build`", TOOLS, "boot")
+    sbat = ", ".join(f"{c['component']},{c['generation']}" for c in claims) or "no claim"
+    nfix = sum(1 for f in info.get("security_fixes", {}).get("fixes", [])
+               if f.get("present") and f.get("type") != "defect")
+    return ok("grub-src", f"GRUB {info.get('version')} (key {info.get('key')}): SBAT {sbat} proven, "
+                          f"{nfix} security fixes present", "boot")
 
 
 def check_shim(ctx: Ctx) -> Check:
     d = ctx.dir("BB_SHIM_DIR")
-    miss = _missing(d, ("shimx64.efi.signed.latest", "mmx64.efi"))
+    # Debian's shim-signed + shim-helpers-amd64-signed (build/shim/debian-shim.lock)
+    miss = _missing(d, ("shimx64.efi.signed", "mmx64.efi.signed"))
     if miss:
-        return Check("shim", FAIL, f"{d}: missing {', '.join(miss)}", tools_fix("shim-signed"), TOOLS, "boot")
-    return ok("shim", f"{d} (shimx64.efi.signed.latest, mmx64.efi)", "boot")
+        return Check("shim", FAIL, f"{d}: missing {', '.join(miss)}",
+                     "run `make tools` (build/shim/fetch.py fetches Debian's pinned shim into .tools/debian)",
+                     TOOLS, "boot")
+    return ok("shim", f"{d} (Debian shimx64.efi.signed, mmx64.efi.signed)", "boot")
 
 
 def check_ovmf(ctx: Ctx) -> Check:
@@ -513,7 +552,8 @@ def check_disk(ctx: Ctx, usage=shutil.disk_usage) -> Check:
 
 
 CHECKS = (
-    check_python, check_grub_efi, check_grub_bios, check_grub_signed, check_shim, check_ovmf, check_seabios,
+    check_python, check_grub_src, check_grub_efi, check_grub_bios, check_grub_signed, check_shim, check_ovmf,
+    check_seabios,
     check_qemu, check_kvm, check_mtools, check_xorriso, check_mksquashfs, check_sfdisk, check_mkfs_fat, check_mkfs_exfat,
     check_mkfs_ntfs, check_sbsign, check_openssl, check_virt_fw_vars, check_udisks, check_socat, check_gdb,
     check_grub_dbg, check_venv, check_keys, check_dist, check_dev_image, check_disk,
