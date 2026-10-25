@@ -59,14 +59,14 @@ grep -F macos-arm64.zip SHA256SUMS | shasum -a 256 -c -
 
 ```powershell
 # Windows (PowerShell): compare the output with the line for this file in SHA256SUMS
-Get-FileHash .\beast-booter-0.1.0-windows-x86_64.zip -Algorithm SHA256
+Get-FileHash .\beast-booter-0.1.1-windows-x86_64.zip -Algorithm SHA256
 ```
 
 **2. The unpacked files match `PACKAGE-MANIFEST.json`.** Unpack the archive and run
 the included checker with any Python 3.8 or newer:
 
 ```sh
-python3 beast-booter-0.1.0-linux-x86_64/verify-package.py
+python3 beast-booter-0.1.1-linux-x86_64/verify-package.py
 ```
 
 It recomputes the SHA-256 of every file and checks symlinks and executable
@@ -74,7 +74,7 @@ bits. It also checks the boot files against `payload/dist/manifest.json` (the
 same check the installer makes before it writes a drive) and the layout the
 launchers need, and it reports any file that is missing or that is not part of
 the package. You can also run it on an archive without unpacking it:
-`python3 verify-package.py beast-booter-0.1.0-macos-arm64.zip`.
+`python3 verify-package.py beast-booter-0.1.1-macos-arm64.zip`.
 
 If you have no Python, use the bundled one, but only after step 1, and always
 with `-I -S -B`:
@@ -174,7 +174,7 @@ first (above), then:
   set on the download:
 
   ```sh
-  xattr -dr com.apple.quarantine ~/Downloads/beast-booter-0.1.0-macos-arm64
+  xattr -dr com.apple.quarantine ~/Downloads/beast-booter-0.1.1-macos-arm64
   ```
 
 While an app is quarantined, macOS may run it from a hidden, read-only copy
@@ -184,8 +184,8 @@ into its own folder.
 ### Linux
 
 ```sh
-tar xzf beast-booter-0.1.0-linux-x86_64.tar.gz
-cd beast-booter-0.1.0-linux-x86_64
+tar xzf beast-booter-0.1.1-linux-x86_64.tar.gz
+cd beast-booter-0.1.1-linux-x86_64
 ./BeastBooter                  # the GUI
 ./beast-booter --help          # the CLI
 sudo ./beast-booter install --device /dev/sdX
@@ -307,8 +307,8 @@ make portable                    # this machine's target, e.g. linux-x86_64
 make portable ARGS=--all         # linux-x86_64, windows-x86_64, macos-x86_64, macos-arm64
 scripts/build_portable.sh --target windows-x86_64 --target macos-arm64
 ls out/portable/
-#   beast-booter-0.1.0-linux-x86_64.tar.gz   beast-booter-0.1.0-macos-arm64.zip
-#   beast-booter-0.1.0-macos-x86_64.zip      beast-booter-0.1.0-windows-x86_64.zip
+#   beast-booter-0.1.1-linux-x86_64.tar.gz   beast-booter-0.1.1-macos-arm64.zip
+#   beast-booter-0.1.1-macos-x86_64.zip      beast-booter-0.1.1-windows-x86_64.zip
 #   SHA256SUMS
 ```
 

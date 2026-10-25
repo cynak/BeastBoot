@@ -7,7 +7,7 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-52525b"></a>
-  <a href="VERSION"><img alt="Version: 0.1.0 (in development)" src="https://img.shields.io/badge/version-0.1.0%20%28in%20development%29-orange"></a>
+  <a href="VERSION"><img alt="Version: 0.1.1" src="https://img.shields.io/badge/version-0.1.1-orange"></a>
   <a href="docs/ARCHITECTURE.md#2-boot-flows"><img alt="Platforms: BIOS, UEFI, Secure Boot" src="https://img.shields.io/badge/platforms-BIOS%20%7C%20UEFI%20%7C%20Secure%20Boot-d62839"></a>
   <br>
   <a href="sbom/README.md"><img alt="SBOM: CycloneDX 1.6 + SPDX 2.3" src="https://img.shields.io/badge/SBOM-CycloneDX%201.6%20%2B%20SPDX%202.3-52525b"></a>

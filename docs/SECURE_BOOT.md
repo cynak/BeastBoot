@@ -215,7 +215,7 @@ grub,5,Free Software Foundation,grub,2.14,https://www.gnu.org/software/grub/
 grub.ubuntu,2,Ubuntu,grub2,2.14-2ubuntu1,https://www.ubuntu.com/
 grub.ubuntu26,1,Ubuntu,grub2,2.14-2ubuntu1,https://www.ubuntu.com/
 grub.peimage,2,Canonical,grub2,2.14-2ubuntu1,https://salsa.debian.org/grub-team/grub/-/blob/master/debian/patches/secure-boot/efi-use-peimage-shim.patch
-grub.beastbooter,1,beast-booter,grub2,2.14-2ubuntu1+bb0.1.0,https://github.com/cynak/BeastBoot
+grub.beastbooter,1,beast-booter,grub2,2.14-2ubuntu1+bb0.1.1,https://github.com/cynak/BeastBoot
 ```
 
 - The first five lines are copied **verbatim** from Ubuntu's signed GRUB of

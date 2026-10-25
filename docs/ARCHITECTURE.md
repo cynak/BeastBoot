@@ -146,7 +146,7 @@ firmware packs.
 {
   "schema": 1,
   "name": "beast-booter",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "source_date_epoch": 1760000000,
   "secure_boot": {
     "cert_sha256": "<sha256 of the DER cert>",
@@ -377,7 +377,7 @@ beast-booter firmware list    (--device DEV | --image PATH) [--json]
 - `info --json` prints:
 
 ```json
-{"layout": "msdos", "layout_version": 2, "version": "0.1.0", "install_id": "...",
+{"layout": "msdos", "layout_version": 2, "version": "0.1.1", "install_id": "...",
  "disk_sectors": 2097152, "bios_core_lba": 1,
  "data": {"index": 1, "start_lba": 2048, "size_lba": 1046528, "fs": "fat32",
           "uuid": "96BC-D565", "label": "BEASTBOOTER"},

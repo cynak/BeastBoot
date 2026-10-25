@@ -13,7 +13,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/wpasupplicant@2%3A2.11-0ubuntu5?arch=amd64&distro=ubuntu-26.04&upstream=wpa"
@@ -32,7 +32,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -51,7 +51,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/wpasupplicant@2%3A2.11-0ubuntu5?arch=amd64&distro=ubuntu-26.04&upstream=wpa"
@@ -70,7 +70,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -89,7 +89,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -108,7 +108,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -127,7 +127,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -146,7 +146,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -165,7 +165,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -184,7 +184,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libexpat1@2.7.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=expat"
@@ -203,7 +203,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -222,7 +222,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -241,7 +241,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -260,7 +260,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libexpat1@2.7.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=expat"
@@ -279,7 +279,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -298,7 +298,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -317,7 +317,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -336,7 +336,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -355,7 +355,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -374,7 +374,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -393,7 +393,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -412,7 +412,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -431,7 +431,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -450,7 +450,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -469,7 +469,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -488,7 +488,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -507,7 +507,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -526,7 +526,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -545,7 +545,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -564,7 +564,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -583,7 +583,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -601,7 +601,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -619,7 +619,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -637,7 +637,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libc6@2.43-2ubuntu2.4?arch=amd64&distro=ubuntu-26.04&upstream=glibc"
@@ -656,7 +656,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -675,7 +675,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -694,7 +694,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -713,7 +713,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -732,7 +732,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -751,7 +751,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -770,7 +770,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -789,7 +789,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -808,7 +808,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -827,7 +827,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -846,7 +846,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -865,7 +865,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -884,7 +884,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -903,7 +903,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -922,7 +922,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -941,7 +941,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -960,7 +960,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -979,7 +979,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -997,7 +997,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -1015,7 +1015,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/wpasupplicant@2%3A2.11-0ubuntu5?arch=amd64&distro=ubuntu-26.04&upstream=wpa"
@@ -1033,7 +1033,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1052,7 +1052,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1071,7 +1071,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1090,7 +1090,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1109,7 +1109,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1128,7 +1128,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1147,7 +1147,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1166,7 +1166,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1185,7 +1185,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1204,7 +1204,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1223,7 +1223,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1242,7 +1242,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1261,7 +1261,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1280,7 +1280,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1299,7 +1299,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1318,7 +1318,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1337,7 +1337,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1356,7 +1356,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1375,7 +1375,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1394,7 +1394,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1413,7 +1413,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1432,7 +1432,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -1451,7 +1451,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libexpat1@2.7.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=expat"
@@ -1470,7 +1470,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/wpasupplicant@2%3A2.11-0ubuntu5?arch=amd64&distro=ubuntu-26.04&upstream=wpa"
@@ -1489,7 +1489,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1508,7 +1508,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1527,7 +1527,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1546,7 +1546,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1565,7 +1565,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1584,7 +1584,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1603,7 +1603,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libc6@2.43-2ubuntu2.4?arch=amd64&distro=ubuntu-26.04&upstream=glibc"
@@ -1622,7 +1622,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libc6@2.43-2ubuntu2.4?arch=amd64&distro=ubuntu-26.04&upstream=glibc"
@@ -1641,7 +1641,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1660,7 +1660,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1679,7 +1679,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1698,7 +1698,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -1717,7 +1717,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -1736,7 +1736,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -1755,7 +1755,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -1773,7 +1773,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -1791,7 +1791,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -1810,7 +1810,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -1829,7 +1829,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -1848,7 +1848,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -1867,7 +1867,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -1886,7 +1886,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -1905,7 +1905,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -1924,7 +1924,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -1943,7 +1943,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libc6@2.43-2ubuntu2.4?arch=amd64&distro=ubuntu-26.04&upstream=glibc"
@@ -1962,7 +1962,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -1981,7 +1981,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
@@ -2000,7 +2000,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libexpat1@2.7.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=expat"
@@ -2019,7 +2019,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libc6@2.43-2ubuntu2.4?arch=amd64&distro=ubuntu-26.04&upstream=glibc"
@@ -2038,7 +2038,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-booter@0.1.0",
+          "@id": "pkg:generic/beast-booter@0.1.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libc6@2.43-2ubuntu2.4?arch=amd64&distro=ubuntu-26.04&upstream=glibc"

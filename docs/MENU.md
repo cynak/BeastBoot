@@ -116,7 +116,7 @@ With `bb_debug=1` the menu prints one machine-readable line per event. Every
 line starts with exactly `BEAST: `:
 
 ```
-BEAST: ready version=0.1.0 platform=efi sb=0 esp=hd0,msdos2 data=hd0,msdos1 fs=exfat
+BEAST: ready version=0.1.1 platform=efi sb=0 esp=hd0,msdos2 data=hd0,msdos1 fs=exfat
 BEAST: dir /
 BEAST: item dir /Some Folder
 BEAST: item iso /ubuntu-24.04.iso
