@@ -267,7 +267,7 @@ def test_unusable_generators_run_each_tool(tmp_path):
     for name in ("flex", "gawk", "autopoint"):
         _tool(tmp_path, name, f"echo '{name} 1.0'")
     _tool(tmp_path, "bison", "echo \"bison: /lib/x86_64-linux-gnu/libc.so.6: version 'GLIBC_2.38' not found\" >&2; exit 1")
-    env = {"PATH": f"{tmp_path}:/usr/bin:/bin"}
+    env = {"PATH": str(tmp_path)}  # only the fake tools: a gawk/bison on the host must not count
     bad = gs.unusable_generators(env, {"bison"})
     assert len(bad) == 1 and bad[0].startswith("bison (unpacked") and "GLIBC_2.38" in bad[0]
     (tmp_path / "gawk").unlink()
