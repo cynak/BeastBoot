@@ -3,7 +3,9 @@
 
     python3 -I scripts/scan_vulns.py [--offline] [--fail-on critical|high]
 
-Reads sbom/beast-booter.cdx.json (run gen_sbom.py first), dist/ and sbom/vex.openvex.json.
+Reads sbom/beast-booter.cdx.json (run gen_sbom.py first), dist/ and the OpenVEX files
+(sbom/vex.openvex.json, hand-maintained, plus every sbom/vex.*.openvex.json, generated from
+evidence, e.g. vex.kernel.openvex.json; never vex.proposed.openvex.json).
 Writes sbom/vulnerabilities.json, sbom/VULNERABILITIES.md and sbom/vex.proposed.openvex.json.
 
 Steps
@@ -12,7 +14,7 @@ Steps
   2. osv-scanner on the SBOM, plus on a derived view that names each Debian *source*
      package (OSV's Ubuntu records are keyed by source package).
   3. merge + dedupe by (vulnerability id/alias, component); tag shipped vs build.
-  4. apply OpenVEX triage (sbom/vex.openvex.json); invalid statements are reported.
+  4. apply OpenVEX triage (sbom/vex.openvex.json + sbom/vex.*.openvex.json); invalid statements are reported.
   5. evidence for triage: CVEs recorded as fixed in the shipped package's changelog,
      Ubuntu CVE tracker status, GRUB module named by the advisory vs. modules embedded
      in grubx64.efi. Evidence becomes *proposed* VEX statements, never applied silently.
@@ -206,7 +208,7 @@ def tool_version(binpath: Path, args: list[str]) -> str:
         return "missing"
 
 
-def run_grype(root: Path, sbom: Path, vex: Path, distro: str, offline: bool, work: Path) -> dict:
+def run_grype(root: Path, sbom: Path, vex: list[Path], distro: str, offline: bool, work: Path) -> dict:
     grype = root / ".tools/bin/grype"
     if not grype.exists():
         return {"ok": False, "error": "grype not installed (scripts/install-tools.sh)", "matches": []}
@@ -232,8 +234,9 @@ def run_grype(root: Path, sbom: Path, vex: Path, distro: str, offline: bool, wor
             info["db"]["stale"] = True
     out = work / "grype.json"
     cmd = [str(grype), f"sbom:{sbom}", "--distro", distro.replace("-", ":", 1), "-o", "json", "--file", str(out)]
-    if vex.exists():
-        cmd += ["--vex", str(vex)]
+    for v in vex:
+        if v.exists():
+            cmd += ["--vex", str(v)]
     info["command"] = " ".join(["grype"] + cmd[1:]).replace(str(root) + "/", "")
     r = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=1800)
     if r.returncode != 0 or not out.exists():
@@ -490,6 +493,35 @@ def load_vex(path: Path) -> tuple[list[dict], list[str], dict]:
         good.append(s)
     meta = {"@id": doc.get("@id"), "author": doc.get("author"), "version": doc.get("version"),
             "timestamp": doc.get("timestamp"), "statements": len(doc.get("statements", []) or [])}
+    return good, errs, meta
+
+
+VEX_HAND = "vex.openvex.json"
+VEX_PROPOSED = "vex.proposed.openvex.json"
+
+
+def default_vex_files(sbom_dir: Path) -> list[Path]:
+    """The hand-maintained file first, then every generated sbom/vex.*.openvex.json (sorted);
+    the scanner's own proposals are never applied."""
+    extra = sorted(p for p in sbom_dir.glob("vex.*.openvex.json") if p.name != VEX_PROPOSED)
+    return [sbom_dir / VEX_HAND, *extra]
+
+
+def load_vex_files(paths: list[Path], root: Path) -> tuple[list[dict], list[str], dict]:
+    """load_vex for several files: statements combined, problems prefixed with the file name.
+    A missing generated file is fine; a missing hand-maintained file is reported as before."""
+    good, errs, files = [], [], []
+    for path in paths:
+        if not path.exists() and path.name != VEX_HAND:
+            continue
+        g, e, m = load_vex(path)
+        good += g
+        errs += [x if x.startswith(path.name) else f"{path.name}: {x}" for x in e]
+        rel = str(path.relative_to(root)) if path.is_relative_to(root) else str(path)
+        files.append({"path": rel, **m, "applicable": len(g)})
+    meta = {"statements": sum(f.get("statements", 0) for f in files), "files": files}
+    if files:
+        meta.update({k: files[0].get(k) for k in ("@id", "author", "version", "timestamp")})
     return good, errs, meta
 
 
@@ -1297,7 +1329,9 @@ def write_markdown(path: Path, rep: dict) -> None:
     for o in rep["scanners"]["osv-scanner"]:
         a(f"- **osv-scanner** {o.get('version')} ({o['label']}) - {o.get('packages_scanned')} packages, "
           f"{o.get('mode', 'n/a')}; {'ok' if o.get('ok') else 'FAILED: ' + str(o.get('error'))}")
-    a(f"- **VEX**: `sbom/vex.openvex.json` - {rep['vex']['meta'].get('statements', 0)} statement(s)"
+    vfiles = rep["vex"]["meta"].get("files") or [{"path": rep["vex"].get("path") or "sbom/vex.openvex.json",
+                                                  "statements": rep["vex"]["meta"].get("statements", 0)}]
+    a("- **VEX**: " + ", ".join(f"`{f['path']}` - {f.get('statements', 0)} statement(s)" for f in vfiles)
       + (f", **{len(rep['vex']['errors'])} problem(s)**: " + "; ".join(rep["vex"]["errors"]) if rep["vex"]["errors"] else ""))
     a("- **Boot-chain checks**: SBAT, Authenticode signers, beast-booter certificate, dbx, manifest/provenance "
       "(sources and dates below).")
@@ -1636,7 +1670,9 @@ def main() -> int:
     ap.add_argument("--refresh", action="store_true", help="refetch cached data files even if fresh")
     ap.add_argument("--max-age-hours", type=float, default=24.0, help="data cache freshness (default 24)")
     ap.add_argument("--no-ubuntu-tracker", action="store_true", help="skip Ubuntu CVE tracker lookups")
-    ap.add_argument("--vex", help="OpenVEX file (default: sbom/vex.openvex.json)")
+    ap.add_argument("--vex", action="append",
+                    help="OpenVEX file; repeat for several (default: sbom/vex.openvex.json and every "
+                         "sbom/vex.*.openvex.json except vex.proposed.openvex.json)")
     ap.add_argument("--osv-download-db", action="store_true",
                     help="also download OSV's ecosystem databases into .tools/cache/osv-scanner for --offline runs")
     ap.add_argument("--out", help="output directory (default: sbom/)")
@@ -1658,7 +1694,7 @@ def main() -> int:
     codename = meta_props.get("build-host-os-codename", "")
     by_purl = {purl_key(c["purl"]): c["ref"] for c in idx.values() if c.get("purl")}
     fetch = Fetcher(root / ".tools/cache/sbom-vuln", a.offline, a.max_age_hours, a.refresh)
-    vex_path = Path(a.vex).resolve() if a.vex else sbom_dir / "vex.openvex.json"
+    vex_paths = [Path(v).resolve() for v in a.vex] if a.vex else default_vex_files(sbom_dir)
     out_dir = Path(a.out).resolve() if a.out else sbom_dir
     out_dir.mkdir(parents=True, exist_ok=True)
     ts = iso(now_utc())
@@ -1666,7 +1702,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="bb-scan-") as td:
         work = Path(td)
         log("grype ...")
-        g = run_grype(root, cdx_path, vex_path, distro, a.offline, work)
+        g = run_grype(root, cdx_path, vex_paths, distro, a.offline, work)
         if not g.get("ok"):
             log(f"grype failed: {g.get('error')}")
         log("osv-scanner ...")
@@ -1678,7 +1714,7 @@ def main() -> int:
                 log(f"osv-scanner ({o['label']}) failed: {o.get('error')}")
     raw = from_grype(g, idx, by_purl) + from_osv([(o1, {}), (o2, src_map)], idx)
     findings = merge(raw, idx)
-    vex_ok, vex_errs, vex_meta = load_vex(vex_path)
+    vex_ok, vex_errs, vex_meta = load_vex_files(vex_paths, root)
     apply_vex(findings, vex_ok)
 
     log("evidence (changelogs, Ubuntu tracker, GRUB modules) ...")
@@ -1773,7 +1809,8 @@ def main() -> int:
                  "build_id": manifest.get("build_id"), "distro": distro},
         "scanners": {"grype": {k: v for k, v in g.items() if k not in ("matches", "ignored")},
                      "osv-scanner": [{k: v for k, v in o.items() if k != "packages"} for o in (o1, o2)]},
-        "vex": {"path": str(vex_path.relative_to(root)) if vex_path.is_relative_to(root) else str(vex_path),
+        "vex": {"path": vex_meta["files"][0]["path"] if vex_meta.get("files") else None,
+                "paths": [f["path"] for f in vex_meta.get("files", [])],
                 "meta": vex_meta, "errors": vex_errs,
                 "applied": sum(1 for f in all_f if f["vex"])},
         "summary": summary, "top_actions": top,

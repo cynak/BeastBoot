@@ -1,7 +1,8 @@
 # beast-net userland: which files of each locked package go into the initramfs.
 #
 #   <package> <glob>...     take matching paths from that package (relative to /)
-#   exclude <glob>...       never ship matching paths (checked after everything else)
+#   exclude <glob>...       never ship matching paths (checked after everything else,
+#                           also against the generated busybox applet links)
 #
 # '*' does not cross '/', '**' matches any depth. Matching directories are
 # created as needed; symlinks are kept as symlinks (their targets must be
@@ -45,3 +46,24 @@ exclude usr/lib/python3.14/lib-dynload/xx* usr/lib/python3.14/lib-dynload/_xxtes
 exclude usr/lib/python3.14/lib-dynload/_remote_debugging.*
 exclude usr/lib/python3.14/__phello__/** usr/lib/python3.14/**/*.exe
 exclude usr/lib/python3.14/config-*/**
+
+# Unused code with open CVEs (sbom/vex.userland.openvex.json names each one).
+# Python modules the app never imports (not in the import closure of
+# beastnet/python/beastnet + runtime.json; shutil, which argparse loads, only
+# imports tarfile/zipfile inside make_archive/unpack_archive): tarfile,
+# zipfile, configparser, csv (Sniffer), xml + its users plistlib/xmlrpc
+# (ElementTree, expat wrapper), urllib.request + robotparser, tempfile, and
+# uuid + _uuid (its libuuid1 then leaves packages.lock).
+exclude usr/lib/python3.14/tarfile.py usr/lib/python3.14/zipfile/** usr/lib/python3.14/configparser.py
+exclude usr/lib/python3.14/csv.py usr/lib/python3.14/xml/** usr/lib/python3.14/plistlib.py
+exclude usr/lib/python3.14/xmlrpc/** usr/lib/python3.14/urllib/request.py
+exclude usr/lib/python3.14/urllib/robotparser.py usr/lib/python3.14/tempfile.py
+exclude usr/lib/python3.14/uuid.py usr/lib/python3.14/lib-dynload/_uuid.*
+# busybox applet links nothing runs (init, udhcpc.script, mdev.conf and the
+# app call only runtime.json "binaries"); busybox sh has no standalone-applet
+# mode, so without a link the shell cannot run them either: archive
+# extractors (tar, cpio, unzip, rpm, dpkg, ar), wget + its TLS helper,
+# httpd, netstat, the DHCPv6 client, awk.
+exclude usr/*bin/tar usr/*bin/cpio usr/*bin/unzip usr/*bin/rpm usr/*bin/rpm2cpio
+exclude usr/*bin/dpkg usr/*bin/dpkg-deb usr/*bin/ar usr/*bin/wget usr/*bin/ssl_client
+exclude usr/*bin/httpd usr/*bin/netstat usr/*bin/udhcpc6 usr/*bin/awk

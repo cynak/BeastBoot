@@ -30,6 +30,9 @@ __pycache__/
 /sbom/*
 !/sbom/README.md
 !/sbom/vex.openvex.json
+# generated, evidence-backed triage (scripts/kernel_vex.py, ...); the scanner's proposals stay local
+!/sbom/vex.*.openvex.json
+/sbom/vex.proposed.openvex.json
 
 # Top-level hidden folders are local only, except the CI and release workflows
 /.*/

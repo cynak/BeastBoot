@@ -42,9 +42,9 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 
 # Python modules the app needs (docs/BEASTNET.md section 5); checked by running
 # the shipped interpreter at build time. runtime.json may add more.
-REQUIRED_PY = ["ssl", "hashlib", "curses", "json", "urllib.request", "urllib.parse", "http.client",
+REQUIRED_PY = ["ssl", "hashlib", "curses", "json", "urllib.parse", "http.client",
                "socket", "subprocess", "select", "fcntl", "struct", "zlib", "termios", "signal",
-               "argparse", "shutil", "tempfile", "threading", "ipaddress", "base64", "binascii",
+               "argparse", "shutil", "threading", "ipaddress", "base64", "binascii",
                "email.utils", "datetime", "re", "time", "os", "errno", "ctypes", "locale"]
 TERMINALS = ["linux", "vt100", "vt102", "vt220", "xterm", "xterm-256color", "screen", "dumb"]
 
@@ -382,8 +382,8 @@ def main() -> int:
     for ap_path in sorted(applets):
         top, _, rest = ap_path.partition("/")
         rel = {"bin": "usr/bin/", "sbin": "usr/sbin/"}.get(top, top + "/") + rest
-        if not rel.startswith("usr/") or rel.endswith("/busybox") or st.has(rel):
-            continue
+        if not rel.startswith("usr/") or rel.endswith("/busybox") or st.has(rel) or excluded(rel):
+            continue  # userland.list "exclude" also drops applet links (the code stays in busybox)
         st.add_link(rel, "/usr/bin/busybox", f"built:busybox applet link ({pk['busybox'].key})")
         n_app += 1
 

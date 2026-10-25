@@ -21,6 +21,10 @@ gen_sbom/validate_sbom need them). Then the real scripts run against it with --r
   coverage        the beast-net kernel (syft's purl, tracked via the linux source package),
                   initrd.img linked to every package it contains, one portable runtime per
                   target (pinned SHA-256) and a scannable CPython component
+  kernel-vex      scripts/kernel_vex.py on a synthetic kernel tree: a file built into a module the
+                  initramfs lacks, another architecture and an unset config -> not_affected; a
+                  built-in file, a header (built-in includer / no includer), an unknown condition
+                  and a module modules.order does not explain -> stay open
   gate            scripts/release/release_tool.py gate: only new findings at/above the
                   severity without a VEX statement block (baseline, --ignore-unfixed, warn)
 """
@@ -287,6 +291,73 @@ def test_coverage(real: Path) -> None:
         check("coverage: CPython component with a CPE (scannable)", "python:python" in py.get("cpe", ""), str(py)[:200])
 
 
+def test_kernel_vex(base: Path) -> None:
+    import kernel_vex as kv
+    mk = {
+        "Kbuild": "obj-y += drivers/\nobj-y += arch/$(SRCARCH)/\n",
+        "Makefile": "",
+        "arch/x86/Makefile": "libs-y += arch/x86/lib/\n",
+        "arch/x86/Kbuild": "obj-y += kernel/\n",
+        "arch/x86/kernel/Makefile": "obj-y += setup.o\n",
+        "arch/arm64/kernel/Makefile": "obj-y += cpu.o\n",
+        "drivers/Makefile": "obj-y += net/\nobj-$(CONFIG_FOO) += foo/\n",
+        "drivers/net/Makefile": ("obj-$(CONFIG_SHIPPED) += shipped.o\n"
+                                 "obj-$(CONFIG_NOTSHIPPED) += big.o\n"
+                                 "big-y := big_main.o\nbig-$(CONFIG_BIG_EXTRA) += big_util.o\n"
+                                 "obj-$(CONFIG_CORE) += core.o\n"
+                                 "obj-$(CONFIG_UNSET) += gone.o\n"
+                                 "ifeq ($(call cc-option,-x),)\nobj-y += maybe.o\nendif\n"
+                                 "obj-$(CONFIG_ODD) += odd.o\n"),
+        "drivers/foo/Makefile": "obj-y += foo.o\n",
+    }
+    files = set(mk) | {"arch/x86/kernel/setup.c", "arch/arm64/kernel/cpu.c", "arch/arm64/include/asm/cpu.h",
+                       "drivers/foo/foo.c", "Documentation/net.rst"} | \
+        {f"drivers/net/{n}" for n in ("shipped.c", "big_main.c", "big_util.c", "core.c", "gone.c", "maybe.c",
+                                      "odd.c", "big.h", "common.h", "only.h")}
+    inc = {"drivers/net/big_main.c": ['q:big.h', 'q:common.h'], "drivers/net/core.c": ['q:common.h'],
+           "arch/arm64/kernel/cpu.c": ["a:asm/cpu.h"], "arch/x86/kernel/setup.c": ["a:asm/cpu.h"]}
+    tree = kv.Tree(files, mk, inc)
+    cfg = {"CONFIG_SHIPPED": "m", "CONFIG_NOTSHIPPED": "m", "CONFIG_BIG_EXTRA": "y", "CONFIG_CORE": "y",
+           "CONFIG_ODD": "m"}
+    order = {"kernel/drivers/net/shipped.ko", "kernel/drivers/net/big.ko", "kernel/drivers/net/odd.ko",
+             "kernel/drivers/net/ghost.ko"}
+    b = kv.Build(tree, cfg, order, {"kernel/drivers/net/core.ko"}, {"kernel/drivers/net/shipped.ko"})
+    # ghost.ko is not derivable -> drivers/net becomes opaque; rerun with a consistent modules.order
+    check("kernel-vex: self-check flags a module the Makefiles do not explain",
+          any("ghost.ko" in m for m in b.mismatch) and b.classify("drivers/net/big_util.c")[0] == "unknown",
+          json.dumps(b.mismatch))
+    b = kv.Build(tree, cfg, order - {"kernel/drivers/net/ghost.ko"}, {"kernel/drivers/net/core.ko"},
+                 {"kernel/drivers/net/shipped.ko"})
+    st = {p: b.classify(p) for p in sorted(files)}
+    check("kernel-vex: module not in the initramfs -> not present",
+          st["drivers/net/big_util.c"][:2] == ("absent", "module-not-shipped") and "big.ko" in
+          st["drivers/net/big_util.c"][2] and "CONFIG_NOTSHIPPED=m" in st["drivers/net/big_util.c"][2],
+          str(st["drivers/net/big_util.c"]))
+    check("kernel-vex: shipped module -> present", st["drivers/net/shipped.c"][0] == "present")
+    check("kernel-vex: built-in -> present", st["drivers/net/core.c"][:2] == ("present", "built-in"))
+    check("kernel-vex: other architecture -> not present", st["arch/arm64/kernel/cpu.c"][1] == "other-arch")
+    check("kernel-vex: unset config -> not present",
+          st["drivers/net/gone.c"][:2] == ("absent", "config-not-set") and "CONFIG_UNSET is not set" in
+          st["drivers/net/gone.c"][2], str(st["drivers/net/gone.c"]))
+    check("kernel-vex: unreached directory -> not present", st["drivers/foo/foo.c"][1] == "dir-not-built")
+    check("kernel-vex: unknown condition -> present (may be built)", st["drivers/net/maybe.c"][0] == "present")
+    check("kernel-vex: header with a built-in includer -> present", st["drivers/net/common.h"][0] == "present")
+    check("kernel-vex: header without includer -> unknown", st["drivers/net/only.h"][0] == "unknown")
+    check("kernel-vex: <asm/..> header of another arch -> not present",
+          st["arch/arm64/include/asm/cpu.h"][0] == "absent", str(st["arch/arm64/include/asm/cpu.h"]))
+    rec = lambda *pf: {"containers": {"cna": {"affected": [{"programFiles": list(pf)}]}}}  # noqa: E731
+    recs = {"CVE-1": rec("drivers/net/big_util.c", "drivers/net/big.h"), "CVE-2": rec("drivers/net/core.c"),
+            "CVE-3": rec("drivers/net/only.h"), "CVE-4": rec("arch/arm64/kernel/cpu.c", "Documentation/net.rst"),
+            "CVE-5": rec("drivers/net/big_main.c", "drivers/net/common.h"), "CVE-6": {"containers": {"cna": {}}}}
+    res = {e["id"]: e["classification"] for e in kv.classify_cves(b, sorted(recs) + ["CVE-7"], recs)}
+    check("kernel-vex: CVE classification (all files absent -> not_present, else open)",
+          res == {"CVE-1": "not_present", "CVE-2": "present", "CVE-3": "unresolved", "CVE-4": "not_present",
+                  "CVE-5": "present", "CVE-6": "unresolved", "CVE-7": "unresolved"}, json.dumps(res))
+    bin_res = kv.classify_cves(b, ["CVE-1"], recs, {"vmlinux": ["drivers/net/big_util.c"], "modules": {}})
+    check("kernel-vex: path found in the shipped binary overrides not_present",
+          bin_res[0]["classification"] == "unresolved")
+
+
 def test_gate(base: Path) -> None:
     """scripts/release/release_tool.py gate: blocks only NEW findings >= severity without VEX."""
     tool = HERE / "release" / "release_tool.py"
@@ -330,6 +401,7 @@ def main() -> int:
     base = Path(tempfile.mkdtemp(prefix="bb-sbom-selftest-", dir=os.environ.get("TMPDIR")))
     try:
         test_keys()
+        test_kernel_vex(base)
         test_coverage(real)
         test_gate(base)
         test_modules(real)

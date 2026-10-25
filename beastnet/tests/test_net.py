@@ -187,7 +187,7 @@ def test_udhcpc_script_configures(tmp_path):
            "RESOLV_CONF": str(tmp_path / "resolv.conf"), "BEASTNET_RUN": str(tmp_path / "run")}
     # Plain sh, not busybox sh: busybox runs its own ip applet instead of our fake.
     subprocess.run(["sh", script, "bound"], env=env, check=True)
-    assert (tmp_path / "resolv.conf").read_text() == "search lan\nnameserver 10.0.2.3\nnameserver 10.0.2.4\n"
+    assert (tmp_path / "resolv.conf").read_text() == "nameserver 10.0.2.3\nnameserver 10.0.2.4\n"  # no search line (CVE-2026-8674)
     assert "ip=10.0.2.15" in (tmp_path / "run" / "dhcp-eth0").read_text()
     iplog = (tmp_path / "ip.log").read_text()
     assert "ip -4 addr add 10.0.2.15/24 dev eth0" in iplog

@@ -84,6 +84,19 @@ recorded in the manifest:
   curses + ncurses terminfo, json, urllib, socket, subprocess) and their shared
   libraries (resolved with the packages' dependencies / ldd).
 
+Left out on purpose because they carry open CVEs and nothing in beast-net uses
+them (build/beastnet/userland.list; the evidence per CVE is in
+sbom/vex.userland.openvex.json):
+
+- Python modules outside the app's import set: tarfile, zipfile, configparser,
+  csv, xml (+ plistlib, xmlrpc), urllib.request (+ robotparser), tempfile,
+  uuid + `_uuid` (so libuuid1 is no longer shipped). The build's import smoke
+  test (REQUIRED_PY + runtime.json) still passes.
+- busybox applet links nothing calls: tar, cpio, unzip, rpm, rpm2cpio, dpkg,
+  dpkg-deb, ar, wget, ssl_client, httpd, netstat, udhcpc6, awk. The code stays
+  inside /usr/bin/busybox, but busybox sh runs only applets that have a link,
+  so the rescue shell cannot start them either (except as `busybox <applet>`).
+
 The app sources come from this repo's `beastnet/` directory:
 
 - `beastnet/rootfs/` is copied verbatim into the initramfs root. It contains

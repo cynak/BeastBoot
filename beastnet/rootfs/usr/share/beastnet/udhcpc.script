@@ -24,10 +24,10 @@ bound|renew)
 		done
 	fi
 	[ -z "$dns" ] && dns=${router%% *}	# most home routers answer DNS
-	{
-		[ -n "$domain" ] && echo "search $domain"
-		for d in $dns; do echo "nameserver $d"; done
-	} >"$RESOLV.tmp" && mv "$RESOLV.tmp" "$RESOLV"
+	# No "search" line from the DHCP domain option: the app resolves only full host
+	# names, and a rogue DHCP server's search list could crash glibc's resolver
+	# (CVE-2026-8674, sbom/vex.userland.openvex.json).
+	for d in $dns; do echo "nameserver $d"; done >"$RESOLV.tmp" && mv "$RESOLV.tmp" "$RESOLV"
 	mkdir -p "$STATE"
 	echo "ip=$ip mask=$mask router=$router dns=$dns" >"$STATE/dhcp-$interface"
 	;;
