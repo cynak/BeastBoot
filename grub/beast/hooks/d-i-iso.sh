@@ -37,3 +37,43 @@ if [ -f /beast-booter/debian.iso ] && [ -f /beast-booter/loop.udeb ]; then
         bb_di_log "loop-modules udeb unreadable"
     fi
 fi
+
+# d-i starts one installer per console (/sbin/reopen-console: the serial console
+# of console=ttyS0 and tty1, say), but only the one on the preferred console when
+# it sees a preseed: installers that no question stops run in parallel and trip
+# over each other (two anna runs: "Installation step failed" at "Load installer
+# components from installation media", or "No kernel modules were found"). It
+# looks for /preseed.cfg and the words auto and url only. Answers on the kernel
+# command line (bb_kargs: a question name, or an /etc/preseed_aliases alias such
+# as priority, locale, keymap or file) preseed too, so do the same for them.
+# This runs before reopen-console makes init start the installers.
+bb_di_preseeded() {
+    tr -s ' ' '\n' < /proc/cmdline 2>/dev/null | {
+        while read -r bb_w; do
+            case "$bb_w" in
+                ?*=*) bb_k="${bb_w%%=*}" ;;
+                *) continue ;;
+            esac
+            case "$bb_k" in
+                */*) exit 0 ;;
+                *[!A-Za-z0-9_-]*) continue ;;
+            esac
+            if grep -q "^${bb_k}[[:space:]]" /etc/preseed_aliases 2>/dev/null; then
+                exit 0
+            fi
+        done
+        exit 1
+    }
+}
+bb_di_c="$(sed -n 's|^/dev/\([A-Za-z0-9]*\) *$|\1|p' /var/run/console-preferred 2>/dev/null)"
+if [ -n "$bb_di_c" ] && [ "$(grep -c '::respawn:/sbin/debian-installer$' /etc/inittab 2>/dev/null)" -gt 1 ] 2>/dev/null && bb_di_preseeded; then
+    if grep -v '::respawn:/sbin/debian-installer$' /etc/inittab > /tmp/bb-inittab 2>/dev/null &&
+        echo "$bb_di_c::respawn:/sbin/debian-installer" >> /tmp/bb-inittab &&
+        cat /tmp/bb-inittab > /etc/inittab; then
+        echo "/dev/$bb_di_c " > /var/run/console-devices 2>/dev/null || true
+        bb_di_log "preseeded command line: debian-installer on $bb_di_c only"
+    fi
+    rm -f /tmp/bb-inittab
+fi
+unset bb_di_c bb_m bb_n bb_w bb_k
+unset -f bb_di_log bb_di_preseeded 2>/dev/null || true

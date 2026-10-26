@@ -372,7 +372,7 @@
         "Retrieving [a-z0-9][a-z0-9.+-]+"
       ],
       "fail": [
-        "No CD-ROM|CD-ROM drive was detected|CD-ROM couldn't be mounted|installation media couldn't be mounted|Failed to load installer component"
+        "No CD-ROM|CD-ROM drive was detected|CD-ROM couldn't be mounted|installation media couldn't be mounted|Failed to load installer component|Installation step failed|failing step is|No kernel modules were found"
       ]
     },
     {
