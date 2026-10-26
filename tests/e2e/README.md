@@ -132,7 +132,7 @@ user networking, downloads the official link from
 (`BB_LIVE_IMAGE_SIZE`, default 16G), checks the vendor's SHA-256 when there is
 a checksum file, hands off, and the menu then opens the ISO once (dry run) and
 must detect the catalog's `recipe` (Ubuntu: `casper` with `fsmod exfat`;
-Windows: `unsupported-windows`). The file on the drive is hashed again on the
+Windows: the wimboot load of `windows`). The file on the drive is hashed again on the
 host and must match what the helper reported.
 
 | Variable | Meaning |

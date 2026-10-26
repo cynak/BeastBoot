@@ -40,7 +40,7 @@ it in `/dev/disk/by-uuid/`, `<label>` the ISO's volume label as GRUB reads it.
 | `dracut-live` | `/LiveOS/squashfs.img` and `/images/pxeboot/vmlinuz` | `root=live:CDLABEL=<label> rd.live.image iso-scan/filename=<path> quiet` | Fedora live ISOs (Workstation, spins), other dracut live images with this layout. Also, with the kernel at `/boot/x86_64/loader/linux` (KIWI layout): `/LiveOS/squashfs.img`, or `/boot/grub2/grub.cfg` without `/LiveOS` (Fedora 44+ Workstation Live, openSUSE Tumbleweed live, Leap 16 Agama installer) |
 | `anaconda` | `/images/pxeboot/vmlinuz` and no `/LiveOS` | `inst.stage2=hd:UUID=<uuid>:<path> quiet` | Fedora Server/Everything netinst and DVD, RHEL, AlmaLinux, Rocky Linux, CentOS Stream installers |
 | `suse` | `/boot/x86_64/loader/linux` (the dracut cases above win first) | `isofrom_device=/dev/disk/by-uuid/<uuid> isofrom_system=<path> splash=silent` | linuxrc installers such as Tumbleweed NET (the installation source comes from the network; the VM needs a NIC); openSUSE/SLE DVD ISOs are unverified |
-| `debian-installer` | `/install.amd/vmlinuz` + `.disk/info` | the whole ISO and its loop-modules udeb are added to the initrd, `hooks/d-i-iso.sh` mounts it on `/cdrom` (needs RAM for the ISO twice; netinst only, not DVD sets) | Debian netinst / CD installers |
+| `debian-installer` | `/install.amd/vmlinuz` + `.disk/info` | the whole ISO and its loop-modules udeb are added to the initrd, `hooks/d-i-iso.sh` mounts it on `/cdrom` (needs RAM for the ISO twice; netinst only, not DVD sets: see [Size limit](#size-limit-of-alpine-and-debian-installer-isos)) | Debian netinst / CD installers |
 | `alpine` | `/.alpine-release` + `/apks/.boot_repository` | the whole ISO is added to the initramfs, `rdinit=/beast-init` (`hooks/alpine-init.sh`) attaches it to `/dev/loop0` | Alpine standard / extended (RAM for the ISO) |
 | `windows` | `/sources/boot.wim` and (`/bootmgr` or `/efi/microsoft/boot/bcd`) | no kernel: wimboot starts the ISO's `sources/boot.wim` from memory. Installation ISOs: **Windows Setup** from the ISO (default) or a Windows PE command prompt; other `boot.wim` ISOs (Windows PE, WinRE) as they are. **Secure Boot off only** ([below](#windows)) | Windows 11: **tested (real ISO)**, see below. Windows 10 and Windows Server installation ISOs: expected. Windows PE / WinRE ISOs: unverified |
 | `efi-chainload` | UEFI only: `/EFI/BOOT/BOOTX64.EFI` in any letter case | `chainloader` the ISO's own UEFI boot loader | self-contained EFI programs (for example memtest86+ or netboot.xyz, unverified); most other ISOs fail, see below |
@@ -69,6 +69,25 @@ Notes per recipe:
   prompt or an error. It is meant for self-contained EFI programs. A warning
   is shown before starting.
 - **windows**: see [Windows](#windows) below.
+- **debian-installer**: in the Debian installer, the BeastBoot stick itself
+  can show up as an ordinary disk in the partitioning step. Do not choose it
+  as the installation target: that would erase your ISOs.
+
+### Size limit of Alpine and Debian installer ISOs
+
+`alpine` and `debian-installer` put the whole ISO into the initrd, in memory,
+so they only work for small ISOs. GRUB cannot read a file's size in a menu
+script, so there is no check beforehand: when GRUB cannot load the initrd, the
+menu stops with `BEAST: error iso-too-large` and says which ISO and what to
+use instead. Measured with a real Alpine 3.24.3 ISO padded to a given size
+(4 GB of RAM): legacy BIOS loads 700 MiB but not 1.1 GiB (the BIOS loader needs
+the initrd in memory below 4 GiB next to the kernel, so plan for about
+900 MiB at most); UEFI loads 1.1 GiB, and with 2 GiB the kernel itself ran out
+of memory ("Kernel panic": the kernel keeps a second copy of the ISO, so
+plan for 2.5 times the ISO size in RAM; this failure cannot be caught by the
+menu). A Debian DVD-1 (about 3.7 GB) or an Alpine "extended" ISO is too large
+for BIOS and for most PCs: use the netinst / CD ISO (Debian) or the standard ISO
+(Alpine), or write the large ISO to its own stick.
 
 ## Windows
 
@@ -105,6 +124,10 @@ Setup then stops at its own check, "This PC doesn't currently meet Windows 11
 system requirements" (TPM 2.0, Secure Boot), as it would from Microsoft's
 stick; closing it returns to BeastBoot's command prompt. Installing Windows
 to the end was not part of the test.
+
+**Untested**: Windows Server 2025 (and other Windows Server editions). Microsoft
+publishes no checksum for the evaluation ISO, so it cannot be verified and
+is not in the test catalog; it uses the same code path as Windows 11.
 
 Limits:
 
@@ -156,8 +179,8 @@ support the data partition's filesystem:
 | Data filesystem | GRUB can read it | ISO initramfs can mount it |
 |---|---|---|
 | FAT32 | yes | yes, every Linux initramfs supports vfat (expected) |
-| exFAT (default) | yes | **Ubuntu desktop: tested** with Ubuntu 26.04.1 (UEFI, UEFI with Secure Boot, legacy BIOS; with Secure Boot on, 0.1.2 first needs [Ubuntu's key trusted](#secure-boot)), through the [exFAT add-on](#the-exfat-add-on). Other casper ISOs with a `minimal.squashfs` or `filesystem.squashfs` (official flavours, Linux Mint) and Debian live-boot ISOs: expected through the same add-on, unverified. **Ubuntu Server ISOs are not covered** (their layers are named `ubuntu-server-*.squashfs`): use FAT32 for them if they fit. Other distributions need the `exfat` module in their own initramfs (Linux 5.7 or later); unverified per distribution. |
-| NTFS | yes, **but not under Secure Boot**: GRUB 2.14 switches its NTFS driver off in lockdown mode, so with Secure Boot on the menu cannot see an NTFS data partition at all | needs `ntfs3` (Linux 5.15+) in the initramfs; many distributions do not include it there. Unverified. |
+| exFAT (default) | yes | **Ubuntu desktop: tested** with Ubuntu 26.04.1 (UEFI, UEFI with Secure Boot, legacy BIOS; with Secure Boot on, 0.1.2 first needs [Ubuntu's key trusted](#secure-boot)), through the [exFAT add-on](#the-exfat-add-on). Other casper ISOs with a `minimal.squashfs` or `filesystem.squashfs` (official flavours, Linux Mint) and Debian live-boot ISOs: expected through the same add-on, unverified. **Ubuntu Server: tested** (26.04.1 live server, exFAT; its layer `ubuntu-server-minimal.squashfs` is read like the others). Other distributions need the `exfat` module in their own initramfs (Linux 5.7 or later); unverified per distribution. |
+| NTFS | yes, **but not under Secure Boot**: GRUB 2.14 switches its NTFS driver off in lockdown mode, so with Secure Boot on the menu cannot see an NTFS data partition at all | **Tested**: Ubuntu desktop (its own `loopback.cfg`), Debian live (the add-on brings the ISO's `ntfs3`), openSUSE Tumbleweed NET (`suse`, UEFI and BIOS; the `suse` recipe is not refused on NTFS) and Windows (Windows PE reads NTFS). **Refused** with `ntfs-unsupported`: dracut-based ISOs and Anaconda (Fedora, RHEL family, openSUSE Leap 16 and Tumbleweed live), whose initramfs has no NTFS driver. Others: needs `ntfs3` (Linux 5.15+) in the initramfs; unverified. |
 
 If an ISO is not covered by the add-on below and you are unsure, use FAT32
 for the data partition (`--fs fat32`). Its 4 GiB per-file limit is the catch:
@@ -196,9 +219,9 @@ beast-booter: casper may now search exfat partitions for the ISO
 
 With `bb_debug=1` the menu prints `BEAST: fsmod exfat <module>` when it uses
 the add-on, or `BEAST: fsmod none <reason>` when it cannot (see
-[MENU.md](MENU.md#debug-output-bb_debug1)). Limits: only the three squashfs
-names above are looked at, so Ubuntu Server ISOs (`ubuntu-server-*.squashfs`)
-boot as before (`fsmod none no-squashfs`); GRUB cannot read zstd-compressed
+[MENU.md](MENU.md#debug-output-bb_debug1)). Limits: only the squashfs
+names above (and `ubuntu-server-minimal.squashfs` on Ubuntu Server) are looked
+at, so other layouts boot as before (`fsmod none no-squashfs`); GRUB cannot read zstd-compressed
 squashfs images, so such ISOs boot as before too; the safe-graphics
 and other extra entries of the ISO's own `loopback.cfg` are not offered while
 the add-on is used. To turn it off, put `set bb_fs_addon=0` in

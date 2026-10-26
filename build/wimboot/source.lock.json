@@ -13,7 +13,7 @@
     "name": "wimboot-2.9.0.tar.gz",
     "sha256": "3b83be6d55cf49a4a997189dbbb048024c5232b0d7f8a45fc864b290dc04a4e5",
     "size": 663894,
-    "urls": ["https://github.com/ipxe/wimboot/archive/refs/tags/v2.9.0.tar.gz"]
+    "urls": ["https://github.com/ipxe/wimboot/archive/refs/tags/v2.9.0.tar.gz", "https://codeload.github.com/ipxe/wimboot/tar.gz/refs/tags/v2.9.0"]
   },
   "source_date_epoch": 1763423895,
   "source_date_epoch_comment": "2025-11-17T23:58:15Z, the publication time of the v2.9.0 release: file times of the output",

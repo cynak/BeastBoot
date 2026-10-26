@@ -21,7 +21,9 @@ compares it byte for byte.
 - `source.lock.json`: the release tag's GitHub source archive (SHA-256, size,
   and the commit id GitHub embeds in it). The upstream tree also contains
   prebuilt binaries; the build deletes them before it starts, so only code
-  compiled here can reach the output.
+  compiled here can reach the output. Two URLs, same bytes (checked): the tag archive and its
+  codeload mirror, both on GitHub. Upstream publishes no release tarball elsewhere (ipxe.org and
+  boot.ipxe.org only serve the signed binary), so the SHA-256 pin is what protects the build.
 - `patches/series`: our patches, each with its reason in its header:
   1. `0001` UEFI: take the files from the initrd that GRUB's `linux`/`initrd`
      pass through `EFI_LOAD_FILE2_PROTOCOL` (the Linux EFI stub convention).

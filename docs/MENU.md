@@ -160,8 +160,8 @@ BEAST: error no-recipe /mystery.iso
   data partition is not exFAT or the ISO is not a casper / live-boot ISO.
 - `error <code> <text>` codes: `no-data-partition`, `iso-not-found`,
   `loopback-failed`, `no-recipe`, `ntfs-unsupported`, `windows-sb` (Secure Boot is on: Windows
-  ISOs need it off), `windows-no-wimboot`, `grubenv-not-writable`,
-  `sb-verify-failed`, `boot-failed`. The text after the code is for people, not parsers. Under
+  ISOs need it off), `windows-bad-name` (the ISO path has a quote or control character), `windows-no-wimboot`, `grubenv-not-writable`,
+  `iso-too-large` (Alpine or Debian installer ISO that does not fit in memory as an initrd), `sb-verify-failed`, `boot-failed`. The text after the code is for people, not parsers. Under
   Secure Boot, any failure of `linux`, `initrd`, `chainloader` or `boot` is
   reported as `sb-verify-failed`; without Secure Boot it is `boot-failed`.
 

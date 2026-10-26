@@ -104,8 +104,10 @@ jobs:
             .tools/cache/beastnet
             .tools/cache/linux-firmware
             .tools/cache/grub-src/dl
+            .tools/cache/wimboot/dl
+            .tools/cache/beastmount/dl
             .tools/debian/debs
-          key: release-dl-${{ hashFiles('packaging/portable/runtimes.lock', 'build/beastnet/packages.lock', 'build/beastnet/firmware.lock', 'build/grub/source.lock.json', 'build/shim/debian-shim.lock') }}
+          key: release-dl-${{ hashFiles('packaging/portable/runtimes.lock', 'build/beastnet/packages.lock', 'build/beastnet/firmware.lock', 'build/grub/source.lock.json', 'build/wimboot/source.lock.json', 'build/winpe/mingw-w64.lock.json', 'build/shim/debian-shim.lock') }}
 
       # Debian's shim (signed through Microsoft UEFI CA 2011 and 2023) and its
       # MokManager, pinned by SHA-256 in build/shim/debian-shim.lock;

@@ -85,8 +85,8 @@ def test_5_recipe_not_pinned_fails():
 
 
 def test_failures_misc():
-    v = _judge(_log(READY, f"BEAST: boot {ISO} recipe=windows", "BEAST: error unsupported-windows /x.iso", ""))
-    assert v.status == "fail" and v.reason.startswith("menu: error unsupported-windows")
+    v = _judge(_log(READY, f"BEAST: boot {ISO} recipe=windows", "BEAST: error windows-sb /x.iso", ""))
+    assert v.status == "fail" and v.reason.startswith("menu: error windows-sb")
     v = _judge(_log(READY, BOOT, "Entering emergency mode. Exit the shell to continue."))
     assert v.status == "fail" and "emergency" in v.reason
     v = _judge(_log(READY), exited=True)

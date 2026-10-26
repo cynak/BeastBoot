@@ -829,7 +829,12 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
             bm_lock = json.loads((root / "build/winpe/mingw-w64.lock.json").read_text())
         except (OSError, ValueError):
             bm_lock = {"packages": []}
-        tc_dirs = sorted((bm["cache"] / "toolchain").glob("*/.bb-complete"))
+        # the toolchain of the current lock only (a lock bump leaves older ones in the cache)
+        try:
+            tc_id = hashlib.sha256(json.dumps(bm_lock["packages"], sort_keys=True).encode()).hexdigest()[:16]
+        except (KeyError, TypeError):
+            tc_id = ""
+        tc_dirs = [q for q in [bm["cache"] / "toolchain" / tc_id / ".bb-complete"] if q.is_file()]
         for lp in bm_lock["packages"]:
             debf = bm["cache"] / "dl" / lp["file"].rsplit("/", 1)[1]
             if not debf.is_file():

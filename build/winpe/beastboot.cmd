@@ -7,9 +7,12 @@ rem   winpeshl.ini    runs this script instead of the image's default shell
 rem   beastboot.cmd   this script
 rem   beastmount.exe  attaches an ISO read-only (VirtDisk API; setup mode only)
 rem   beastboot.txt   the drive's GRUB environment block (grub/grubenv on the
-rem                   ESP) with two lines the menu wrote with save_env:
+rem                   ESP) with three lines the menu wrote with save_env:
 rem                     bb_winpe_iso=/path/to/the.iso   (on the data partition)
 rem                     bb_winpe_mode=setup | pe
+rem                     bb_winpe_uuid=XXXX-XXXX   (the data partition's volume
+rem                       serial; the drive that has the ISO path must match it,
+rem                       so another disk with the same path is not used)
 rem
 rem setup: find the data partition (the drive that has the ISO path), attach
 rem        the ISO read-only (beastmount.exe: diskpart attaches only VHD/VHDX
@@ -43,6 +46,7 @@ set "BB_LOG="
 set "BB_ISO="
 set "BB_MODE="
 set "BB_DATA="
+set "BB_UUID="
 set "BB_SRC="
 set "BB_INST="
 set "BB_PROC="
@@ -56,6 +60,7 @@ if exist "%BB_ENV%" (
   for /f "usebackq eol=# tokens=1,* delims==" %%a in ("%BB_ENV%") do (
     if /i "%%a"=="bb_winpe_iso" set "BB_ISO=%%b"
     if /i "%%a"=="bb_winpe_mode" set "BB_MODE=%%b"
+    if /i "%%a"=="bb_winpe_uuid" set "BB_UUID=%%b"
   )
 )
 if not defined BB_MODE set "BB_MODE=pe"
@@ -225,8 +230,26 @@ set "BB_LOG=%1:\RESULT.TXT"
 exit /b 0
 
 :find_data
-for %%d in (%BB_DRIVES%) do if not defined BB_DATA if exist "%%d:%BB_ISO%" set "BB_DATA=%%d:"
+for %%d in (%BB_DRIVES%) do if not defined BB_DATA if exist "%%d:%BB_ISO%" call :is_data %%d && set "BB_DATA=%%d:"
 exit /b 0
+
+rem :is_data L - L: is the data partition: its volume serial (last word of the
+rem last line of "vol", in any language) is the one the menu saved. The NTFS
+rem serial is 64 bits and "vol" shows 32 of them (XXXX-XXXX): that must occur
+rem in the saved one. Without a saved serial (older menu) any drive is taken.
+:is_data
+if not defined BB_UUID exit /b 0
+set "BB_VL="
+set "BB_VS="
+for /f "delims=" %%l in ('vol %1: 2^>nul') do set "BB_VL=%%l"
+if defined BB_VL for %%t in (%BB_VL%) do set "BB_VS=%%t"
+if not defined BB_VS exit /b 1
+set "BB_VS=%BB_VS:-=%"
+set "BB_UN=%BB_UUID:-=%"
+setlocal EnableDelayedExpansion
+set "BB_T=!BB_UN:%BB_VS%=!"
+if "!BB_T!"=="!BB_UN!" (endlocal & exit /b 1)
+endlocal & exit /b 0
 
 rem :has_media L - L: has sources\install.wim/.esd/.swm (the file in BB_INST)
 :has_media

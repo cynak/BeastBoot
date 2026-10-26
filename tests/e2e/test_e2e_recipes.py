@@ -288,6 +288,17 @@ def test_unbootable_kernel_reports_boot_failed(make_drive, vm_factory):
 
 
 @pytest.mark.ntfs
+@pytest.mark.parametrize("mode", BOTH)
+def test_windows_iso_with_quote_in_name_is_refused(mode, udisks_ok, make_drive, vm_factory):
+    """A quote in the ISO path would break out of beastboot.cmd's quoted set lines."""
+    drive = make_drive("ntfs-recipes", images.user_config(dryrun=True, autoboot=trees.QUOTE_ISO))
+    vm = vm_factory(mode, drive.path)
+    err = vm.wait_record("error", timeout=120)
+    assert error_code(err) == "windows-bad-name", str(err)
+    assert not vm.records("dryrun")
+
+
+@pytest.mark.ntfs
 @pytest.mark.parametrize("fixture", ["dracut-live", "anaconda"])
 @pytest.mark.parametrize("mode", BOTH)
 def test_dracut_on_ntfs_is_refused(mode, fixture, udisks_ok, make_drive, vm_factory):

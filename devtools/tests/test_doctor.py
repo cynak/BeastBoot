@@ -381,8 +381,29 @@ def test_every_problem_has_a_fix(fake):
     for required in ("python", "grub-src", "grub-efi", "grub-bios", "grub-signed", "shim", "ovmf", "seabios", "qemu",
                      "qemu-gtk", "kvm", "mtools", "xorriso", "sfdisk", "mkfs.fat", "mkfs.exfat", "mkfs.ntfs",
                      "sbsigntool", "openssl", "virt-fw-vars", "udisks", "gdb", "grub-dbg-pc", "grub-dbg-efi",
-                     "venv", "keys", "dist", "disk"):
+                     "venv", "keys", "dist", "disk", "build-tools", "wimboot-cache", "beastmount-cache"):
         assert required in names
+
+
+def test_build_tools(fake):
+    r = doctor.check_build_tools(fake.ctx())
+    assert r.status == WARN and "patch" in r.detail and "dpkg-deb" in r.detail and "apt install" in r.fix
+    fake.tool(*doctor.BUILD_TOOLS)
+    assert doctor.check_build_tools(fake.ctx()).status == OK
+
+
+def test_build_caches(fake):
+    rs = doctor.check_build_caches(fake.ctx())
+    assert [r.name for r in rs] == ["wimboot-cache", "beastmount-cache"]
+    assert all(r.status == WARN and "make build" in r.fix for r in rs)
+    for sub in ("wimboot", "beastmount"):
+        d = fake.repo / ".tools/cache" / sub
+        (d / "out/k1").mkdir(parents=True)
+        (d / "out/k1/build-info.json").write_text("{}")
+        (d / "dl").mkdir()
+        (d / "dl/x.tar").write_text("x")
+    rs = doctor.check_build_caches(fake.ctx())
+    assert all(r.status == OK and "1 build(s), 1 download(s)" in r.detail for r in rs)
 
 
 def test_render(capsys):

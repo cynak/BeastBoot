@@ -38,6 +38,16 @@ def main_tree(isos: dict[str, Path]) -> dict:
     return tree
 
 
+QUOTE_ISO = '/recipes/quo"te.iso'  # NTFS only: exFAT and FAT32 forbid the quote
+
+
+def ntfs_tree(isos: dict[str, Path]) -> dict:
+    """main_tree plus a Windows ISO whose name contains a quote."""
+    tree = main_tree(isos)
+    tree[QUOTE_ISO] = isos["windows"]
+    return tree
+
+
 MAIN_ROOT_DIRS = {"/recipes", "/Some Folder"}
 MAIN_ROOT_ISOS = {"/UPPER-CASE.ISO", "/Mixed.Iso"}
 MAIN_HIDDEN = {

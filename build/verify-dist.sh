@@ -188,6 +188,15 @@ WIM="$ESP/beast-booter/wimboot"
 WIM_VER="$(mget build.wimboot_version 2>/dev/null || true)"
 WIMSRC=(python3 -I "$HERE/wimboot/wimbootsrc.py")
 BMSRC=(python3 -I "$HERE/winpe/beastmountsrc.py")
+
+# --rebuild builds every component from scratch: a fresh cache directory per component, so a warm
+# cache cannot hand back the old output. Only the downloaded, hash-checked inputs (dl/) are copied
+# in from the normal cache; everything derived (unpacked toolchains, work trees, out/) is rebuilt.
+rb_cache() {  # rb_cache <name> <normal cache dir>
+  local d="$T/rebuild/$1"; mkdir -p "$d"
+  [ -d "$2/dl" ] && cp -a "$2/dl" "$d/dl"
+  echo "$d"
+}
 if [ -z "$WIM_VER" ] && [ ! -e "$WIM" ]; then
   info "this build has no wimboot (built with BB_SKIP_WIMBOOT=1): Windows ISOs are refused"
 elif [ -z "$WIM_VER" ] || [ ! -f "$WIM" ]; then
@@ -252,7 +261,7 @@ fi
 if [ "$REBUILD" = 1 ] && [ -f "$ESP/beast-booter/winpe/beastmount.exe" ]; then
   echo
   echo "[6b] rebuild beastmount.exe from source (build/winpe/beastmountsrc.py, pinned MinGW-w64) and compare"
-  if BOUT="$("${BMSRC[@]}" build --quiet 2>"$T/beastmount.log")"; then
+  if BOUT="$("${BMSRC[@]}" build --quiet --force --cache "$(rb_cache beastmount "${BB_BEASTMOUNT_CACHE:-$BB_ROOT/.tools/cache/beastmount}")" 2>"$T/beastmount.log")"; then
     BOUT="${BOUT##*$'\n'}"
     if cmp -s "$BOUT/beastmount.exe" "$ESP/beast-booter/winpe/beastmount.exe"; then ok "beast-booter/winpe/beastmount.exe is byte-identical to the rebuilt one"
     else bad "beast-booter/winpe/beastmount.exe differs from the rebuilt one"; fi
@@ -265,7 +274,7 @@ fi
 if [ "$REBUILD" = 1 ] && [ -f "$WIM" ]; then
   echo
   echo "[6] rebuild wimboot from source (build/wimboot/wimbootsrc.py) and compare"
-  if WOUT="$("${WIMSRC[@]}" build --quiet 2>"$T/wimboot.log")"; then
+  if WOUT="$("${WIMSRC[@]}" build --quiet --force --cache "$(rb_cache wimboot "${BB_WIMBOOT_CACHE:-$BB_ROOT/.tools/cache/wimboot}")" 2>"$T/wimboot.log")"; then
     WOUT="${WOUT##*$'\n'}"
     if [ "$("${WIMSRC[@]}" info "$WOUT" version)" = "$WIM_VER" ]; then ok "wimboot $WIM_VER built from source in $WOUT"
     else bad "this checkout builds wimboot $("${WIMSRC[@]}" info "$WOUT" version), the manifest says $WIM_VER"; fi
@@ -284,8 +293,8 @@ if [ "$REBUILD" = 1 ]; then
   echo
   echo "[7] rebuild GRUB from source (build/grub/grubsrc.py) and compare"
   info "manifest grubx64.efi origin: $(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["files"]["esp/EFI/BOOT/grubx64.efi"]["origin"])' "$DIST/manifest.json")"
-  # A cache hit costs seconds; a cold build a few minutes (downloads the pinned source).
-  if GOUT="$(python3 -I "$HERE/grub/grubsrc.py" build --quiet 2>"$T/grub.log")"; then
+  # Always a from-scratch build in a temporary cache (only the verified downloads are reused).
+  if GOUT="$(python3 -I "$HERE/grub/grubsrc.py" build --quiet --force --cache "$(rb_cache grub "${BB_GRUB_CACHE:-$BB_ROOT/.tools/cache/grub-src}")" 2>"$T/grub.log")"; then
     GOUT="${GOUT##*$'\n'}"
     gver="$(python3 -I "$HERE/grub/grubsrc.py" info "$GOUT" version)"
     gkey="$(python3 -I "$HERE/grub/grubsrc.py" info "$GOUT" key)"

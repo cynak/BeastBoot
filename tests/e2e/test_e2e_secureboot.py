@@ -155,6 +155,21 @@ def test_enrolled_windows_refused_with_explanation(secureboot_ok, mok_cert, make
     assert not vm.records("windows"), "the Windows boot must not start under Secure Boot"
 
 
+def test_windows_still_refused_by_shim_when_menu_check_is_bypassed(secureboot_ok, mok_cert, make_drive, vm_factory):
+    """Defence in depth: even with the menu's own Secure Boot check off (bb_sb=0 in
+    config.cfg), shim's verifier refuses the unsigned wimboot, so nothing of Windows runs."""
+    cfg = images.user_config(autoboot=trees.recipe_path("windows"),
+                             extra='set bb_sb="0"\nexport bb_sb')
+    drive = make_drive("main", cfg)
+    vm = vm_factory("uefi-sb", drive.path, mok_certs=[mok_cert])
+    checks.wait_ready(vm, timeout=120)
+    err = vm.wait_record("error", timeout=120)
+    assert error_code(err) == "boot-failed", str(err)      # the menu believed Secure Boot was off
+    assert "linux failed" in err.text, str(err)            # loading wimboot was refused
+    assert vm.records("windows"), "the menu must have tried the Windows boot"
+    vm.expect_absent(r"initrd failed|Booting Windows|wimboot [0-9]", within=5)
+
+
 # ---------------------------------------------------------------------------
 # Ubuntu's key (MokList) and its revocations (MokListX)
 # ---------------------------------------------------------------------------

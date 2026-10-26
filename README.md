@@ -12,6 +12,7 @@
   <br>
   <a href="sbom/README.md"><img alt="SBOM: CycloneDX 1.6 + SPDX 2.3" src="https://img.shields.io/badge/SBOM-CycloneDX%201.6%20%2B%20SPDX%202.3-52525b"></a>
   <a href="sbom/README.md"><img alt="Vulnerabilities: report with every release" src="https://img.shields.io/badge/vulnerabilities-report%20per%20release-52525b"></a>
+  <a href="https://buymeacoffee.com/cynak"><img alt="Buy me a coffee" src="https://img.shields.io/badge/Buy%20me%20a%20coffee-cynak-d62839?logo=buymeacoffee&logoColor=white"></a>
   <a href="https://github.com/cynak/BeastBoot/releases"><img alt="Release on GitHub" src="https://img.shields.io/github/v/release/cynak/BeastBoot?include_prereleases&color=d62839&label=release"></a>
   <a href="docs/CODE_QUALITY.md"><img alt="Lint: ruff + ShellCheck" src="https://img.shields.io/badge/lint-ruff%20%2B%20ShellCheck-52525b"></a>
 </p>

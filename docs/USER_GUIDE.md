@@ -384,12 +384,20 @@ With `set bb_debug=1` in `config.cfg`, the menu also prints a `BEAST: error
 | `sb-verify-failed` | Secure Boot refused the ISO's kernel: it is not signed by a key this computer trusts | Ubuntu or based on it: **Trust Ubuntu's Secure Boot key** ([section 6](#ubuntu-isos-with-secure-boot-on)). Other distributions: enroll their key with **Enroll a key (MokManager)** if they publish one. Or turn Secure Boot off for this ISO. BeastBoot never retries without verification. |
 | `no-recipe` | BeastBoot does not recognise how this ISO boots | check [ISO_SUPPORT.md](ISO_SUPPORT.md#recipes); report the ISO |
 | `windows-sb` | a Windows ISO, and Secure Boot is on | turn Secure Boot off in the firmware settings for this boot ([Install Windows](#install-windows-from-the-stick)) |
+| `windows-bad-name` | a Windows ISO whose path contains a quote (") or a control character (possible on NTFS) | rename the file or folder without those characters |
+| `iso-too-large` | an Alpine or Debian installer ISO that is too big to load into memory (Debian DVD, Alpine extended) | use the netinst / standard ISO of the same release, or another install method |
 | `windows-no-wimboot` | the drive's boot files have no Windows support | update the boot files with a full release ([section 7](#7-update-the-boot-files)) |
 | `grubenv-not-writable` | the menu could not write its settings file `grub/grubenv` | update the boot files ([section 7](#7-update-the-boot-files)); that recreates it |
 | `ntfs-unsupported` | a dracut-based ISO (Fedora, RHEL family, openSUSE Leap 16 or Tumbleweed live) on an NTFS data partition | its initramfs has no NTFS driver; use exFAT or FAT32 |
 | `no-data-partition` | the menu cannot find the storage partition | with Secure Boot on and NTFS, see below; otherwise the partition was deleted or reformatted: reinstall |
 | `iso-not-found`, `loopback-failed` | the ISO file is gone or cannot be opened | copy it again; check it with its SHA-256 |
 | `boot-failed` | the ISO's kernel or boot loader did not start | try the other boot mode (UEFI / legacy) |
+
+**Debian installer ISOs** (netinst, CD): inside the installer, the BeastBoot
+stick itself may appear as an ordinary disk in the partitioning step. Do not
+choose it as the installation target: that would erase your ISOs. Large ISOs
+(Debian DVD, Alpine extended) are refused with `iso-too-large`: use the netinst
+or standard ISO.
 
 **The ISO starts, then stops looking for its files** (an initramfs shell,
 "unable to find a medium"): the ISO's own Linux must mount the storage

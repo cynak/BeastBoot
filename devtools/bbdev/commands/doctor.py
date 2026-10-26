@@ -220,6 +220,42 @@ def check_grub_src(ctx: Ctx) -> Check:
                           f"{nfix} security fixes present", "boot")
 
 
+# What the native source builds need on the host (build/grub/grubsrc.py, build/wimboot/wimbootsrc.py,
+# build/winpe/beastmountsrc.py). WARN, not FAIL: docker can build instead (BB_*_BUILDER=docker).
+BUILD_TOOLS = ("gcc", "ld", "as", "ar", "objcopy", "strip", "nm", "make", "patch", "dpkg-deb", "xz", "tar",
+               "m4", "autoconf", "automake", "aclocal", "pkg-config")
+BUILD_TOOLS_APT = ("build-essential binutils patch dpkg xz-utils m4 autoconf automake pkg-config "
+                   "libfreetype-dev libc6-dev")
+
+
+def check_build_tools(ctx: Ctx) -> Check:
+    miss = [t for t in BUILD_TOOLS if not ctx.which(t)]
+    if miss:
+        return Check("build-tools", WARN,
+                     f"not found: {' '.join(miss)} (native GRUB, wimboot and beastmount.exe source builds)",
+                     f"sudo apt install {BUILD_TOOLS_APT} (or build in docker: BB_GRUB_BUILDER=docker "
+                     "BB_WIMBOOT_BUILDER=docker)", SYSTEM, "build")
+    return ok("build-tools", f"{', '.join(BUILD_TOOLS)} found (native source builds)", "build")
+
+
+def check_build_caches(ctx: Ctx) -> list[Check]:
+    """Info lines for the wimboot and beastmount source-build caches (a cold build downloads)."""
+    out = []
+    for name, var, sub, what in (
+            ("wimboot-cache", "BB_WIMBOOT_CACHE", "wimboot", "iPXE wimboot source"),
+            ("beastmount-cache", "BB_BEASTMOUNT_CACHE", "beastmount", "MinGW-w64 .deb files")):
+        d = Path(ctx.env.get(var) or ctx.repo / ".tools/cache" / sub)
+        n = len(list((d / "out").glob("*/build-info.json"))) if (d / "out").is_dir() else 0
+        dl = len(list((d / "dl").glob("*"))) if (d / "dl").is_dir() else 0
+        if n:
+            out.append(ok(name, f"{short(d, ctx)}: {n} build(s), {dl} download(s) ({what})", "build"))
+        else:
+            out.append(Check(name, WARN, f"{short(d, ctx)}: nothing built yet ({dl} download(s) of the {what})",
+                             "run `make build` (the first build downloads the pinned inputs, SHA-256 checked)",
+                             BUILD, "build"))
+    return out
+
+
 def check_shim(ctx: Ctx) -> Check:
     d = ctx.dir("BB_SHIM_DIR")
     # Debian's shim-signed + shim-helpers-amd64-signed (build/shim/debian-shim.lock)
@@ -556,7 +592,7 @@ CHECKS = (
     check_seabios,
     check_qemu, check_kvm, check_mtools, check_xorriso, check_mksquashfs, check_sfdisk, check_mkfs_fat, check_mkfs_exfat,
     check_mkfs_ntfs, check_sbsign, check_openssl, check_virt_fw_vars, check_udisks, check_socat, check_gdb,
-    check_grub_dbg, check_venv, check_keys, check_dist, check_dev_image, check_disk,
+    check_grub_dbg, check_build_tools, check_build_caches, check_venv, check_keys, check_dist, check_dev_image, check_disk,
 )
 
 

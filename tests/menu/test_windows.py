@@ -79,7 +79,7 @@ def test_wimboot_commands_per_platform():
 
 def test_iso_path_and_mode_saved_to_grubenv():
     lines = code_lines(function_body(LIB.read_text(), "bb_win_boot"))
-    assert 'if save_env --file "($bb_esp)/grub/grubenv" bb_winpe_iso bb_winpe_mode; then' in lines
+    assert 'if save_env --file "($bb_esp)/grub/grubenv" bb_winpe_iso bb_winpe_mode bb_winpe_uuid; then' in lines
     assert 'set bb_winpe_iso="$bb_iso"' in lines and 'set bb_winpe_mode="$1"' in lines
     assert 'bb_err grubenv-not-writable "$bb_iso"' in lines
     # saved before wimboot is loaded
@@ -155,3 +155,19 @@ def test_beastmount_modes():
 def test_windows_cfg_grub_script_check():
     p = subprocess.run(["grub-script-check", str(WINCFG)], capture_output=True, text=True)
     assert p.returncode == 0, p.stdout + p.stderr
+
+
+def test_iso_names_with_quote_or_control_character_are_refused():
+    body = function_body(LIB.read_text(), "bb_win_boot")
+    lines = code_lines(body)
+    assert """if regexp '["[:cntrl:]]' "$bb_iso"; then""" in lines
+    assert 'bb_err windows-bad-name "$bb_iso"' in lines
+    # refused before anything is saved or loaded
+    assert lines.index('bb_err windows-bad-name "$bb_iso"') < lines.index('set bb_winpe_iso="$bb_iso"')
+
+
+def test_data_partition_is_matched_by_volume_serial():
+    text = CMD.read_text(encoding="utf-8")
+    assert 'bb_winpe_uuid" set "BB_UUID=%%b"' in text
+    assert re.search(r'if exist "%%d:%BB_ISO%" call :is_data %%d && set "BB_DATA=%%d:"', text)
+    assert "\n:is_data\r\n" in text or "\n:is_data\n" in text

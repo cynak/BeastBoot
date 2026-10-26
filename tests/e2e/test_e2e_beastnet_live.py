@@ -153,7 +153,6 @@ def test_live_download_and_boot(src, udisks_ok, helper, dist_dir, workdir, vm_fa
         assert fsmod.has_token("exfat"), str(fsmod)  # Ubuntu: the exFAT add-on is used
         vm2.wait_record("dryrun", r"^dryrun initrd ", after=rec.start)
     elif recipe == "windows":
-        err = vm2.wait_record("error", after=rec.start)
-        assert err.text.startswith("error unsupported-windows"), str(err)
+        vm2.wait_record("dryrun", r"^dryrun linux(16)? .*/beast-booter/wimboot", after=rec.start)
     vm2.stop()
     assert bn.read_grubenv(drive).get("bb_oneshot", "") == "", "bb_oneshot was not cleared"
