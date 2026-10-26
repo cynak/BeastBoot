@@ -143,6 +143,18 @@ def test_enrolled_unsigned_kernel_refused(secureboot_ok, mok_cert, make_drive, v
     assert error_code(err) == "sb-verify-failed", str(err)
 
 
+def test_enrolled_windows_refused_with_explanation(secureboot_ok, mok_cert, make_drive, vm_factory):
+    """wimboot is unsigned: under Secure Boot the menu does not even try it
+    (windows-sb), and says to turn Secure Boot off."""
+    drive = make_drive("main", images.user_config(autoboot=trees.recipe_path("windows")))
+    vm = vm_factory("uefi-sb", drive.path, mok_certs=[mok_cert])
+    checks.wait_ready(vm, timeout=120)
+    err = vm.wait_record("error", timeout=120)
+    assert error_code(err) == "windows-sb", str(err)
+    vm.wait_for(r"turn Secure Boot off in the firmware settings", timeout=30)
+    assert not vm.records("windows"), "the Windows boot must not start under Secure Boot"
+
+
 # ---------------------------------------------------------------------------
 # Ubuntu's key (MokList) and its revocations (MokListX)
 # ---------------------------------------------------------------------------

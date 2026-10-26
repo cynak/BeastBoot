@@ -151,6 +151,8 @@ ORIGIN_REPO = re.compile(r"repo:([^\s,]+)")
 ORIGIN_GRUB = re.compile(r"grub-src:([a-z0-9][a-z0-9+.-]*)=([0-9][0-9A-Za-z.+~:-]*?)(?::(/[^\s,;)\]]*))?(?=[\s,;)\]]|$)")
 # wimboot built from source by build/wimboot/wimbootsrc.py: wimboot-src:wimboot=<version>:/<path in its build dir>
 ORIGIN_WIMBOOT = re.compile(r"wimboot-src:([a-z0-9][a-z0-9+.-]*)=([0-9][0-9A-Za-z.+~-]*?):(/[^\s,;)\]]*)(?=[\s,;)\]]|$)")
+# beastmount.exe built by build/winpe/beastmountsrc.py: beastmount-src:beastmount=<version>:/<path in its build dir>
+ORIGIN_BEASTMOUNT = re.compile(r"beastmount-src:([a-z0-9][a-z0-9+.-]*)=([0-9][0-9A-Za-z.+~-]*?):(/[^\s,;)\]]*)(?=[\s,;)\]]|$)")
 
 
 def resigned_origin(path: Path, p: deb.DebPkg, member: str | None) -> str:
@@ -190,7 +192,10 @@ def parse_origin(origin: str) -> dict:
             for m in ORIGIN_GRUB.finditer(origin)]
     wimboot = [{"name": m.group(1), "version": m.group(2), "path": m.group(3)}
                for m in ORIGIN_WIMBOOT.finditer(origin)]
+    beastmount = [{"name": m.group(1), "version": m.group(2), "path": m.group(3)}
+                  for m in ORIGIN_BEASTMOUNT.finditer(origin)]
     return {"kind": {"deb": "copied"}.get(kind, kind), "debs": debs, "grub": grub, "wimboot": wimboot,
+            "beastmount": beastmount,
             "repo": ORIGIN_REPO.findall(origin), "signed_by_bb": "signed:beast-booter" in origin,
             "raw": origin}
 
@@ -259,6 +264,28 @@ def load_wimboot_build(root: Path, manifest: dict) -> dict | None:
         note = (f"wimboot build {key} is not in the wimboot cache "
                 "(`python3 -I build/wimboot/wimbootsrc.py build` recreates it)")
     return {"version": ver, "key": key, "info": info, "note": note}
+
+
+def load_beastmount_build(root: Path, manifest: dict) -> dict | None:
+    """The beastmount.exe build the manifest names (build.beastmount_*): its build-info.json from
+    the build/winpe/beastmountsrc.py cache, accepted only if its SHA-256 is the manifest's."""
+    b = manifest.get("build", {})
+    ver, key = b.get("beastmount_version"), b.get("beastmount_build_key")
+    if not ver or not key:
+        return None
+    cache = Path(os.environ.get("BB_BEASTMOUNT_CACHE") or root / ".tools/cache/beastmount")
+    p = cache / "out" / key / "build-info.json"
+    info, note = None, None
+    if p.is_file():
+        raw = p.read_bytes()
+        if hashlib.sha256(raw).hexdigest() == b.get("beastmount_build_info_sha256"):
+            info = json.loads(raw)
+        else:
+            note = f"{p} is not the build-info.json the manifest recorded (beastmount_build_info_sha256)"
+    else:
+        note = (f"beastmount build {key} is not in the beastmount cache "
+                "(`python3 -I build/winpe/beastmountsrc.py build` recreates it)")
+    return {"version": ver, "key": key, "info": info, "note": note, "cache": cache}
 
 
 ORIGIN_REPO_FILE = re.compile(r"(?:repo|key):([^\s,]+)")
@@ -558,11 +585,11 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
     # ---- licenses + package components ----------------------------------------------------
     license_refs: dict[str, str] = {}
 
-    def add_pkg(p: deb.DebPkg, role: str, used_for: str = "") -> str:
+    def add_pkg(p: deb.DebPkg, role: str, used_for: str = "", doc_root: Path | None = None) -> str:
         ref = f"deb:{p.name}@{p.version}"
         if ref in m.items:
             return ref
-        lic = deb.package_license(p, tools_root, spdx_ids)
+        lic = deb.package_license(p, doc_root or tools_root, spdx_ids)
         lic["source"] = lic["source"].replace(str(root) + "/", "")
         license_refs.update({k: v.replace(str(root) + "/", "") for k, v in lic["refs"].items()})
         maint = re.match(r"\s*(.*?)\s*<([^>]+)>", p.maintainer or "")
@@ -767,6 +794,53 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
         wup = add_upstream("wimboot", wup_ver, None, of=f"wimboot {wim['version']} (source build)")
         m.dep(wim_ref, wup, "DESCENDANT_OF")
 
+    # ---- beastmount.exe (build/winpe/beastmountsrc.py) -------------------------------------
+    # Our own program (build/winpe/beastmount.c), built with the pinned MinGW-w64 .debs
+    # (build/winpe/mingw-w64.lock.json), which are recorded as its build tools.
+    bm = load_beastmount_build(root, manifest)
+    bm_ref = None
+    if bm:
+        binfo = bm["info"] or {}
+        bm_ref = f"beastmount-src:beastmount@{bm['version']}"
+        if bm["note"]:
+            m.notes.append(bm["note"])
+        btc = binfo.get("toolchain", {})
+        m.add({"ref": bm_ref, "kind": "source-build", "role": "shipped", "name": "beastmount",
+               "version": bm["version"], "purl": f"pkg:generic/beast-booter/beastmount@{bm['version']}",
+               "supplier": "beast-booter maintainers", "license": "GPL-3.0-or-later",
+               "license_source": "build/winpe/beastmount.c (SPDX-License-Identifier)",
+               "description": ("beast-booter's Windows PE helper (build/winpe/beastmount.c): attaches the ISO "
+                               "read-only with the VirtDisk API so Windows Setup can start from it; x86_64 "
+                               "console program built with MinGW-w64, unsigned"),
+               "props": {"role": "shipped", "source": "build/winpe/beastmount.c",
+                         "source-sha256": binfo.get("source_sha256"),
+                         "beastmount-build-key": bm["key"],
+                         "beastmount-build-info-sha256": manifest.get("build", {}).get("beastmount_build_info_sha256"),
+                         "built-by": "build/winpe/beastmountsrc.py (inputs: beastmount.c, mingw-w64.lock.json)",
+                         "toolchain": (f"{btc['gcc']}; " + ", ".join(f"{p_['name']} {p_['version']}"
+                                                                     for p_ in btc.get("packages", [])))
+                         if btc.get("gcc") else None,
+                         "reproducible": binfo.get("reproducible"),
+                         "imports": ", ".join(binfo.get("facts", {}).get("imports", [])) or None,
+                         "secure-boot": "not signed: runs in Windows PE, which the menu boots only with Secure Boot off",
+                         "vulnerability-tracking": "our own code; its build tools are listed as packages"}})
+        m.dep(root_ref, bm_ref, "CONTAINS")
+        try:
+            bm_lock = json.loads((root / "build/winpe/mingw-w64.lock.json").read_text())
+        except (OSError, ValueError):
+            bm_lock = {"packages": []}
+        tc_dirs = sorted((bm["cache"] / "toolchain").glob("*/.bb-complete"))
+        for lp in bm_lock["packages"]:
+            debf = bm["cache"] / "dl" / lp["file"].rsplit("/", 1)[1]
+            if not debf.is_file():
+                m.notes.append(f"MinGW-w64 package {lp['name']} {lp['version']} is not in {bm['cache']}/dl: "
+                               "not recorded as a build tool")
+                continue
+            p = deb.deb_fields(debf)
+            ref = add_pkg(p, "build", "MinGW-w64 cross compiler: builds beastmount.exe "
+                          "(build/winpe/mingw-w64.lock.json)", doc_root=tc_dirs[-1].parent if tc_dirs else None)
+            m.dep(ref, bm_ref, "BUILD_TOOL_OF")
+
     # ---- tooling (build / install / test) ---------------------------------------------------
     for name, role, used in TOOLING:
         p = pkgs.get(name) or resolve(name, None)
@@ -855,6 +929,25 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
             if item["props"]["origin-verified"].startswith("MISMATCH"):
                 m.notes.append(f"{rel}: {item['props']['origin-verified']}")
                 m.provenance_errors.append(f"{rel}: {item['props']['origin-verified']}")
+        elif o["kind"] == "beastmount-src":
+            w = o["beastmount"][0] if o["beastmount"] else {}
+            if bm_ref is None or w.get("version") != bm["version"]:
+                item["props"]["origin-verified"] = "MISMATCH: origin names no file of the manifest's beastmount build"
+            elif bm["info"] is None:
+                item["props"]["origin-verified"] = f"UNVERIFIED: {bm['note']}"
+            else:
+                want = bm["info"]["files"].get(w["path"].lstrip("/"))
+                item["props"]["origin-verified"] = (
+                    f"sha256 matches build-info.json of beastmount build {bm['key']} ({w['path'].lstrip('/')})"
+                    if want == f["sha256"] else
+                    f"MISMATCH: differs from {w['path'].lstrip('/')} of beastmount build {bm['key']}")
+                item["props"]["package-path"] = w["path"]
+            if bm_ref:
+                item["parent"] = bm_ref
+                m.dep(fref, bm_ref, "CONTAINED_BY")
+            if item["props"]["origin-verified"].startswith("MISMATCH"):
+                m.notes.append(f"{rel}: {item['props']['origin-verified']}")
+                m.provenance_errors.append(f"{rel}: {item['props']['origin-verified']}")
         elif o["kind"] == "wimboot-src":
             w = o["wimboot"][0] if o["wimboot"] else {}
             if wim_ref is None or w.get("version") != wim["version"]:
@@ -908,8 +1001,10 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
             item["props"]["origin-verified"] = verify_repo_origin(root, dist / rel, o["raw"])
             if not item["props"]["origin-verified"].startswith("sha256 matches"):
                 m.notes.append(f"{rel}: {item['props']['origin-verified']}")
-        if o["kind"] not in ("copied", "grub-src", "wimboot-src") or (o["kind"] == "grub-src" and grub_ref is None) \
-                or (o["kind"] == "wimboot-src" and wim_ref is None):
+        if o["kind"] not in ("copied", "grub-src", "wimboot-src", "beastmount-src") \
+                or (o["kind"] == "grub-src" and grub_ref is None) \
+                or (o["kind"] == "wimboot-src" and wim_ref is None) \
+                or (o["kind"] == "beastmount-src" and bm_ref is None):
             m.dep(root_ref, fref, "CONTAINS")
         # EFI binaries: SBAT, Authenticode, signers
         if rel.lower().endswith(".efi"):

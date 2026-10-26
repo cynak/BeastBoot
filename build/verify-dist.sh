@@ -6,7 +6,7 @@
 #   --cert F    a beast-booter certificate you obtained independently (PEM or
 #               DER); grubx64.efi must verify against it and the certificate
 #               shipped in DIST must be the same one
-#   --rebuild   build GRUB and wimboot from the pinned source
+#   --rebuild   build GRUB, wimboot and beastmount.exe from the pinned source
 #               (build/grub/grubsrc.py: a few minutes the first time, then
 #               cached; build/wimboot/wimbootsrc.py: seconds), then compare the
 #               i386-pc modules, boot.img, core.img, the unsigned grubx64.efi
@@ -30,7 +30,11 @@
 #   5. wimboot (Windows PE loader) is a hybrid BIOS/UEFI image of the
 #      manifest's version, unsigned, with its SBAT lines, from the manifest's
 #      wimboot build (compared with that build when it is in the local cache);
-#      the Windows PE start-up files have CRLF line endings
+#      the Windows PE start-up files have CRLF line endings; beastmount.exe
+#      (attaches the ISO in Windows PE) is a PE32+ x86_64 console program
+#      without time stamp or signature that imports only KERNEL32/msvcrt, from
+#      the manifest's beastmount build (--rebuild: rebuilt with the pinned
+#      MinGW-w64 .debs of build/winpe/mingw-w64.lock.json and compared)
 # and prints the SBAT and the certificate fingerprints. MokManager shows the
 # SHA-1 fingerprint when you choose "View key" - compare it before enrolling.
 set -euo pipefail
@@ -45,7 +49,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --cert) CERT="${2:?--cert needs a file}"; shift 2 ;;
     --rebuild) REBUILD=1; shift ;;
-    -h|--help) sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,39p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) echo "verify-dist: unknown option $1" >&2; exit 2 ;;
     *) DIST="$1"; shift ;;
   esac
@@ -183,6 +187,7 @@ echo "[5] wimboot (Windows PE loader, built from source by build/wimboot/wimboot
 WIM="$ESP/beast-booter/wimboot"
 WIM_VER="$(mget build.wimboot_version 2>/dev/null || true)"
 WIMSRC=(python3 -I "$HERE/wimboot/wimbootsrc.py")
+BMSRC=(python3 -I "$HERE/winpe/beastmountsrc.py")
 if [ -z "$WIM_VER" ] && [ ! -e "$WIM" ]; then
   info "this build has no wimboot (built with BB_SKIP_WIMBOOT=1): Windows ISOs are refused"
 elif [ -z "$WIM_VER" ] || [ ! -f "$WIM" ]; then
@@ -216,6 +221,45 @@ else
       bad "beast-booter/winpe/$f does not have CRLF line endings throughout"
     fi
   done
+  # beastmount.exe: our own program, built reproducibly by build/winpe/beastmountsrc.py
+  BM="$ESP/beast-booter/winpe/beastmount.exe"
+  BM_VER="$(mget build.beastmount_version 2>/dev/null || true)"
+  if [ -z "$BM_VER" ] || [ ! -f "$BM" ]; then
+    bad "beast-booter/winpe/beastmount.exe and the manifest's build.beastmount_version must come with wimboot (file: $([ -f "$BM" ] && echo yes || echo no), version: '${BM_VER}')"
+  else
+    if bfacts="$("${BMSRC[@]}" check "$BM" 2>"$T/bm.err")"; then
+      ok "beast-booter/winpe/beastmount.exe $BM_VER: PE32+ x86_64 console program, TimeDateStamp 0, no signature, imports only KERNEL32/msvcrt"
+      info "beastmount facts: $bfacts"
+    else
+      bad "beast-booter/winpe/beastmount.exe: $(sed 's/^beastmount: error: //' "$T/bm.err")"
+    fi
+    bo="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["files"]["esp/beast-booter/winpe/beastmount.exe"]["origin"])' "$DIST/manifest.json")"
+    if [ "$bo" = "beastmount-src:beastmount=$BM_VER:/beastmount.exe" ]; then ok "manifest origin: $bo"; else bad "manifest origin of beast-booter/winpe/beastmount.exe is '$bo'"; fi
+    bkey="$(mget build.beastmount_build_key)"
+    binfo="${BB_BEASTMOUNT_CACHE:-$BB_ROOT/.tools/cache/beastmount}/out/$bkey/build-info.json"
+    if [ -f "$binfo" ] && [ "$(sha "$binfo")" = "$(mget build.beastmount_build_info_sha256)" ]; then
+      if [ "$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["files"]["beastmount.exe"])' "$binfo")" = "$(sha "$BM")" ]; then
+        ok "beast-booter/winpe/beastmount.exe is the file of beastmount build $bkey (its build-info.json is the manifest's)"
+      else
+        bad "beast-booter/winpe/beastmount.exe differs from the file of beastmount build $bkey"
+      fi
+    else
+      info "beastmount build $bkey is not in the local cache: --rebuild builds it and compares"
+    fi
+  fi
+fi
+
+if [ "$REBUILD" = 1 ] && [ -f "$ESP/beast-booter/winpe/beastmount.exe" ]; then
+  echo
+  echo "[6b] rebuild beastmount.exe from source (build/winpe/beastmountsrc.py, pinned MinGW-w64) and compare"
+  if BOUT="$("${BMSRC[@]}" build --quiet 2>"$T/beastmount.log")"; then
+    BOUT="${BOUT##*$'\n'}"
+    if cmp -s "$BOUT/beastmount.exe" "$ESP/beast-booter/winpe/beastmount.exe"; then ok "beast-booter/winpe/beastmount.exe is byte-identical to the rebuilt one"
+    else bad "beast-booter/winpe/beastmount.exe differs from the rebuilt one"; fi
+  else
+    tail -n 5 "$T/beastmount.log" | sed 's/^/        /'
+    bad "beastmount.exe source build failed (python3 -I build/winpe/beastmountsrc.py build)"
+  fi
 fi
 
 if [ "$REBUILD" = 1 ] && [ -f "$WIM" ]; then

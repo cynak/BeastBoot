@@ -15,13 +15,22 @@ rem setup: find the data partition (the drive that has the ISO path), attach
 rem        the ISO read-only (beastmount.exe: diskpart attaches only VHD/VHDX
 rem        files, and Setup's Windows PE has no PowerShell or storage WMI
 rem        provider), find its drive letter (the new drive with
-rem        sources\install.wim/.esd/.swm) and start Windows Setup from it.
+rem        sources\install.wim/.esd/.swm), start Windows Setup from it and
+rem        check that Setup runs from that drive.
 rem pe:    start the image's normal shell (WinRE's recovery UI, or startnet.cmd).
 rem
 rem Tests: when a disk labelled BBTEST is attached, progress lines are appended
-rem to \RESULT.TXT on it: winpe-ok, iso-mounted <letter>:, setup-started, or
-rem fail <reason>. On any failure the script says what failed and opens a
-rem command prompt; closing it restarts the PC (as Windows PE always does).
+rem to \RESULT.TXT on it (tests/e2e/REAL_ISOS.md), in this order:
+rem   winpe-ok
+rem   iso-found <data letter>:\path\to.iso
+rem   iso-mounted <L>: <L>:\sources\install.wim   (only after that file was found)
+rem   setup-started <L>:\setup.exe
+rem   setup-running   (only after a Setup process from <L>: was seen running)
+rem   setup-process <its path>
+rem or, at any point, "fail <reason>: <plain words>". With BBTEST the script
+rem then powers the PC off (the end of a test case) instead of waiting.
+rem On any failure the script says what failed and opens a command prompt;
+rem closing it restarts the PC (as Windows PE always does).
 rem
 rem The script never writes to the data partition and never changes a disk.
 
@@ -35,6 +44,8 @@ set "BB_ISO="
 set "BB_MODE="
 set "BB_DATA="
 set "BB_SRC="
+set "BB_INST="
+set "BB_PROC="
 echo.
 echo BeastBoot: Windows PE started.
 
@@ -52,13 +63,14 @@ if not defined BB_MODE set "BB_MODE=pe"
 call :find_bbtest
 if /i "%BB_MODE%"=="setup" goto setup
 if /i "%BB_MODE%"=="pe" goto pe
-set "BB_MSG=unknown-mode %BB_MODE%"
+set "BB_MSG=unknown-mode: the boot menu asked for mode %BB_MODE%, which this script does not know (update the drive's boot files)"
 call :log winpe-ok
 goto fail
 
 rem ---------------------------------------------------------------- pe mode
 :pe
 call :log winpe-ok
+if defined BB_LOG goto test_end
 rem WinRE's recovery UI first, if the image has it. It can also return at once
 rem (the image is not a recovery environment), so a shell always follows:
 rem when this script ends, Windows PE restarts the PC.
@@ -84,12 +96,13 @@ if not defined BB_LOG call :find_bbtest
 call :log winpe-ok
 
 if not defined BB_ISO (
-  set "BB_MSG=no-iso-path: %BB_ENV% names no ISO (bb_winpe_iso)"
+  set "BB_MSG=no-iso-path: the boot menu did not say which ISO to use (%BB_ENV% has no bb_winpe_iso line); update the drive's boot files"
   goto fail
 )
 set "BB_ISO=%BB_ISO:/=\%"
 if not "%BB_ISO:~0,1%"=="\" set "BB_ISO=\%BB_ISO%"
-echo BeastBoot: looking for %BB_ISO% ...
+set "BB_SAY=BeastBoot: looking for %BB_ISO% ..."
+call :say
 
 rem USB drives can take a few seconds to get a drive letter
 for /l %%i in (1,1,20) do if not defined BB_DATA (
@@ -97,22 +110,24 @@ for /l %%i in (1,1,20) do if not defined BB_DATA (
   if not defined BB_DATA call :sleep 2
 )
 if not defined BB_DATA (
-  set "BB_MSG=iso-not-found: no drive has %BB_ISO% (is the BeastBoot drive connected, and its data partition readable here: exFAT, NTFS or FAT32?)"
+  set "BB_MSG=iso-not-found: no drive has %BB_ISO%. Is the BeastBoot drive still connected? Windows reads its data partition when it is exFAT, NTFS or FAT32"
   goto fail
 )
+set "BB_LINE=iso-found %BB_DATA%%BB_ISO%"
+call :logline
 echo BeastBoot: found the ISO on %BB_DATA%
 
 rem Drives that already have Windows install media (not the ISO's)
 for %%d in (%BB_DRIVES%) do call :mark_old %%d
 
 if not exist "%BB_SYS%\beastmount.exe" (
-  set "BB_MSG=no-mount-tool: beastmount.exe is missing, and this Windows PE has no built-in way to attach an ISO"
+  set "BB_MSG=no-mount-tool: beastmount.exe is missing, and this Windows PE has no built-in way to attach an ISO; update the drive's boot files"
   goto fail
 )
 echo BeastBoot: attaching the ISO read-only...
 "%BB_SYS%\beastmount.exe" "%BB_DATA%%BB_ISO%"
 if errorlevel 1 (
-  set "BB_MSG=attach-failed: could not attach %BB_DATA%%BB_ISO% read-only (see the message above)"
+  set "BB_MSG=attach-failed: Windows could not open %BB_DATA%%BB_ISO% as a disc image (message above). The file may be damaged or incomplete: check it against the checksum Microsoft publishes"
   goto fail
 )
 
@@ -121,21 +136,40 @@ for /l %%i in (1,1,15) do if not defined BB_SRC (
   if not defined BB_SRC call :sleep 1
 )
 if not defined BB_SRC (
-  set "BB_MSG=no-media: the ISO is attached, but no new drive with sources\install.wim or install.esd appeared"
+  set "BB_MSG=no-media: the ISO is attached, but no new drive with sources\install.wim or install.esd appeared; is it a Windows installation ISO?"
   goto fail
 )
-call :log iso-mounted %BB_SRC%
-echo BeastBoot: the ISO is drive %BB_SRC%
+call :log iso-mounted %BB_SRC% %BB_INST%
+echo BeastBoot: the ISO is drive %BB_SRC% (%BB_INST%)
 
 set "BB_SETUP=%BB_SRC%\setup.exe"
 if not exist "%BB_SETUP%" set "BB_SETUP=%BB_SRC%\sources\setup.exe"
 if not exist "%BB_SETUP%" (
-  set "BB_MSG=no-setup: %BB_SRC% has no setup.exe"
+  set "BB_MSG=no-setup: drive %BB_SRC% has no setup.exe, so this ISO cannot install Windows from here"
   goto fail
 )
-call :log setup-started
+call :log setup-started %BB_SETUP%
 echo BeastBoot: starting Windows Setup (%BB_SETUP%)...
-start "" /wait "%BB_SETUP%"
+start "" "%BB_SETUP%"
+
+rem Proof that Setup runs from the attached ISO: a setup.exe, setuphost.exe or
+rem setupprep.exe process whose program file is on %BB_SRC% (tasklist shows
+rem only names, and the RAM disk X: has a setup.exe of its own).
+for /f "delims=" %%p in ('%BB_SYS%\beastmount.exe --running %BB_SRC% 60') do set "BB_PROC=%%p"
+if not defined BB_PROC (
+  set "BB_MSG=setup-not-running: Windows Setup (%BB_SETUP%) did not start, or it closed at once"
+  goto fail
+)
+call :log setup-running
+call :log setup-process %BB_PROC%
+echo BeastBoot: Windows Setup is running (%BB_PROC%).
+if defined BB_LOG goto test_end
+
+rem Wait until Setup has ended (cancelled; after a full install Setup restarts
+rem the PC itself), then leave a command prompt.
+:wait_setup
+call :sleep 5
+%BB_SYS%\beastmount.exe --running %BB_SRC% 0 >nul 2>&1 && goto wait_setup
 echo.
 echo BeastBoot: Windows Setup has ended. Close this window to restart the PC.
 cmd /k
@@ -150,16 +184,32 @@ setlocal EnableDelayedExpansion
 echo   !BB_MSG!
 endlocal
 echo.
+if defined BB_LOG (
+  call :sleep 10
+  goto test_end
+)
 echo A command prompt opens: you can look around (dir, diskpart), or close it
 echo to restart the PC.
 cmd /k
 exit /b 1
 
+rem Tests only (a disk labelled BBTEST is attached): power off, which ends the
+rem test case. Setup stays on screen for a moment first.
+:test_end
+echo BeastBoot: test disk BBTEST found: powering off in 20 seconds.
+call :sleep 20
+wpeutil shutdown
+cmd /k
+exit /b 0
+
 rem :log WORDS - append WORDS to RESULT.TXT on BBTEST ("fail": fail BB_MSG)
+rem :logline - the same for the line in BB_LINE (for lines with user data:
+rem ISO names may contain & % ! ( ), which "call" would expand or split)
 :log
-if not defined BB_LOG exit /b 0
 set "BB_LINE=%*"
 if /i "%~1"=="fail" set "BB_LINE=fail %BB_MSG%"
+:logline
+if not defined BB_LOG exit /b 0
 setlocal EnableDelayedExpansion
 >>"!BB_LOG!" echo(!BB_LINE!
 endlocal
@@ -178,10 +228,11 @@ exit /b 0
 for %%d in (%BB_DRIVES%) do if not defined BB_DATA if exist "%%d:%BB_ISO%" set "BB_DATA=%%d:"
 exit /b 0
 
+rem :has_media L - L: has sources\install.wim/.esd/.swm (the file in BB_INST)
 :has_media
-if exist "%1:\sources\install.wim" exit /b 0
-if exist "%1:\sources\install.esd" exit /b 0
-if exist "%1:\sources\install.swm" exit /b 0
+set "BB_INST="
+for %%f in (install.wim install.esd install.swm) do if not defined BB_INST if exist "%1:\sources\%%f" set "BB_INST=%1:\sources\%%f"
+if defined BB_INST exit /b 0
 exit /b 1
 
 :mark_old
@@ -198,8 +249,20 @@ call :has_media %1 || exit /b 0
 set "BB_SRC=%1:"
 exit /b 0
 
-rem :sleep SECONDS (Windows PE has no timeout.exe)
+rem :say - echo BB_SAY (text with user data) without expanding it again
+:say
+setlocal EnableDelayedExpansion
+echo(!BB_SAY!
+endlocal
+exit /b 0
+
+rem :sleep SECONDS (Windows PE has no timeout.exe; ping 127.0.0.1 works only once
+rem the network stack runs, so beastmount.exe waits where it is there: setup mode)
 :sleep
+if exist "%BB_SYS%\beastmount.exe" (
+  "%BB_SYS%\beastmount.exe" --sleep %~1
+  exit /b 0
+)
 set /a BB_N=%~1+1
 ping -n %BB_N% 127.0.0.1 >nul 2>&1
 exit /b 0

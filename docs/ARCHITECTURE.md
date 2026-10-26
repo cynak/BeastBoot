@@ -157,7 +157,9 @@ wimboot and Secure Boot: our wimboot is patched (on UEFI it takes the files
 GRUB passes with `initrd newc:...` through LoadFile2, see
 build/wimboot/README.md) and not signed, so shim/GRUB refuse it under Secure
 Boot; the menu boots Windows ISOs only with Secure Boot off.
-`BB_SKIP_WIMBOOT=1` builds without `beast-booter/`.
+`beast-booter/winpe/beastmount.exe` (attaches the ISO in Windows PE) is our
+own program, built reproducibly with pinned MinGW-w64 packages
+(build/winpe/beastmountsrc.py). `BB_SKIP_WIMBOOT=1` builds without `beast-booter/`.
 
 The installer adds to the ESP, outside `dist/`: `BEAST-BOOTER.ID` (install
 id and layout version), `grub/beast/device.cfg` (§5), `grub/grubenv` (1024
@@ -296,8 +298,8 @@ BEAST: error <code> <free text>
 ```
 
 Error codes: `no-data-partition`, `iso-not-found`, `loopback-failed`,
-`no-recipe`, `unsupported-windows`, `sb-verify-failed`, `boot-failed`,
-`oneshot-not-cleared`.
+`no-recipe`, `windows-sb`, `windows-no-wimboot`, `grubenv-not-writable`,
+`sb-verify-failed`, `boot-failed`, `oneshot-not-cleared`.
 
 ## 6. ISO boot recipes
 
@@ -315,7 +317,7 @@ ISO's volume label (`probe --label (loop)`).
 | 5 | `dracut-live` | `/LiveOS/squashfs.img` and `/images/pxeboot/vmlinuz` | `/images/pxeboot/vmlinuz` / `/images/pxeboot/initrd.img` | `root=live:CDLABEL=<label> rd.live.image iso-scan/filename=<path> quiet` |
 | 6 | `anaconda` | `/images/pxeboot/vmlinuz` (no `/LiveOS`) | same as above | `inst.stage2=hd:UUID=<uuid>:<path> quiet` |
 | 7 | `suse` | `/boot/x86_64/loader/linux` | that / `/boot/x86_64/loader/initrd` | `isofrom_device=/dev/disk/by-uuid/<uuid> isofrom_system=<path> splash=silent` |
-| 8 | `windows` | `/sources/boot.wim` and (`/bootmgr` or `/efi/microsoft/boot/bcd`) | – | not supported in 0.1: show an explanation (`BEAST: error unsupported-windows`) |
+| 8 | `windows` | `/sources/boot.wim` and (`/bootmgr` or `/efi/microsoft/boot/bcd`) | `($esp)/beast-booter/wimboot` / `newc:boot.wim:(loop)/sources/boot.wim` + the Windows PE start-up files | Secure Boot on: `BEAST: error windows-sb` and explain. Install media (`/sources/install.wim`, `.esd`, `.swm`): menu `windows.cfg` (Windows Setup, default; or Windows PE `index=1`), ISO path and mode saved to `grub/grubenv` for `beastboot.cmd`; other `boot.wim` ISOs as they are. BIOS `linux16`/`initrd16`, UEFI `linux`/`initrd` (tests/e2e/REAL_ISOS.md "Windows") |
 | 9 | `efi-chainload` | UEFI only: `/EFI/BOOT/BOOTX64.EFI` (any case) | – | `chainloader (loop)/EFI/BOOT/BOOTX64.EFI`, with a warning that many ISOs cannot find their files this way |
 | – | none | – | – | `BEAST: error no-recipe ...` and explain |
 

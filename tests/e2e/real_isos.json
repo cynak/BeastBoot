@@ -488,8 +488,8 @@
       "timeout_s": 900,
       "result": [
         "^winpe-ok\\s*$",
-        "^iso-mounted [A-Z]:?\\s*$",
-        "^setup-started\\s*$"
+        "^iso-mounted [A-Z]: [A-Z]:\\\\sources\\\\install\\.(wim|esd)\\s*$",
+        "^setup-running\\s*$"
       ]
     },
     {
@@ -516,8 +516,8 @@
       "timeout_s": 900,
       "result": [
         "^winpe-ok\\s*$",
-        "^iso-mounted [A-Z]:?\\s*$",
-        "^setup-started\\s*$"
+        "^iso-mounted [A-Z]: [A-Z]:\\\\sources\\\\install\\.(wim|esd)\\s*$",
+        "^setup-running\\s*$"
       ]
     }
   ]

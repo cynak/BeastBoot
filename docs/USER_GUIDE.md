@@ -141,6 +141,32 @@ The tools at the bottom of the root menu:
 
 Which ISOs boot and how: [ISO_SUPPORT.md](ISO_SUPPORT.md).
 
+### Install Windows from the stick
+
+1. Download a Windows 10 or 11 installation ISO from Microsoft and copy it
+   onto the drive like any ISO. The drive must be exFAT (the default) or
+   NTFS: the ISO is larger than 4 GiB.
+2. **Turn Secure Boot off** in the computer's firmware settings (**UEFI
+   firmware settings** in the BeastBoot menu gets you there). BeastBoot
+   starts Windows ISOs with a loader that is not signed; with Secure Boot on,
+   the menu tells you so and does not start them. You can turn Secure Boot
+   back on once Windows is installed.
+3. Boot the drive, pick the ISO, then **Install Windows**. (**Windows PE
+   command prompt** instead opens a Windows command prompt for repairs.)
+4. Windows loads its setup files into memory (up to a minute from a USB 2
+   stick; this needs about 2.5 GB of memory, and Windows 11 needs 4 GB
+   anyway). A black
+   BeastBoot window attaches the ISO, then Windows Setup opens. Install as
+   usual.
+5. When Setup restarts the PC, let it start from the internal disk: remove
+   the stick, or pick the disk in the firmware's boot menu. Choosing the ISO
+   in BeastBoot again would start Setup from the beginning.
+
+If something goes wrong, the black window says what failed and leaves a
+command prompt open. Windows 11 Setup checks the PC itself (TPM 2.0, Secure
+Boot support, UEFI), exactly as from Microsoft's own stick. Details:
+[ISO_SUPPORT.md](ISO_SUPPORT.md#windows).
+
 ## 6. First boot with Secure Boot on
 
 Once per computer, you enroll the BeastBoot key in MokManager. Nothing
@@ -357,7 +383,9 @@ With `set bb_debug=1` in `config.cfg`, the menu also prints a `BEAST: error
 |---|---|---|
 | `sb-verify-failed` | Secure Boot refused the ISO's kernel: it is not signed by a key this computer trusts | Ubuntu or based on it: **Trust Ubuntu's Secure Boot key** ([section 6](#ubuntu-isos-with-secure-boot-on)). Other distributions: enroll their key with **Enroll a key (MokManager)** if they publish one. Or turn Secure Boot off for this ISO. BeastBoot never retries without verification. |
 | `no-recipe` | BeastBoot does not recognise how this ISO boots | check [ISO_SUPPORT.md](ISO_SUPPORT.md#recipes); report the ISO |
-| `unsupported-windows` | a Windows installer ISO | not supported in 0.1 |
+| `windows-sb` | a Windows ISO, and Secure Boot is on | turn Secure Boot off in the firmware settings for this boot ([Install Windows](#install-windows-from-the-stick)) |
+| `windows-no-wimboot` | the drive's boot files have no Windows support | update the boot files with a full release ([section 7](#7-update-the-boot-files)) |
+| `grubenv-not-writable` | the menu could not write its settings file `grub/grubenv` | update the boot files ([section 7](#7-update-the-boot-files)); that recreates it |
 | `no-data-partition` | the menu cannot find the storage partition | with Secure Boot on and NTFS, see below; otherwise the partition was deleted or reformatted: reinstall |
 | `iso-not-found`, `loopback-failed` | the ISO file is gone or cannot be opened | copy it again; check it with its SHA-256 |
 | `boot-failed` | the ISO's kernel or boot loader did not start | try the other boot mode (UEFI / legacy) |

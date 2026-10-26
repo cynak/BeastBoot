@@ -106,6 +106,7 @@ set bb_serial=1
 | `bb_theme=/path/theme.txt` | use your own GRUB theme file from the data partition instead of BeastBoot's (see [Changing the look](#changing-the-look)) |
 | `bb_fs_addon=0` | do not use the [exFAT add-on](ISO_SUPPORT.md#the-exfat-add-on): casper and live-boot ISOs on an exFAT drive are started exactly as on FAT32 (with the ISO's own `loopback.cfg`). Default: on |
 | `bb_kargs="word ..."` | extra kernel parameters added at the end of the command line of every ISO started by one of BeastBoot's own Linux recipes (casper, live-boot, archiso, dracut-live, anaconda, suse), for example `bb_kargs="console=ttyS0,115200"`. Not added for an ISO started with its own `loopback.cfg` (GRUB cannot change those lines), for Windows or EFI loaders, or for the network helper. Default: empty. Used by the real-ISO tests ([tests/e2e/REAL_ISOS.md](../tests/e2e/REAL_ISOS.md)) |
+| `bb_windows=pe` | for `bb_autoboot` of a Windows installation ISO: start its Windows PE command prompt instead of Windows Setup. From the menu you choose in a small menu instead. Default: `setup` |
 | `bb_beastnet_script=/path/plan.json` | start the network helper in script mode with this JSON plan (a path on the data partition) instead of asking questions; see [BEASTNET.md](BEASTNET.md) §5 |
 
 The same `bb_*` settings may also be put in `grub/beast/device.cfg` on the
@@ -158,8 +159,9 @@ BEAST: error no-recipe /mystery.iso
   zstd-compressed) or `no-exfat-module <squashfs>`. Nothing is printed when the
   data partition is not exFAT or the ISO is not a casper / live-boot ISO.
 - `error <code> <text>` codes: `no-data-partition`, `iso-not-found`,
-  `loopback-failed`, `no-recipe`, `unsupported-windows`, `sb-verify-failed`,
-  `boot-failed`. The text after the code is for people, not parsers. Under
+  `loopback-failed`, `no-recipe`, `windows-sb` (Secure Boot is on: Windows
+  ISOs need it off), `windows-no-wimboot`, `grubenv-not-writable`,
+  `sb-verify-failed`, `boot-failed`. The text after the code is for people, not parsers. Under
   Secure Boot, any failure of `linux`, `initrd`, `chainloader` or `boot` is
   reported as `sb-verify-failed`; without Secure Boot it is `boot-failed`.
 
@@ -321,6 +323,10 @@ Esc returns to the menu.
   still has to call `normal_exit` itself (after Esc) or `..` already did.
   (In GRUB a `function` definition takes effect when it is parsed, so the
   only way to swap it at run time is to `source` a file.)
+- A Windows installation ISO chosen in the menu opens `windows.cfg` with
+  `configfile` (Install Windows / Windows PE command prompt); Esc returns
+  to the folder. `bb_r_windows` exports `bb_iso` for it, and the ISO stays
+  open as `(loop)`.
 - Functions are global in GRUB but variables are per `configfile` context,
   so everything the scripts need is exported (`bb_*`).
 - File names come from GRUB's `*` wildcard (the `regexp` module), which

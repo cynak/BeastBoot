@@ -16,6 +16,10 @@ Status words used below:
 - **expected**: what the distribution's documentation or boot scripts say
   should work. Not yet tried with real ISOs by this project.
 - **unverified**: our best understanding, likely to have exceptions.
+- **tested (real ISO)**: the vendor's own ISO, checksum-verified, booted from a
+  BeastBoot drive in QEMU by `tests/e2e/test_e2e_real_isos.py`
+  ([tests/e2e/REAL_ISOS.md](../tests/e2e/REAL_ISOS.md)) until its own system
+  or installer was running from the ISO.
 
 Real-ISO results are very welcome; please include the ISO file name, the
 data filesystem, BIOS/UEFI/Secure Boot, and the `BEAST:` lines (set
@@ -38,7 +42,7 @@ it in `/dev/disk/by-uuid/`, `<label>` the ISO's volume label as GRUB reads it.
 | `suse` | `/boot/x86_64/loader/linux` | `isofrom_device=/dev/disk/by-uuid/<uuid> isofrom_system=<path> splash=silent` | openSUSE live images (KIWI); openSUSE/SLE installation ISOs are unverified |
 | `debian-installer` | `/install.amd/vmlinuz` + `.disk/info` | the whole ISO and its loop-modules udeb are added to the initrd, `hooks/d-i-iso.sh` mounts it on `/cdrom` (needs RAM for the ISO twice; netinst only, not DVD sets) | Debian netinst / CD installers |
 | `alpine` | `/.alpine-release` + `/apks/.boot_repository` | the whole ISO is added to the initramfs, `rdinit=/beast-init` (`hooks/alpine-init.sh`) attaches it to `/dev/loop0` | Alpine standard / extended (RAM for the ISO) |
-| `windows` | `/sources/boot.wim` and (`/bootmgr` or `/efi/microsoft/boot/bcd`) | not supported in 0.1: the menu explains this | Windows 10/11 and Windows Server installation ISOs |
+| `windows` | `/sources/boot.wim` and (`/bootmgr` or `/efi/microsoft/boot/bcd`) | no kernel: wimboot starts the ISO's `sources/boot.wim` from memory. Installation ISOs: **Windows Setup** from the ISO (default) or a Windows PE command prompt; other `boot.wim` ISOs (Windows PE, WinRE) as they are. **Secure Boot off only** ([below](#windows)) | Windows 11: **tested (real ISO)**, see below. Windows 10 and Windows Server installation ISOs: expected. Windows PE / WinRE ISOs: unverified |
 | `efi-chainload` | UEFI only: `/EFI/BOOT/BOOTX64.EFI` in any letter case | `chainloader` the ISO's own UEFI boot loader | self-contained EFI programs (for example memtest86+ or netboot.xyz, unverified); most other ISOs fail, see below |
 | `none` | nothing matched | the menu explains that the ISO is unknown | |
 
@@ -64,9 +68,68 @@ Notes per recipe:
   device of its own, which does not exist, so most Linux ISOs stop at a GRUB
   prompt or an error. It is meant for self-contained EFI programs. A warning
   is shown before starting.
-- **windows**: Windows setup must find `install.wim`/`install.esd` on a real
-  disk, which needs either extracting the ISO or a filesystem-mapping driver.
-  Neither is in 0.1. Write Windows ISOs to a separate USB stick.
+- **windows**: see [Windows](#windows) below.
+
+## Windows
+
+What happens when you pick a Windows installation ISO (one with
+`sources/install.wim` or `install.esd`):
+
+1. A small menu asks: **Install Windows** (default) or **Windows PE command
+   prompt** (repair and tools, no Setup). With `bb_autoboot` the menu is
+   skipped: Setup, or the command prompt with `bb_windows=pe`
+   ([MENU.md](MENU.md)).
+2. GRUB writes the ISO's path to the drive's `grub/grubenv` and starts
+   [wimboot](https://ipxe.org/wimboot) (iPXE's Windows PE loader, built from
+   source with our patches, `build/wimboot/`). wimboot loads the ISO's
+   `sources/boot.wim` into memory and starts Windows PE from it, with three
+   small files added: a start-up script, the ISO path, and `beastmount.exe`.
+   Nothing on the ISO or the drive is changed.
+3. In Windows PE the start-up script finds the BeastBoot data partition,
+   attaches the ISO file **read-only** as a DVD drive (`beastmount.exe`, our
+   own small program built from `build/winpe/beastmount.c`), and starts
+   Windows Setup from that drive, as from a Microsoft USB stick. It checks
+   that Setup really runs from the ISO. If a step fails, it says what failed
+   in plain words and leaves a command prompt open.
+
+ISOs with `boot.wim` but no install image (Windows PE, WinRE, recovery tool
+ISOs) boot as they are: their own start-up runs, nothing is added.
+
+**Tested (real ISO)**: Windows 11 Enterprise 26H2 evaluation (x64, en-US,
+Microsoft's checksum), UEFI and legacy BIOS, on an exFAT and on an NTFS data
+partition: Windows Setup starts from the attached ISO and shows its first
+screen ("Select language settings"); a path with spaces and `&` in a folder
+works. The Windows PE command prompt variant also starts on UEFI and BIOS.
+On these test VMs (no TPM, firmware without Secure Boot support) Windows 11
+Setup then stops at its own check, "This PC doesn't currently meet Windows 11
+system requirements" (TPM 2.0, Secure Boot), as it would from Microsoft's
+stick; closing it returns to BeastBoot's command prompt. Installing Windows
+to the end was not part of the test.
+
+Limits:
+
+- **Secure Boot must be off.** wimboot is not signed (and Microsoft's signed
+  wimboot cannot start from GRUB on UEFI), so with Secure Boot on the menu
+  stops with `BEAST: error windows-sb` and says to turn Secure Boot off.
+  BeastBoot never works around Secure Boot. Turn it off for the
+  installation; the installed Windows starts normally with Secure Boot on
+  again.
+- **Memory**: about twice the size of `boot.wim` plus 1 GB, because wimboot
+  keeps `boot.wim` in memory and Windows copies it into its own RAM disk.
+  With Windows 11 26H2 (`boot.wim` 610 MB) Setup started with 2.5 GB
+  (UEFI) and 4 GB (UEFI and BIOS); Windows 11 itself requires 4 GB.
+- **Windows 11's hardware check** is Setup's own, the same as from
+  Microsoft's USB stick: on a PC without TPM 2.0 or Secure Boot support (or
+  started in legacy BIOS mode), Windows 11 Setup says the PC does not meet the
+  requirements. BeastBoot does not bypass it.
+- **Data partition**: exFAT or NTFS (the ISO is larger than 4 GiB, too big
+  for FAT32). Windows PE reads both.
+- **Restart during Setup**: Setup restarts the PC to finish. Let it start
+  from the internal disk (remove the stick, or pick the disk in the firmware
+  boot menu); choosing the ISO in BeastBoot again starts Setup from the
+  beginning.
+- USB 2 sticks: loading `boot.wim` takes about a minute before anything
+  moves on the screen.
 
 ## Paths with spaces and special characters
 

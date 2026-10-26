@@ -343,9 +343,9 @@ Windows 11 Enterprise); `BB_LIVE_SOURCE=id,id` picks others. The links name
 exact releases, so they go stale: a `gone (404)` result means the link in
 the catalog needs updating, not that beast-net is broken.
 
-Windows ISOs download fine but do not boot from BeastBoot 0.1 (the menu
-says so, `unsupported-windows`); they are larger than 4 GiB, so the drive
-needs exFAT or NTFS for them.
+Windows ISOs download fine and boot with Secure Boot off
+([ISO_SUPPORT.md](ISO_SUPPORT.md#windows)); they are larger than 4 GiB, so
+the drive needs exFAT or NTFS for them.
 
 ## 8. Trust Ubuntu's Secure Boot key
 

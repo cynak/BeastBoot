@@ -56,3 +56,25 @@ New tag: update `tag`, `upstream_version`, `commit`, `source` (url, sha256,
 size) and `source_date_epoch` in `source.lock.json`, reset `patch_level` to 1,
 and build. `patch -F0` fails the build if a patch no longer applies. Check the
 upstream CHANGELOG for anything that changes the BIOS or EFI file handling.
+
+## The Windows PE files next to it (build/winpe/)
+
+`winpeshl.ini` and `beastboot.cmd` (shipped with CRLF line endings) and
+`beastmount.exe`, which attaches the ISO read-only in Windows PE (Setup's
+Windows PE has no built-in way to attach an ISO). beastmount is our own
+program (`beastmount.c`, GPL-3.0-or-later), built by
+
+```
+python3 -I build/winpe/beastmountsrc.py build      # prints .tools/cache/beastmount/out/<key>
+python3 -I build/winpe/beastmountsrc.py verify DIR
+```
+
+with Ubuntu 26.04's MinGW-w64 cross compiler, pinned as the exact .deb files
+in `build/winpe/mingw-w64.lock.json` (SHA-256 and size checked, unpacked into
+the cache and run from there, so the host's own packages do not matter; the
+docker builder of `build/grub/source.lock.json` provides the compiler's
+shared libraries where the host lacks them). Each build compiles twice in two
+directories and fails unless both outputs are identical; the image carries no
+time stamp, symbols or build path. `build/verify-dist.sh` checks the shipped
+file (and `--rebuild` rebuilds and compares it). To update the compiler: new
+versions, SHA-256 and sizes from `apt-cache show`, and a new snapshot time.

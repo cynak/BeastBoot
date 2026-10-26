@@ -31,3 +31,39 @@ def test_browse_into_folder_and_boot(mode, make_drive, vm_factory):
     # Dry run: nothing is handed off and nothing fails.
     vm.expect_absent(r"BEAST: error", within=2, after=boot.start)
     assert vm.running
+
+
+WIN_MENU = ["Install Windows (start Windows Setup from the ISO)",
+            "Windows PE command prompt (repair and tools, no Setup)"]
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_windows_iso_asks_setup_or_pe(mode, make_drive, vm_factory):
+    """A Windows installation ISO picked in the menu opens a small menu (windows.cfg):
+    Setup first, then Windows PE; Esc returns to the folder (dry run)."""
+    path = trees.recipe_path("windows")
+    vm = vm_factory(mode, make_drive("main", images.user_config(dryrun=True)).path)
+    checks.wait_ready(vm, timeout=120)
+    vm.wait_record("dir", r"^dir /$", timeout=60)
+    menu = vm.wait_menu(timeout=60)
+    mark = vm.mark()
+    vm.keys(*["down"] * menu.entries.index("recipes/"), "enter")
+    vm.wait_record("dir", r"^dir /recipes/?$", timeout=60, after=mark)
+    vm.wait_menu(first_entry="..", timeout=60)
+    # windows.iso is the last but one entry (winpe.iso sorts after it)
+    mark = vm.mark()
+    vm.keys("end", "up", "enter")
+    boot = vm.wait_record("boot", rf"^boot {path} recipe=windows$", timeout=60, after=mark)
+    vm.wait_record("windows-menu", rf"^windows-menu {path}$", timeout=60, after=boot.start)
+    menu = vm.wait_menu(first_entry=WIN_MENU[0], timeout=60)
+    assert menu.entries == WIN_MENU and menu.selected == 0, str(menu)
+    mark = vm.mark()
+    vm.keys("down", "enter")
+    vm.wait_record("windows", r"^windows mode=pe$", timeout=60, after=mark)
+    lin = vm.wait_record("dryrun", r"^dryrun linux(16)? ", timeout=60, after=mark)
+    assert lin.has_token("index=1"), str(lin)
+    # the dry run returns to the Windows menu; Esc goes back to the folder
+    vm.wait_menu(first_entry=WIN_MENU[0], timeout=60)
+    vm.key("esc")
+    vm.wait_menu(first_entry="..", timeout=60)
+    vm.expect_absent(r"BEAST: error", within=2, after=boot.start)

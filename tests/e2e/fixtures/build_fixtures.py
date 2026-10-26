@@ -173,9 +173,20 @@ FIXTURES: dict[str, dict] = {
         "rockridge": False,
         "files": {
             "/sources/boot.wim": dummy("boot.wim"),
+            "/sources/install.wim": dummy("install.wim"),
             "/bootmgr": dummy("bootmgr"),
             "/efi/microsoft/boot/bcd": dummy("bcd"),
             "/efi/boot/bootx64.efi": dummy("windows efi loader"),
+        },
+    },
+    "winpe": {
+        # A Windows PE / WinRE ISO: boot.wim but no install image, booted as it is.
+        "label": "BB_WINPE",
+        "rockridge": False,
+        "files": {
+            "/sources/boot.wim": dummy("boot.wim"),
+            "/bootmgr": dummy("bootmgr"),
+            "/efi/microsoft/boot/bcd": dummy("bcd"),
         },
     },
     "efi-chainload": {

@@ -147,7 +147,7 @@ Activate it in a shell with `source .venv/bin/activate` if you want its
 | `build/` | `build.sh` (writes `dist/`), `keygen.sh`, `verify-dist.sh`, module lists, SBAT template, `early-bios.cfg`, the release `Containerfile` |
 | `build/theme/` | `mktheme.py` (draws the graphical menu's theme images) and `mkmemdisk.py` (the font memdisk inside `grubx64.efi`) |
 | `build/wimboot/` | builds iPXE's wimboot (`dist/esp/beast-booter/wimboot`) from its pinned release source plus our patches; see [build/wimboot/README.md](../build/wimboot/README.md) |
-| `build/winpe/` | the Windows PE start-up files the menu injects with wimboot (`dist/esp/beast-booter/winpe/`): `winpeshl.ini`, `beastboot.cmd` |
+| `build/winpe/` | the Windows PE start-up files the menu injects with wimboot (`dist/esp/beast-booter/winpe/`): `winpeshl.ini`, `beastboot.cmd`, and `beastmount.exe`, built from `beastmount.c` by `beastmountsrc.py` with the pinned MinGW-w64 .debs of `mingw-w64.lock.json` (reproducible: compiled twice and compared; `BB_BEASTMOUNT_BUILDER`, `BB_BEASTMOUNT_CACHE`) |
 | `build/beastnet/` | builds the beast-net helper (`dist/esp/beast-net/`): pinned Ubuntu packages, module list, initramfs, firmware catalog; see [build/beastnet/README.md](../build/beastnet/README.md) |
 | `beastnet/` | the helper's own code: `python/beastnet/` (network, WiFi, download, hand-off, curses and plain UIs), `rootfs/` (`/init`, udhcpc script), `tests/` (unit tests) |
 | `keys/` | your local Secure Boot signing key (`make keys`; private files are git-ignored) |
@@ -840,7 +840,8 @@ Common failures:
 | `BEAST: error iso-not-found` | `bb_autoboot` (or a menu path) points to a file that is not there | fix the path; it is relative to the data partition root |
 | `BEAST: error loopback-failed` | GRUB could not open the ISO as a loop device | check the file (checksum); try copying it again |
 | `BEAST: error no-recipe` | the ISO layout is not recognised | [ISO_SUPPORT.md](ISO_SUPPORT.md#recipes); report it with the `BEAST:` output |
-| `BEAST: error unsupported-windows` | Windows installer ISO | not supported in 0.1 |
+| `BEAST: error windows-sb` | Windows ISO with Secure Boot on (wimboot is unsigned) | turn Secure Boot off for that boot |
+| `BEAST: error grubenv-not-writable` | `save_env` to `($esp)/grub/grubenv` failed (Windows setup/pe mode) | the drive's grubenv is missing or damaged: `beast-booter update` recreates it |
 | `BEAST: error sb-verify-failed` | shim refused the ISO's kernel (unsigned, or signed by a key this machine does not trust) | enroll that distribution's key via "Enroll a key (MokManager)", or turn Secure Boot off for that boot |
 | `BEAST: error boot-failed` | GRUB's `linux`, `initrd`, `chainloader` or `boot` failed without Secure Boot | read the GRUB error just above; `debug=linux,loader` |
 | kernel starts, then the live system cannot find its medium (casper "Unable to find a medium containing a live file system", dracut timeouts, "/dev/disk/by-uuid/... does not exist") | the ISO's initramfs cannot mount the data partition's filesystem | use a FAT32 data partition, see [ISO_SUPPORT.md](ISO_SUPPORT.md#the-data-partitions-filesystem) |

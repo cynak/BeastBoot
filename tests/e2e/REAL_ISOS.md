@@ -137,7 +137,7 @@ What the build ships (build/wimboot/, build/winpe/; `BB_SKIP_WIMBOOT=1` leaves i
 | `beast-booter/wimboot` | iPXE wimboot 2.9.0 + our patches (`2.9.0+bb1`), built from pinned source. One x86_64 hybrid image: GRUB `linux16` on BIOS, `linux` on UEFI. Unsigned. |
 | `beast-booter/winpe/winpeshl.ini` | injected: makes Windows PE run `beastboot.cmd` instead of its default shell |
 | `beast-booter/winpe/beastboot.cmd` | injected: the start-up script (below) |
-| `beast-booter/winpe/beastmount.exe` | injected (setup mode): attaches the ISO read-only. **Not built yet**: source in `build/winpe/beastmount.c`, needs a pinned MinGW-w64 build step (decision pending) |
+| `beast-booter/winpe/beastmount.exe` | injected (setup mode): attaches the ISO read-only; `--running L: N` proves Setup runs from `L:`; `--sleep N` is the script's timer. Built from `build/winpe/beastmount.c` by `build/winpe/beastmountsrc.py` with Ubuntu 26.04's MinGW-w64 13 as pinned .debs (`build/winpe/mingw-w64.lock.json`); every build compiles twice in two directories and must give the same bytes (no time stamp, no symbols); imports only KERNEL32/msvcrt |
 
 Why the patches: upstream wimboot on UEFI reads its files only from the
 file system of its own device. GRUB 2.12+ `linux` starts an EFI image from
@@ -152,7 +152,18 @@ try it; it shows `BEAST: error windows-sb` ("turn Secure Boot off to boot
 this Windows ISO") instead. (Upstream's Microsoft-signed release binary is
 unpatched, so it cannot boot from GRUB on UEFI either.)
 
-### Recipe (phase 2, grub/beast/lib.cfg)
+### Recipe (grub/beast/lib.cfg `bb_r_windows`, `bb_win_boot`; grub/beast/windows.cfg)
+
+As built: install media (`sources/install.wim|esd|swm`) chosen in the menu
+opens `windows.cfg` (Install Windows = setup, first; Windows PE command
+prompt = pe); `bb_autoboot` (and so the harness) gets setup, or pe with
+`bb_windows=pe` in config.cfg. Other boot.wim ISOs: mode `native`, nothing
+injected, no save_env. Debug lines: `BEAST: windows mode=<m>`; in a dry run
+`BEAST: dryrun save_env bb_winpe_iso=<path> bb_winpe_mode=<m>`, `BEAST:
+dryrun linux16|linux <esp>/beast-booter/wimboot [index=1]` and `BEAST: dryrun
+initrd16|initrd newc:boot.wim:(loop)/sources/boot.wim newc:...`. Errors:
+`windows-sb`, `windows-no-wimboot`, `grubenv-not-writable`.
+The design it implements:
 
 Detection stays as now: `/sources/boot.wim` (case-insensitive). Official
 Microsoft ISOs are UDF bridges whose ISO9660 view holds only `README.TXT`:
@@ -226,7 +237,25 @@ boot
    way to install from WinPE). When Setup ends, a command prompt opens.
 5. Any failure: logs `fail <reason>: <plain words>`, shows the same text and
    opens a command prompt. Reasons: `no-iso-path`, `iso-not-found`,
-   `no-mount-tool`, `attach-failed`, `no-media`, `no-setup`, `unknown-mode`.
+   `no-mount-tool`, `attach-failed`, `no-media`, `no-setup`,
+   `setup-not-running`, `unknown-mode`.
+
+RESULT.TXT lines as built (setup mode, in this order):
+
+```
+winpe-ok
+iso-found D:\Win11_26H2_eval.iso
+iso-mounted E: E:\sources\install.wim       only after that file was found on the new drive
+setup-started E:\setup.exe
+setup-running                                only after beastmount --running saw a setup.exe,
+setup-process E:\setup.exe                     setuphost.exe or setupprep.exe whose program file
+                                             is on E: (tasklist shows names only, X: has a setup.exe too)
+```
+
+With BBTEST attached the script then powers off (`wpeutil shutdown`, 20 s
+after the last line, so Setup is on screen in between); in pe mode right
+after `winpe-ok`; after a failure 10 s after the message. Without BBTEST it
+never powers off: it waits for Setup to end, then opens a command prompt.
 
 It never writes to the data partition. Names with `&`, `%`, `!`, `(`, `)`
 are handled (quoted, no delayed expansion on user data); non-ASCII names
@@ -266,6 +295,26 @@ UEFI serial log: GRUB found `(loop)/sources/boot.wim` through UDF;
 `wimboot v2.9.0+bb1`, `...loaded initrd at [...] via LoadFile2`, WIM patched
 (injected files), `Loaded bootmgfw_EX.efi as BOOTX64.EFI`, then bootmgr's
 "Loading files...".
+
+### Shipped build check (2026-10-25, worktree build, beastmount.exe 1.0)
+
+win11-eval (the ISO above), msdos drive, the harness defaults (`ram_mb` 8192):
+
+| case | RESULT.TXT | result |
+|---|---|---|
+| `test_e2e_real_isos.py` uefi/bios x exfat/ntfs (setup) | `winpe-ok`, `iso-found C:\26300...iso`, `iso-mounted E: E:\sources\install.wim`, `setup-started E:\setup.exe`, `setup-running`, `setup-process E:\setup.exe` | pass x4 (32-36 s each) |
+| ISO at `/My ISOs/Win 11 (eval) & co.iso`, NTFS, uefi + bios (setup) | `iso-found D:\My ISOs\Win 11 (eval) & co.iso`, `iso-mounted F: ...`, `setup-running` | pass x2 |
+| `bb_windows=pe` (index=1), exFAT, uefi + bios | `winpe-ok` | pass x2 |
+| setup with `ram_mb` 4096 (uefi, bios) and 2560 (uefi) | as above | pass x3 |
+
+(The pe, spaces and memory cases ran through `realiso.run_case` from a
+scratch script with a changed `config_text` / `iso_dest` / `ram_mb`; the
+harness has no switch for them yet.) Without BBTEST, on UEFI: Setup shows
+"Select language settings", "Select keyboard settings", "Select setup option"
+(Install Windows 11; "Repair my PC" greyed out), then "This PC doesn't
+currently meet Windows 11 system requirements: TPM 2.0, Secure Boot" (these
+VMs have no TPM and OVMF without Secure Boot support). Close ends Setup;
+the script then says so and leaves a command prompt.
 
 ### Test disk `BBTEST`
 

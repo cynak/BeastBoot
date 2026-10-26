@@ -176,12 +176,64 @@ def test_loopback_runs_iso_config(mode, make_drive, vm_factory):
     assert rec.fields.get("iso_path") == path, str(rec)
 
 
+WIN_INJECT = ("winpeshl.ini", "beastboot.cmd", "beastboot.txt")
+
+
+def check_windows_dryrun(vm, mode: str, path: str, win_mode: str):
+    """wimboot with linux16/initrd16 on BIOS, linux/initrd on UEFI; boot.wim from the
+    ISO; the start-up files (and beastmount.exe in setup mode) from the ESP; the
+    ISO path and mode saved to grubenv (tests/e2e/REAL_ISOS.md "Windows")."""
+    boot = vm.wait_record("boot", rf"^boot {re.escape(path)} recipe=", timeout=120)
+    assert checks.recipe_of(boot) == "windows", str(boot)
+    vm.wait_record("windows", rf"^windows mode={win_mode}$", after=boot.start)
+    lx, rd = ("linux16", "initrd16") if mode == "bios" else ("linux", "initrd")
+    lin = vm.wait_record("dryrun", rf"^dryrun {lx} ", after=boot.start)
+    args = ["index=1"] if win_mode == "pe" else []
+    assert any(re.fullmatch(r"\(.+\)/beast-booter/wimboot", v.split()[2]) and v.split()[3:] == args
+               for v in lin.variants()), str(lin)
+    ini = vm.wait_record("dryrun", rf"^dryrun {rd} ", after=boot.start)
+    want = {"setup": [*WIN_INJECT, "beastmount.exe"], "pe": list(WIN_INJECT), "native": []}[win_mode]
+    src_rx = re.compile(r"\(.+\)/(beast-booter/winpe/[a-z.]+|grub/grubenv)")
+
+    def initrd_ok(v: str) -> bool:      # one way of re-joining GRUB's wrapped serial lines
+        t = v.split()
+        if t[2:3] != ["newc:boot.wim:(loop)/sources/boot.wim"]:
+            return False
+        parts = [w.split(":", 2) for w in t[3:]]
+        return [p[1] for p in parts if len(p) == 3] == want and len(parts) == len(want) and \
+            all(src_rx.fullmatch(p[2]) for p in parts)
+    assert any(initrd_ok(v) for v in ini.variants()), str(ini)
+    saves = vm.records("dryrun", after=boot.start)
+    saved = [r for r in saves if r.text.startswith("dryrun save_env ")]
+    if win_mode == "native":
+        assert not saved, [str(r) for r in saved]
+    else:
+        assert saved and saved[0].text == f"dryrun save_env bb_winpe_iso={path} bb_winpe_mode={win_mode}", \
+            [str(r) for r in saved]
+    assert not vm.records("error", after=boot.start), [str(r) for r in vm.records("error")]
+
+
 @pytest.mark.parametrize("mode", BOTH)
-def test_windows_unsupported(mode, make_drive, vm_factory):
-    _, vm = boot_iso(make_drive, vm_factory, mode, trees.recipe_path("windows"), dryrun=True)
-    err = vm.wait_record("error", timeout=120)
-    assert error_code(err) == "unsupported-windows", str(err)
-    assert not vm.records("dryrun")
+def test_windows_setup_dryrun(mode, make_drive, vm_factory):
+    path = trees.recipe_path("windows")
+    _, vm = boot_iso(make_drive, vm_factory, mode, path, dryrun=True)
+    check_windows_dryrun(vm, mode, path, "setup")
+
+
+@pytest.mark.parametrize("mode", BOTH)
+def test_windows_pe_dryrun(mode, make_drive, vm_factory):
+    path = trees.recipe_path("windows")
+    drive = make_drive("main", images.user_config(dryrun=True, autoboot=path,
+                                                  extra='set bb_windows="pe"\nexport bb_windows'))
+    check_windows_dryrun(vm_factory(mode, drive.path), mode, path, "pe")
+
+
+@pytest.mark.parametrize("mode", BOTH)
+def test_winpe_iso_native_dryrun(mode, make_drive, vm_factory):
+    """A Windows PE / WinRE ISO (no install image) boots as it is: nothing injected."""
+    path = trees.recipe_path("winpe")
+    _, vm = boot_iso(make_drive, vm_factory, mode, path, dryrun=True)
+    check_windows_dryrun(vm, mode, path, "native")
 
 
 @pytest.mark.parametrize("mode", BOTH)

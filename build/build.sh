@@ -10,11 +10,13 @@
 #
 # Every file is either copied unmodified from a named Debian/Ubuntu package
 # (and checked against that package's md5sums), built here from such files
-# plus repo inputs, copied from the repo, or - GRUB, wimboot - built from
-# pinned source (build/grub/: Ubuntu's grub2 source package + our patches;
-# build/wimboot/: iPXE's wimboot release + our patches; checked against their
-# SHA-256). Downloads happen only on a cold cache: build/grub/ (GRUB source,
-# build-time .debs), build/wimboot/ (its source archive) and build/beastnet/
+# plus repo inputs, copied from the repo, or - GRUB, wimboot, beastmount.exe -
+# built from pinned source (build/grub/: Ubuntu's grub2 source package + our
+# patches; build/wimboot/: iPXE's wimboot release + our patches; checked against
+# their SHA-256; build/winpe/: our beastmount.c, compiled with pinned MinGW-w64
+# .debs). Downloads happen only on a cold cache: build/grub/ (GRUB source,
+# build-time .debs), build/wimboot/ (its source archive), build/winpe/ (the
+# MinGW-w64 .debs) and build/beastnet/
 # (pinned, hash-checked .debs and linux-firmware catalog data).
 #
 # Inputs (environment):
@@ -31,7 +33,9 @@
 #                      builds GRUB; BB_GRUB_CACHE: its cache (.tools/cache/grub-src)
 #   BB_WIMBOOT_BUILDER auto (default) | native | docker: the same for
 #                      build/wimboot/wimbootsrc.py; BB_WIMBOOT_CACHE: .tools/cache/wimboot
-#   BB_SKIP_WIMBOOT=1  build without wimboot and the Windows PE files
+#   BB_BEASTMOUNT_BUILDER  auto (default) | native | docker: the same for
+#                      build/winpe/beastmountsrc.py; BB_BEASTMOUNT_CACHE: .tools/cache/beastmount
+#   BB_SKIP_WIMBOOT=1  build without wimboot and the Windows PE files (beastmount.exe too)
 #   BB_SHIM_DIR        shim package directory (set by scripts/dev-env.sh)
 #   BB_DEBIAN_DIR      Debian shim packages (build/shim/fetch.py; default $BB_ROOT/.tools/debian)
 #
@@ -696,7 +700,24 @@ if [ "${BB_SKIP_WIMBOOT:-0}" != 1 ]; then
     sed -e 's/\r$//' -e 's/$/\r/' "$HERE/winpe/$f" > "$WORK/$f"
     add_file "$WORK/$f" "esp/beast-booter/winpe/$f" "built:build/build.sh (CRLF line endings) from repo:build/winpe/$f"
   done
-  log "wimboot $WIM_VERSION (key $WIM_KEY, unsigned) + Windows PE start-up files"
+  # beastmount.exe: attaches the ISO in Windows PE (setup mode). Our own source,
+  # built twice and compared, with the pinned MinGW-w64 cross compiler (build/winpe/).
+  BMSRC=(python3 -I "$HERE/winpe/beastmountsrc.py")
+  BM_OUT="$("${BMSRC[@]}" build ${BB_BEASTMOUNT_BUILDER:+--builder "$BB_BEASTMOUNT_BUILDER"})" \
+    || die "beastmount.exe build failed (build/winpe/beastmountsrc.py build; logs under .tools/cache/beastmount/work/; BB_SKIP_WIMBOOT=1 builds without Windows support)"
+  BM_OUT="${BM_OUT##*$'\n'}"
+  [ -f "$BM_OUT/build-info.json" ] || die "build/winpe/beastmountsrc.py printed no build directory"
+  { read -r BM_VERSION; read -r BM_KEY; read -r BM_GCC; } \
+    < <("${BMSRC[@]}" info "$BM_OUT" version key toolchain.gcc)
+  [ -n "$BM_KEY" ] || die "cannot read $BM_OUT/build-info.json"
+  BM_INFO_SHA="$(sha256sum < "$BM_OUT/build-info.json")"; BM_INFO_SHA="${BM_INFO_SHA%% *}"
+  # beastmount-src:<name>=<version>:<path in the build>: gen_sbom.py checks it against build-info.json
+  add_file "$BM_OUT/beastmount.exe" esp/beast-booter/winpe/beastmount.exe "beastmount-src:beastmount=$BM_VERSION:/beastmount.exe"
+  extra build.beastmount_version "$BM_VERSION"
+  extra build.beastmount_build_key "$BM_KEY"
+  extra build.beastmount_build_info_sha256 "$BM_INFO_SHA"
+  extra build.beastmount_toolchain "$BM_GCC; $(python3 -I -c 'import json,sys; print(", ".join(p["name"] + " " + p["version"] for p in json.load(open(sys.argv[1]))["packages"]))' "$HERE/winpe/mingw-w64.lock.json") (build/winpe/mingw-w64.lock.json)"
+  log "wimboot $WIM_VERSION (key $WIM_KEY, unsigned) + Windows PE start-up files + beastmount $BM_VERSION (key $BM_KEY)"
 fi
 
 # version.cfg last: its build id covers everything else, the beast-net helper included
