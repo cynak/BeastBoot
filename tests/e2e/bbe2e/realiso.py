@@ -150,6 +150,8 @@ def validate(cat: dict) -> list[str]:
         if '"' in e.get("kargs", "") or "\\" in e.get("kargs", ""):
             errs.append(f"{where}: kargs must not contain quotes or backslashes")
         sets = e.get("settings") or {}
+        if "net" in e and not isinstance(e["net"], bool):
+            errs.append(f"{where}: net must be true or false")
         if not isinstance(sets, dict) or not all(
                 isinstance(k, str) and re.fullmatch(r"bb_[a-z][a-z0-9_]*", k) and k != "bb_kargs"
                 and isinstance(v, str) and re.fullmatch(r"[A-Za-z0-9_.,=:/-]*", v) for k, v in sets.items()):
@@ -711,6 +713,8 @@ def run_case(iso: Iso, drive: images.Drive, mode: str, fs: str) -> Verdict:
     work.mkdir(parents=True)
     windows = entry["family"] == "windows"
     extra = list(SMBIOS_GETTY)
+    if entry.get("net"):  # network installers (e.g. openSUSE NET) fetch their packages
+        extra += ["-nic", "user"]
     bbtest = None
     if windows:
         bbtest = make_bbtest(work / "bbtest.img", cid)

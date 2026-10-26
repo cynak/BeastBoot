@@ -97,9 +97,11 @@ def test_catalog_is_valid():
     assert len(ids) == len(set(ids))
     for e in entries:
         if e["family"] == "windows":
-            assert "ntfs" in e["fs"] and "kargs" not in e
+            assert "kargs" not in e, e["id"]
         else:
             assert "console=ttyS0" in e.get("kargs", ""), e["id"]
+    # Windows Setup is tested from NTFS too (the usual filesystem for Windows ISOs)
+    assert any(e["family"] == "windows" and "ntfs" in e["fs"] and not e.get("settings") for e in entries)
 
 
 def test_validate_rejects():

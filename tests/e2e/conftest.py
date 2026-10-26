@@ -194,6 +194,7 @@ BASES = {
     "gpt": ("gpt", "fat32", trees.browse_tree),
     "exfat": ("msdos", "exfat", trees.exfat_tree),
     "ntfs": ("msdos", "ntfs", trees.browse_tree),
+    "ntfs-recipes": ("msdos", "ntfs", trees.main_tree),
 }
 
 

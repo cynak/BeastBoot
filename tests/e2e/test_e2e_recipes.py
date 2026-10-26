@@ -40,6 +40,10 @@ LINUX = {
                      ("archisobasedir=arch", "archisolabel={label}", "img_dev=/dev/disk/by-uuid/{uuid}", "img_loop={path}")),
     "dracut-live": Linux("dracut-live", "(loop)/images/pxeboot/vmlinuz", ("(loop)/images/pxeboot/initrd.img",),
                          ("root=live:CDLABEL={label}", "rd.live.image", "iso-scan/filename={path}")),
+    "dracut-kiwi": Linux("dracut-live", "(loop)/boot/x86_64/loader/linux", ("(loop)/boot/x86_64/loader/initrd",),
+                         ("root=live:CDLABEL={label}", "rd.live.image", "iso-scan/filename={path}")),
+    "kiwi-installer": Linux("dracut-live", "(loop)/boot/x86_64/loader/linux", ("(loop)/boot/x86_64/loader/initrd",),
+                            ("root=live:CDLABEL={label}", "rd.live.image", "iso-scan/filename={path}")),
     "anaconda": Linux("anaconda", "(loop)/images/pxeboot/vmlinuz", ("(loop)/images/pxeboot/initrd.img",),
                       ("inst.stage2=hd:UUID={uuid}:{path}",)),
     "suse": Linux("suse", "(loop)/boot/x86_64/loader/linux", ("(loop)/boot/x86_64/loader/initrd",),
@@ -281,3 +285,16 @@ def test_unbootable_kernel_reports_boot_failed(make_drive, vm_factory):
     _, vm = boot_iso(make_drive, vm_factory, "uefi", trees.recipe_path("casper"), dryrun=False)
     err = vm.wait_record("error", timeout=120)
     assert error_code(err) == "boot-failed", str(err)
+
+
+@pytest.mark.ntfs
+@pytest.mark.parametrize("fixture", ["dracut-live", "anaconda"])
+@pytest.mark.parametrize("mode", BOTH)
+def test_dracut_on_ntfs_is_refused(mode, fixture, udisks_ok, make_drive, vm_factory):
+    """dracut cannot read NTFS: the menu refuses with ntfs-unsupported instead of
+    starting a kernel that would stop in dracut's emergency shell."""
+    drive = make_drive("ntfs-recipes", images.user_config(dryrun=True, autoboot=trees.recipe_path(fixture)))
+    vm = vm_factory(mode, drive.path)
+    err = vm.wait_record("error", timeout=120)
+    assert error_code(err) == "ntfs-unsupported", str(err)
+    assert not vm.records("dryrun")

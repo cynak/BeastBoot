@@ -132,6 +132,24 @@ FIXTURES: dict[str, dict] = {
             "/images/install.img": dummy("anaconda stage2"),
         },
     },
+    "dracut-kiwi": {
+        # Fedora 44+ and openSUSE Tumbleweed live ISOs: KIWI layout, dracut initrd.
+        "label": "BB-Kiwi-Live",
+        "files": {
+            "/LiveOS/squashfs.img": dummy("squashfs"),
+            "/boot/x86_64/loader/linux": dummy("kiwi kernel"),
+            "/boot/x86_64/loader/initrd": dummy("kiwi initrd"),
+        },
+    },
+    "kiwi-installer": {
+        # openSUSE Leap 16 (Agama) installer: no LiveOS, but a boot/grub2 tree.
+        "label": "Install-Kiwi-16",
+        "files": {
+            "/boot/x86_64/loader/linux": dummy("kiwi kernel"),
+            "/boot/x86_64/loader/initrd": dummy("kiwi initrd"),
+            "/boot/grub2/grub.cfg": dummy("grub cfg"),
+        },
+    },
     "suse": {
         "label": "BB_SUSE",
         "files": {

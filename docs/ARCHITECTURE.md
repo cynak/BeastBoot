@@ -298,7 +298,7 @@ BEAST: error <code> <free text>
 ```
 
 Error codes: `no-data-partition`, `iso-not-found`, `loopback-failed`,
-`no-recipe`, `windows-sb`, `windows-no-wimboot`, `grubenv-not-writable`,
+`no-recipe`, `ntfs-unsupported`, `windows-sb`, `windows-no-wimboot`, `grubenv-not-writable`,
 `sb-verify-failed`, `boot-failed`, `oneshot-not-cleared`.
 
 ## 6. ISO boot recipes

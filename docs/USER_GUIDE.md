@@ -386,6 +386,7 @@ With `set bb_debug=1` in `config.cfg`, the menu also prints a `BEAST: error
 | `windows-sb` | a Windows ISO, and Secure Boot is on | turn Secure Boot off in the firmware settings for this boot ([Install Windows](#install-windows-from-the-stick)) |
 | `windows-no-wimboot` | the drive's boot files have no Windows support | update the boot files with a full release ([section 7](#7-update-the-boot-files)) |
 | `grubenv-not-writable` | the menu could not write its settings file `grub/grubenv` | update the boot files ([section 7](#7-update-the-boot-files)); that recreates it |
+| `ntfs-unsupported` | a dracut-based ISO (Fedora, RHEL family, openSUSE Leap 16 or Tumbleweed live) on an NTFS data partition | its initramfs has no NTFS driver; use exFAT or FAT32 |
 | `no-data-partition` | the menu cannot find the storage partition | with Secure Boot on and NTFS, see below; otherwise the partition was deleted or reformatted: reinstall |
 | `iso-not-found`, `loopback-failed` | the ISO file is gone or cannot be opened | copy it again; check it with its SHA-256 |
 | `boot-failed` | the ISO's kernel or boot loader did not start | try the other boot mode (UEFI / legacy) |

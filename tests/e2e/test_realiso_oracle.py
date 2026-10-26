@@ -143,8 +143,10 @@ def test_10_coverage_and_fat32_limit():
     for i in ("arch", "debian13-live", "alpine-standard", "fedora-netinst", "alma10-boot", "rocky10-boot",
               "gparted-live", "clonezilla", "systemrescue"):
         assert "fat32" in ents[i]["fs"], i
-    for i in ("ubuntu-desktop", "fedora-netinst", "opensuse-tw-live", "debian13-live"):
+    for i in ("ubuntu-desktop", "debian13-live"):
         assert "ntfs" in ents[i]["fs"], i
+    # dracut cannot read NTFS: the menu refuses those (test_e2e_recipes.test_dracut_on_ntfs_is_refused)
+    assert not any("ntfs" in e["fs"] for e in ents.values() if e.get("recipe") in ("dracut-live", "anaconda"))
     assert not any("fat32" in e["fs"] and e["size"] > realiso.FAT32_MAX_FILE for e in ents.values())
     assert realiso.fs_skip_reason(6 << 30, "fat32") and "4 GiB" in realiso.fs_skip_reason(6 << 30, "fat32")
     assert realiso.fs_skip_reason(6 << 30, "exfat") is None

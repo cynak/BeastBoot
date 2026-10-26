@@ -54,6 +54,9 @@ Each mode boots a QEMU snapshot of that drive (KVM, `-cpu host`, `smp` 2,
   "success": ["regex", ...],           // ALL must appear on the serial log (Linux), or
   "result": ["^winpe-ok\\s*$"],          // regexes (multi-line mode), ALL must match RESULT.TXT on BBTEST (Windows)
   "fail": ["regex"], "smp": 2          // optional: extra fail-fast regexes, CPUs
+  "net": true,                         // optional: give the VM a user-mode NIC (network installers)
+  "settings": {"bb_windows": "pe"},    // optional: menu variables for this case
+  "cache_id": "win11-eval",            // optional: reuse another entry's verified download
 }]}
 ```
 
