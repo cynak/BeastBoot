@@ -18,10 +18,18 @@ SCRIPT = "script"  # the beastnet.script plan is missing or invalid
 EXISTS = "exists"  # destination exists and the plan did not allow replacing it
 INTERNAL = "internal"  # a bug: an unexpected exception
 TRUST = "trust"  # "Trust Ubuntu's Secure Boot key" refused or failed (beastnet/python/beastnet/trust.py)
+# Disk tools (docs/DISK_TOOLS.md section 5):
+DISK_REFUSED = "disk-refused"  # a safety rule refused the plan (reason in the text)
+DISK_CHANGED = "disk-changed"  # identity or presence changed between plan and write
+DISK_IO = "disk-io"            # read/write error beyond what ddrescue records
+ASSEMBLE = "assemble"          # a stack could not start read-only
+RECONSTRUCT = "reconstruct"    # no reconstruction candidate validated
+COPY = "copy"                  # a clone/image/restore failed
 
 CODES = frozenset({
     NO_NETWORK, WIFI_AUTH, DHCP, TLS, HTTP, REFUSED_PLAIN_HTTP, CHECKSUM_MISMATCH,
     NO_SPACE, MOUNT, GRUBENV, SCRIPT, EXISTS, INTERNAL, TRUST,
+    DISK_REFUSED, DISK_CHANGED, DISK_IO, ASSEMBLE, RECONSTRUCT, COPY,
 })
 
 
