@@ -72,5 +72,22 @@ EOF
         bb_hook_log "casper may now search${bb_hook_names} partitions for the ISO"
     fi
 fi
+# live-boot (Debian) takes the NTFS type to need the ntfs-3g program, not a
+# kernel module, so it skips an NTFS partition when `type ntfs-3g` fails, and
+# then runs mount -t ntfs, a type the kernel only knows as ntfs3. With the ISO's
+# ntfs3 module loaded give it both: a stand-in ntfs-3g for the check (never
+# run) and a mount.ntfs helper, which mount(8) runs for -t ntfs, that mounts
+# the partition as ntfs3.
+case "$bb_hook_fs" in
+    *"|ntfs3"*)
+        if [ -d "$bb_hook_root/lib/live/boot" ] && ! command -v ntfs-3g >/dev/null 2>&1; then
+            mkdir -p "$bb_hook_root/sbin" "$bb_hook_root/bin" 2>/dev/null
+            printf '#!/bin/sh\nexit 1\n' > "$bb_hook_root/bin/ntfs-3g" 2>/dev/null &&
+                printf '#!/bin/sh\nexec mount -i -t ntfs3 "$@"\n' > "$bb_hook_root/sbin/mount.ntfs" 2>/dev/null &&
+                chmod 755 "$bb_hook_root/bin/ntfs-3g" "$bb_hook_root/sbin/mount.ntfs" 2>/dev/null &&
+                bb_hook_log "live-boot may now search NTFS partitions for the ISO (ntfs3)"
+        fi
+        ;;
+esac
 unset bb_hook_root bb_hook_fs bb_hook_names bb_hook_m bb_hook_n bb_hook_out bb_hook_k
 unset -f bb_hook_log bb_hook_insmod 2>/dev/null || true

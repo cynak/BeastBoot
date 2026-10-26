@@ -204,6 +204,13 @@ and other extra entries of the ISO's own `loopback.cfg` are not offered while
 the add-on is used. To turn it off, put `set bb_fs_addon=0` in
 `/beast-booter/config.cfg`.
 
+On an NTFS data partition Debian live ISOs get the same kind of add-on with
+the ISO's `ntfs3` module: live-boot's initramfs has no NTFS driver and only
+accepts NTFS when the `ntfs-3g` program exists, so the hook also leaves a
+stand-in `ntfs-3g` and a `mount.ntfs` helper that mounts as `ntfs3`
+(`BEAST: fsmod ntfs <module>`). Ubuntu (casper) ISOs on NTFS keep using the
+ISO's own `loopback.cfg`, whose initramfs mounts NTFS itself.
+
 The kernel command lines use the data partition's UUID as Linux shows it
 (`bb_data_uuid_linux` from the installer's `device.cfg`). If `device.cfg` is
 missing, or the partition was reformatted since, the menu reads the UUID

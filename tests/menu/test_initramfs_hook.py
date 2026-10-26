@@ -142,3 +142,62 @@ def test_not_casper_loads_but_does_not_create_helpers(initramfs, tmp_path):
     check_sourced_cleanly(r)
     assert kmsg(initramfs) == ["beast-booter: exfat support loaded (exfat.ko.zst from the ISO)"]
     assert not (initramfs / "scripts" / "casper-helpers").exists()
+
+
+# --- NTFS for live-boot (Debian): the ISO's ntfs3 module plus helpers ----------------
+
+LOADS_NTFS3 = '#!/bin/sh\nprintf "\\tntfs3\\n" >> "{root}/proc/filesystems"\n'
+
+
+def ntfs_root(tmp_path: Path, live_boot: bool) -> Path:
+    root = tmp_path / "root"
+    for d in ("proc", "dev", "beast-booter/modules"):
+        (root / d).mkdir(parents=True)
+    if live_boot:
+        (root / "lib" / "live" / "boot").mkdir(parents=True)
+    (root / "proc" / "filesystems").write_text("nodev\tsysfs\n\text4\n")
+    (root / "dev" / "kmsg").write_text("")
+    (root / "beast-booter" / "modules" / "ntfs3.ko.zst").write_bytes(b"\x28\xb5\x2f\xfd fake module")
+    return root
+
+
+def source_hook_clean_path(root: Path, tmp_path: Path, *, host_ntfs3g: bool = False) -> subprocess.CompletedProcess:
+    """Like source_hook, but PATH holds only fakes and the few tools the hook needs, so a
+    host ntfs-3g cannot hide the stand-in (and can be added on purpose)."""
+    fakebin = tmp_path / "cleanbin"
+    fakebin.mkdir(exist_ok=True)
+    write_exe(fakebin / "insmod", LOADS_NTFS3.format(root=root))
+    for tool in ("mkdir", "chmod", "grep", "ln", "cat"):
+        found = shutil.which(tool)
+        if found and not (fakebin / tool).exists():
+            (fakebin / tool).symlink_to(found)
+    if host_ntfs3g:
+        write_exe(fakebin / "ntfs-3g", "#!/bin/sh\nexit 0\n")
+    script = f'. "{HOOK}"; echo "after rc=$?"; set | grep -c "^bb_hook" || true'
+    env = dict(os.environ, BB_HOOK_ROOT=str(root), PATH=str(fakebin))
+    return subprocess.run([*SH, "-c", script], env=env, capture_output=True, text=True, timeout=30)
+
+
+def test_ntfs3_gives_live_boot_its_helpers(tmp_path):
+    root = ntfs_root(tmp_path, live_boot=True)
+    r = source_hook_clean_path(root, tmp_path)
+    check_sourced_cleanly(r)
+    stand_in, helper = root / "bin" / "ntfs-3g", root / "sbin" / "mount.ntfs"
+    assert stand_in.stat().st_mode & 0o111 and helper.stat().st_mode & 0o111
+    assert subprocess.run([str(stand_in)], timeout=10).returncode == 1  # only for live-boot's `type ntfs-3g`
+    assert 'exec mount -i -t ntfs3 "$@"' in helper.read_text()
+    assert "beast-booter: live-boot may now search NTFS partitions for the ISO (ntfs3)" in kmsg(root)
+
+
+def test_ntfs3_without_live_boot_adds_no_helpers(tmp_path):
+    root = ntfs_root(tmp_path, live_boot=False)
+    r = source_hook_clean_path(root, tmp_path)
+    check_sourced_cleanly(r)
+    assert not (root / "bin" / "ntfs-3g").exists() and not (root / "sbin" / "mount.ntfs").exists()
+
+
+def test_real_ntfs3g_is_never_shadowed(tmp_path):
+    root = ntfs_root(tmp_path, live_boot=True)
+    r = source_hook_clean_path(root, tmp_path, host_ntfs3g=True)
+    check_sourced_cleanly(r)
+    assert not (root / "bin" / "ntfs-3g").exists() and not (root / "sbin" / "mount.ntfs").exists()

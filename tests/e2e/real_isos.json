@@ -280,8 +280,7 @@
       "size": 2020130816,
       "recipe": "live-boot",
       "recipe_fs": {
-        "fat32": "loopback",
-        "ntfs": "loopback"
+        "fat32": "loopback"
       },
       "modes": [
         "uefi",
