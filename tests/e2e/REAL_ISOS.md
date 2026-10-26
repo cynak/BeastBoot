@@ -49,6 +49,7 @@ Each mode boots a QEMU snapshot of that drive (KVM, `-cpu host`, `smp` 2,
   "modes": ["uefi", "bios"],          // BIOS only where the ISO supports BIOS
   "fs": ["exfat"],                     // data filesystems to test; "ntfs" too for Windows
   "ram_mb": 4096, "timeout_s": 600,
+  "recipe_fs": {"fat32": "loopback"}, // optional: recipe per data fs where it differs (exFAT uses the menu's add-on route, so casper/live-boot there but the ISO's loopback.cfg on FAT32/NTFS)
   "kargs": "console=ttyS0,115200",    // appended through bb_kargs (Linux only)
   "success": ["regex", ...],           // ALL must appear on the serial log (Linux), or
   "result": ["^winpe-ok\\s*$"],          // regexes (multi-line mode), ALL must match RESULT.TXT on BBTEST (Windows)
@@ -72,17 +73,39 @@ matches its menu entries. Anchor markers to what only the running system
 prints (a getty banner such as `^Arch Linux \S+ \(ttyS0\)`, a login prompt,
 installer text).
 
-Oracle (Linux): the first `BEAST: ready` must show the case's platform
-(`efi` or `pc`) and `sb=0`; `BEAST: boot <iso> recipe=<r>` gives the recipe,
-and `<r>` must equal `recipe` (unless null). Success regexes count only after
-that record, with lines echoing the kernel command line (`Command line:`)
-removed. A `BEAST: error` after it, or a fail-fast line (`Kernel panic - not
-syncing`, `Entering emergency mode`, `(initramfs)` prompt, casper's or
-live-boot's "Unable to find a ... live file system", linuxrc's "No repository
-found.", shim's "Aborted. Press any key to exit.", GRUB's "Failed to boot
-both default and fallback entries", "can't find command" or its command
-shell, plus `fail`), ends the case as `fail`; no success within
-`timeout_s` is `timeout`.
+Oracle (Linux), in this order; any failed step is a `fail`:
+
+1. A `BEAST: ready` record must exist, with the case's platform (`efi` or
+   `pc`), `sb=0` and `fs=` equal to the case's data filesystem. No record:
+   "no BEAST: ready record".
+2. Exactly one `BEAST: boot <iso> recipe=<r>`. Two or more: "booted more than
+   once" (the config exports `timeout=5`, so a failed attempt re-boots).
+3. `recipe` in the catalog must be set and equal `<r>`; `null` fails with
+   "recipe not pinned" (a recipe must be decided before an ISO can pass).
+4. Every success regex must match in the text after the boot record, with all
+   `BEAST:` records, kernel `Command line:` echoes and GRUB menu redraw lines
+   ("Press enter to boot the selected OS", "automatically in", "Use the ^ and
+   v keys") removed.
+5. No fail-fast match (and no `BEAST: error`) may start before the end of the
+   last required success match. Fail-fast: `Kernel panic - not syncing`,
+   `Entering emergency mode`, `(initramfs)` prompt, casper's or live-boot's
+   "Unable to find a ... live file system", linuxrc's "No repository found.",
+   shim's "Aborted. Press any key to exit.", GRUB's "Failed to boot both
+   default and fallback entries", "can't find command" or its command shell,
+   plus `fail`. Before all markers matched, any of them ends the case at once.
+
+No success within `timeout_s` is `timeout`. A checksum file that no longer
+lists the ISO is `fail` ("catalog stale"); only an explicit `unverifiable`
+reason skips. FAT32 cases skip for ISOs over 4 GiB. The ISO is copied once
+more to a private file while its SHA-256 is checked again, and that copy goes
+on the drive.
+
+Windows oracle: the `result` regexes must match RESULT.TXT in the order
+listed (each after the end of the previous match), plus steps 1-3 above. Marker
+names the start-up script writes: `iso-mounted <L>: ... install.(wim|esd)` only
+after `<L>:\sources\install.wim|esd` was checked to exist, and `setup-running`
+only after `tasklist` shows `setup.exe` running from that mounted letter
+(`setup-started` only says it was launched).
 
 Serial output from ISOs started with their own `loopback.cfg`: GRUB cannot
 add `bb_kargs` there (a command always wins over a function of the same
@@ -267,4 +290,6 @@ Each case (id, mode, fs) appends one JSON line to `out/real/results.jsonl`:
 The serial log of a case is `out/real/logs/<id>-<mode>-<fs>.log` (plus
 `.qemu.txt` with the command line and `.screen.txt`, and a `.png` screendump
 when the case did not end by itself).
+Summaries use `realiso.latest_results()` (`python -m bbe2e.realiso` from tests/e2e): the
+latest row per (id, mode, fs) for the current beastboot_version and ISO hash.
 docs/ISO_SUPPORT.md marks an ISO "tested (real ISO)" only from a pass here.

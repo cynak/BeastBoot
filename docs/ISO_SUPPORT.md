@@ -36,6 +36,8 @@ it in `/dev/disk/by-uuid/`, `<label>` the ISO's volume label as GRUB reads it.
 | `dracut-live` | `/LiveOS/squashfs.img` and `/images/pxeboot/vmlinuz` | `root=live:CDLABEL=<label> rd.live.image iso-scan/filename=<path> quiet` | Fedora live ISOs (Workstation, spins), other dracut live images with this layout |
 | `anaconda` | `/images/pxeboot/vmlinuz` and no `/LiveOS` | `inst.stage2=hd:UUID=<uuid>:<path> quiet` | Fedora Server/Everything netinst and DVD, RHEL, AlmaLinux, Rocky Linux, CentOS Stream installers |
 | `suse` | `/boot/x86_64/loader/linux` | `isofrom_device=/dev/disk/by-uuid/<uuid> isofrom_system=<path> splash=silent` | openSUSE live images (KIWI); openSUSE/SLE installation ISOs are unverified |
+| `debian-installer` | `/install.amd/vmlinuz` + `.disk/info` | the whole ISO and its loop-modules udeb are added to the initrd, `hooks/d-i-iso.sh` mounts it on `/cdrom` (needs RAM for the ISO twice; netinst only, not DVD sets) | Debian netinst / CD installers |
+| `alpine` | `/.alpine-release` + `/apks/.boot_repository` | the whole ISO is added to the initramfs, `rdinit=/beast-init` (`hooks/alpine-init.sh`) attaches it to `/dev/loop0` | Alpine standard / extended (RAM for the ISO) |
 | `windows` | `/sources/boot.wim` and (`/bootmgr` or `/efi/microsoft/boot/bcd`) | not supported in 0.1: the menu explains this | Windows 10/11 and Windows Server installation ISOs |
 | `efi-chainload` | UEFI only: `/EFI/BOOT/BOOTX64.EFI` in any letter case | `chainloader` the ISO's own UEFI boot loader | self-contained EFI programs (for example memtest86+ or netboot.xyz, unverified); most other ISOs fail, see below |
 | `none` | nothing matched | the menu explains that the ISO is unknown | |

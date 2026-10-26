@@ -11,6 +11,8 @@ normal
 configfile
 echo
 test
+eval
+read
 true
 regexp
 loadenv

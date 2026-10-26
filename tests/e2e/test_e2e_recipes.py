@@ -94,6 +94,53 @@ def test_linux_recipe_dryrun(mode, fixture, make_drive, vm_factory):
 
 
 @pytest.mark.parametrize("mode", BOTH)
+def test_debian_installer_dryrun(mode, make_drive, vm_factory):
+    """The installer's CD is the ISO file: the whole ISO, the ISO's loop-modules
+    udeb and the startup script go into the initrd (hooks/d-i-iso.sh)."""
+    path = trees.recipe_path("debian-installer")
+    drive, vm = boot_iso(make_drive, vm_factory, mode, path, dryrun=True)
+    boot = vm.wait_record("boot", rf"^boot {re.escape(path)} recipe=", timeout=120)
+    assert checks.recipe_of(boot) == "debian-installer", str(boot)
+    lin = vm.wait_record("dryrun", r"^dryrun linux ", after=boot.start)
+    assert "(loop)/install.amd/vmlinuz" in kernel_of(lin), str(lin)
+    ini = vm.wait_record("dryrun", r"^dryrun initrd ", after=boot.start)
+    assert ini.tokens[2] == "(loop)/install.amd/initrd.gz", str(ini)
+    assert any(t.startswith("newc:beast-booter/debian.iso:") and t.endswith(path) for t in ini.tokens), str(ini)
+    assert any(t.startswith("newc:beast-booter/loop.udeb:(loop)/pool/main/l/linux-signed-amd64/loop-modules-")
+               for t in ini.tokens), str(ini)
+    # /lib is a symlink in the installer's initrd: the script must not be under lib/
+    assert any(t.startswith("newc:usr/lib/debian-installer-startup.d/S45beast-iso:") for t in ini.tokens), str(ini)
+    assert not vm.records("error", after=boot.start)
+
+
+@pytest.mark.parametrize("mode", BOTH)
+def test_debian_installer_without_loop_modules(mode, make_drive, vm_factory):
+    path = trees.recipe_path("debian-installer-nokernelmods")
+    _, vm = boot_iso(make_drive, vm_factory, mode, path, dryrun=True)
+    err = vm.wait_record("error", timeout=120)
+    assert error_code(err) == "boot-failed", str(err)
+    assert not vm.records("dryrun")
+
+
+@pytest.mark.parametrize("mode", BOTH)
+def test_alpine_dryrun(mode, make_drive, vm_factory):
+    """Alpine cannot open an ISO file: the ISO goes into the initramfs and
+    hooks/alpine-init.sh (rdinit) attaches it to a loop device."""
+    path = trees.recipe_path("alpine")
+    _, vm = boot_iso(make_drive, vm_factory, mode, path, dryrun=True)
+    boot = vm.wait_record("boot", rf"^boot {re.escape(path)} recipe=", timeout=120)
+    assert checks.recipe_of(boot) == "alpine", str(boot)
+    lin = vm.wait_record("dryrun", r"^dryrun linux ", after=boot.start)
+    assert "(loop)/boot/vmlinuz-lts" in kernel_of(lin), str(lin)
+    assert lin.has_token("rdinit=/beast-init"), str(lin)
+    ini = vm.wait_record("dryrun", r"^dryrun initrd ", after=boot.start)
+    assert ini.tokens[2] == "(loop)/boot/initramfs-lts", str(ini)
+    assert any(t.startswith("newc:beast-booter/alpine.iso:") and t.endswith(path) for t in ini.tokens), str(ini)
+    assert any(t.startswith("newc:beast-init:") for t in ini.tokens), str(ini)
+    assert not vm.records("error", after=boot.start)
+
+
+@pytest.mark.parametrize("mode", BOTH)
 def test_path_with_spaces_dryrun(mode, make_drive, vm_factory):
     drive, vm = boot_iso(make_drive, vm_factory, mode, trees.SPACES_ISO, dryrun=True)
     check_linux_dryrun(vm, drive, "casper", trees.SPACES_ISO)

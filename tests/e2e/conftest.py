@@ -25,6 +25,7 @@ MARKERS = {
     "uefi": "boots under UEFI (OVMF) without Secure Boot",
     "secureboot": "boots under UEFI with Secure Boot (OVMF secboot + Microsoft keys)",
     "exfat": "uses an exFAT data partition (needs udisksctl; run outside the sandbox)",
+    "fat32": "uses a FAT32 data partition",
     "ntfs": "uses an NTFS data partition (needs udisksctl; run outside the sandbox)",
     "selftest": "harness self-test (needs no dist/ or installer)",
     "beastnet": "beast-net download helper (docs/BEASTNET.md)",

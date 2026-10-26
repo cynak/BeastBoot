@@ -35,8 +35,8 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from . import env, images
-from .qemu import VM, plain_text_from_clean
-from .serial import parse_records
+from .qemu import VM
+from .serial import BOUNDARY, parse_records
 
 CATALOG = env.E2E_DIR / "real_isos.json"
 CACHE_DIR = Path(os.environ.get("BB_REAL_CACHE", env.BB_ROOT / ".tools" / "cache" / "real-isos"))
@@ -75,6 +75,9 @@ FAIL_FAST = [
 ]
 # Kernel lines that echo the command line (and could contain marker text).
 _CMDLINE_RE = re.compile(r"^.*\b(?:Kernel command line|Command line):.*$", re.M)
+# GRUB menu / help redraw lines (they name entries and keys, not the ISO's system).
+_MENU_RE = re.compile(r"^.*(?:Press enter to boot the selected OS|automatically in|Use the \^ and v keys).*$", re.M)
+_NOISE_RE = re.compile(f"{_CMDLINE_RE.pattern}|{_MENU_RE.pattern}", re.M)
 
 KEYS = {"id", "family", "name", "version", "url", "size", "recipe", "modes", "fs", "ram_mb", "timeout_s"}
 
@@ -85,6 +88,10 @@ class Unverifiable(Exception):
 
 class FetchError(Exception):
     pass
+
+
+class Stale(FetchError):
+    """The vendor's checksum file no longer lists this ISO: the catalog is out of date (a failure, not a skip)."""
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +144,9 @@ def validate(cat: dict) -> list[str]:
                 re.compile(rx)
             except re.error as ex:
                 errs.append(f"{where}: bad regex {rx!r}: {ex}")
+        rfs = e.get("recipe_fs") or {}
+        if set(rfs) - set(FILESYSTEMS) or not all(isinstance(v, str) for v in rfs.values()):
+            errs.append(f"{where}: recipe_fs must map data filesystems to recipe names")
         if '"' in e.get("kargs", "") or "\\" in e.get("kargs", ""):
             errs.append(f"{where}: kargs must not contain quotes or backslashes")
     return errs
@@ -271,14 +281,16 @@ def expected(entry: dict, get=http_text) -> Expected:
             errors.append(str(e))
             continue
         if got is None:
-            raise Unverifiable(f"{url} has no {algo} line for {name}")
+            raise Stale(f"catalog stale: {url} has no {algo} line for {name}")
         hexv, n = got
         return Expected(algo, hexv, n or name, url)
     if meta and meta.get("algo") and meta.get("hex"):
         return Expected(meta["algo"], meta["hex"], meta["name"], meta["source"] + " (cached: " + "; ".join(errors) + ")")
     if errors:
         raise FetchError("; ".join(errors))
-    raise Unverifiable(entry.get("unverifiable") or "the vendor publishes no checksum for this ISO")
+    if entry.get("unverifiable"):
+        raise Unverifiable(entry["unverifiable"])
+    raise Stale("catalog stale: the entry has no checksum source and no \"unverifiable\" reason")
 
 
 # ---------------------------------------------------------------------------
@@ -380,6 +392,16 @@ def _fetch_locked(entry: dict, exp: Expected, d: Path) -> Iso:
 # Drives
 # ---------------------------------------------------------------------------
 
+FAT32_MAX_FILE = (4 << 30) - 1
+
+
+def fs_skip_reason(iso_bytes: int, fs: str) -> str | None:
+    """Why an ISO cannot be tested on this data filesystem (None: it can)."""
+    if fs == "fat32" and iso_bytes > FAT32_MAX_FILE:
+        return f"FAT32 cannot hold a file over 4 GiB (the ISO is {iso_bytes} bytes)"
+    return None
+
+
 def drive_size(iso_bytes: int) -> str:
     """Image size for the installer: the ISO plus room for the ESP and slack (sparse)."""
     return f"{math.ceil((iso_bytes + 2 * GIB) / GIB)}G"
@@ -398,16 +420,35 @@ def iso_dest(iso: Iso) -> str:
     return "/" + iso.path.name
 
 
+def stage(iso: Iso, dest: Path) -> Path:
+    """A private copy of the ISO whose SHA-256 is checked while it is copied, so a
+    file replaced after the vendor check (BB_ISO_*, the cache) cannot reach the drive."""
+    h = hashlib.sha256()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with open(iso.path, "rb") as src, open(dest, "wb") as out:
+        while chunk := src.read(8 << 20):
+            h.update(chunk)
+            out.write(chunk)
+    if h.hexdigest() != iso.sha256:
+        dest.unlink(missing_ok=True)
+        raise FetchError(f"{iso.path} changed after it was verified (sha256 {h.hexdigest()}, expected {iso.sha256})")
+    return dest
+
+
 def build_drive(iso: Iso, fs: str, path: Path) -> images.Drive:
     from . import beastnet as bn  # grubenv helpers
 
     path.parent.mkdir(parents=True, exist_ok=True)
     images.install(path, layout="msdos", fs=fs, size=drive_size(iso.size), dist=env.DIST, serial=True)
     drive = images.Drive.open(path, "msdos", fs)
-    with drive.data_writer() as w:
-        w.put(iso_dest(iso), iso.path)
-        w.mkdir("/beast-booter")
-        w.put(images.USER_CONFIG, config_text(iso.entry))
+    staged = stage(iso, path.parent / f".stage-{iso.entry['id']}-{fs}.iso")
+    try:
+        with drive.data_writer() as w:
+            w.put(iso_dest(iso), staged)
+            w.mkdir("/beast-booter")
+            w.put(images.USER_CONFIG, config_text(iso.entry))
+    finally:
+        staged.unlink(missing_ok=True)
     bn.write_grubenv(drive, {"bb_oneshot": iso_dest(iso)})
     return drive
 
@@ -458,64 +499,104 @@ class Verdict:
 class Oracle:
     """Pass/fail from the serial log of one boot.
 
-    Order: `BEAST: ready` must show the expected platform with Secure Boot off;
-    `BEAST: boot <iso> recipe=<r>` gives the recipe; a `BEAST: error` record
-    after it fails at once. Success regexes count only after the boot record,
-    with lines that echo the kernel command line removed.
+    A pass needs, in this order of checks: a `BEAST: ready` record with the
+    case's platform, sb=0 and data filesystem; exactly one `BEAST: boot <iso>`
+    record (the config exports timeout=5, so a failed attempt boots again); a
+    `recipe` pinned in the catalog and equal to the boot record's; every
+    success regex matched after the boot record, in text with all `BEAST:`
+    records, kernel command-line echoes and GRUB menu redraw lines removed;
+    and no fail-fast line or `BEAST: error` that starts before the end of the
+    last required success match.
     """
 
-    def __init__(self, entry: dict, mode: str, iso_path: str):
-        self.entry, self.mode, self.iso_path = entry, mode, iso_path
+    def __init__(self, entry: dict, mode: str, iso_path: str, fs: str | None = None):
+        self.entry, self.mode, self.iso_path, self.fs = entry, mode, iso_path, fs
         self.success = [re.compile(rx, re.M) for rx in entry.get("success", [])]
         self.fail = [re.compile(rx, re.M) for rx in FAIL_FAST + entry.get("fail", [])]
         self.recipe: str | None = None
         self.boot_at: int | None = None
+        self.boots = 0
         self.mode_error: str | None = None
-        self.error: str | None = None
+        self.errors: list[tuple[int, str]] = []  # (offset, text) of BEAST: error records
         self.ready = False
         self.boot_rx = re.compile(rf"^boot {re.escape(iso_path)} recipe=")
 
-    def records(self, clean: str) -> None:
-        for r in parse_records(clean, final=True):
+    def records(self, clean: str) -> str:
+        """Read the BEAST records of `clean`; returns the text markers are matched against."""
+        self.recipe = self.boot_at = self.mode_error = None
+        self.boots, self.errors, self.ready = 0, [], False
+        recs = [r for r in parse_records(clean, final=True)]
+        text = list(clean.replace(BOUNDARY, "\n"))
+        for r in recs:
+            for i in range(r.start, min(r.end, len(text))):
+                if text[i] != "\n":
+                    text[i] = " "
             if r.prefix != "BEAST":
                 continue
-            if r.kind == "ready" and self.boot_at is None:
+            if r.kind == "ready" and not self.ready:
                 self.ready = True
                 f = r.fields
                 want = PLATFORM[self.mode]
                 if f.get("platform") != want or f.get("sb") != "0":
                     self.mode_error = f"wrong mode: {r.text} (expected platform={want} sb=0)"
-            elif r.kind == "boot" and self.boot_at is None and r.matches(self.boot_rx):
+                elif self.fs and f.get("fs") != self.fs:
+                    self.mode_error = f"wrong data filesystem: {r.text} (expected fs={self.fs})"
+            elif r.kind == "boot" and r.matches(self.boot_rx):
                 # (a regex, not r.fields: kernel output right after the record can
                 # look like a continuation of a wrapped line)
+                self.boots += 1
+                self.boot_at = r.end  # the last one is the one used; two fail anyway
                 m = re.search(r"\brecipe=([A-Za-z0-9_.-]+)", r.text)
                 self.recipe = m.group(1) if m else None
-                self.boot_at = r.end
-            elif r.kind == "error" and self.ready and not self.error:
-                self.error = r.text  # e.g. iso-not-found comes before any boot record
+            elif r.kind == "error" and self.ready:
+                self.errors.append((r.start, r.text))
+        return _NOISE_RE.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), "".join(text))
 
-    def after_boot(self, clean: str) -> str:
+    def matched(self, text: str) -> list[tuple[str, int]]:
+        """(pattern, end offset of its first match after the boot record)."""
+        out = []
+        for rx in self.success:
+            m = rx.search(text, self.boot_at or 0) if self.boot_at is not None else None
+            if m:
+                out.append((rx.pattern, m.end()))
+        return out
+
+    def first_failure(self, text: str) -> tuple[int, str] | None:
+        """(offset, line) of the earliest fail-fast match after the boot record."""
         if self.boot_at is None:
-            return ""
-        return _CMDLINE_RE.sub("", plain_text_from_clean(clean[self.boot_at:]))
+            return None
+        hits = [(m.start(), m.group(0).strip()) for rx in self.fail if (m := rx.search(text, self.boot_at))]
+        return min(hits) if hits else None
 
-    def matched(self, text: str) -> list[str]:
-        return [rx.pattern for rx in self.success if rx.search(text)]
-
-    def failed(self, text: str) -> str | None:
-        for rx in self.fail:
-            if m := rx.search(text):
-                return m.group(0).strip()
-        return None
+    @property
+    def want_recipe(self) -> str | None:
+        """The pinned recipe; `recipe_fs` overrides it per data filesystem (exFAT takes the
+        menu's own add-on route, FAT32 and NTFS the ISO's loopback.cfg)."""
+        return (self.entry.get("recipe_fs") or {}).get(self.fs, self.entry.get("recipe"))
 
     def recipe_ok(self) -> bool:
-        want = self.entry.get("recipe")
-        return want is None or self.recipe == want
+        return self.want_recipe is not None and self.recipe == self.want_recipe
 
     def recipe_note(self) -> str:
-        if self.recipe_ok():
-            return ""
-        return f"recipe={self.recipe}, expected {self.entry['recipe']}"
+        want = self.want_recipe
+        if want is None:
+            return f"recipe not pinned (the menu used recipe={self.recipe}; set \"recipe\" in the catalog)"
+        if self.recipe != want:
+            return f"recipe={self.recipe}, expected {want}"
+        return ""
+
+    def gate(self, exited: bool, timed_out: bool) -> Verdict | None:
+        """Checks common to Linux and Windows; a failing verdict, or None."""
+        if self.mode_error:
+            return Verdict("fail", self.mode_error, self.recipe)
+        if not self.ready:
+            if self.boots or exited or timed_out:
+                return Verdict("fail", "no BEAST: ready record", self.recipe)
+            return None
+        if self.boots >= 2:
+            return Verdict("fail", f"booted more than once ({self.boots} 'BEAST: boot' records; "
+                           "the first attempt failed and the menu re-booted)", self.recipe)
+        return None
 
 
 def last_lines(text: str, n: int = 3) -> str:
@@ -525,50 +606,78 @@ def last_lines(text: str, n: int = 3) -> str:
 
 def judge_linux(o: Oracle, clean: str, *, exited: bool, timed_out: bool, exit_code: int | None) -> Verdict | None:
     """A verdict, or None to keep waiting."""
-    o.records(clean)
-    if o.mode_error:
-        return Verdict("fail", o.mode_error, o.recipe)
-    text = o.after_boot(clean)
-    matched = o.matched(text)
-    if o.error:
-        return Verdict("fail", f"menu: {o.error}", o.recipe, matched)
-    if o.boot_at is not None and len(matched) == len(o.success):
-        if o.recipe_ok():
-            return Verdict("pass", "all success markers", o.recipe, matched)
-        return Verdict("fail", f"booted, but {o.recipe_note()}", o.recipe, matched)
-    bad = o.failed(text)
+    text = o.records(clean)
+    if v := o.gate(exited, timed_out):
+        return v
+    if not o.ready:
+        return None
+    got = o.matched(text)
+    names = [p for p, _ in got]
+    done = o.boot_at is not None and len(got) == len(o.success)
+    last_end = max((e for _, e in got), default=0) if done else None
+    for pos, err in o.errors:
+        if last_end is None or pos < last_end:
+            return Verdict("fail", f"menu: {err}", o.recipe, names)
+    bad = o.first_failure(text)
+    if done:
+        if bad and bad[0] < last_end:
+            return Verdict("fail", f"ISO gave up before the last success marker: {bad[1]!r}", o.recipe, names)
+        if not o.recipe_ok():
+            why = "booted, but " + o.recipe_note()
+            return Verdict("fail", why, o.recipe, names)
+        return Verdict("pass", "all success markers", o.recipe, names)
     if bad or exited or timed_out:
         note = "; " + o.recipe_note() if o.recipe_note() else ""
-        got = f"{len(matched)}/{len(o.success)} markers"
+        after = text[o.boot_at:] if o.boot_at is not None else ""
+        n = f"{len(got)}/{len(o.success)} markers"
         if o.boot_at is None:
             why = "no 'BEAST: boot' record for the ISO (menu did not start it)"
         elif bad:
-            why = f"ISO gave up: {bad!r}"
+            why = f"ISO gave up: {bad[1]!r}"
         elif exited:
-            why = f"QEMU exited (code {exit_code}); last: {last_lines(text)}"
+            why = f"QEMU exited (code {exit_code}); last: {last_lines(after)}"
         else:
-            why = f"no success after the timeout; last: {last_lines(text)}"
+            why = f"no success after the timeout; last: {last_lines(after)}"
         return Verdict("timeout" if timed_out and not bad and o.boot_at is not None else "fail",
-                       f"{why}; {got}{note}", o.recipe, matched)
+                       f"{why}; {n}{note}", o.recipe, names)
     return None
 
 
+def ordered_matches(patterns: list[str], text: str) -> list[str]:
+    """The leading patterns that match `text` in order, each after the end of the
+    previous match (a later line cannot vouch for an earlier step)."""
+    pos, out = 0, []
+    for p in patterns:
+        m = re.compile(p, re.M).search(text, pos)
+        if not m:
+            break
+        out.append(p)
+        pos = m.end()
+    return out
+
+
 def judge_windows(o: Oracle, clean: str, result_txt: str | None, *, timed_out: bool) -> Verdict:
+    """RESULT.TXT lines must match in the order of "result". Marker names (script side,
+    REAL_ISOS.md): `iso-mounted <L>: ... install.(wim|esd)` only after the file was
+    found on the mounted drive, `setup-running` only after tasklist showed setup.exe
+    from that drive."""
     o.records(clean)
-    if o.mode_error:
-        return Verdict("fail", o.mode_error, o.recipe)
-    want = [re.compile(rx, re.M) for rx in o.entry["result"]]
-    got = result_txt or ""
-    matched = [rx.pattern for rx in want if rx.search(got)]
-    if o.error:
-        return Verdict("fail", f"menu: {o.error}", o.recipe, matched)
+    if v := o.gate(True, timed_out):
+        return v
+    want = o.entry["result"]
+    got = (result_txt or "").replace("\r", "")
+    matched = ordered_matches(want, got)
+    for _, err in o.errors:
+        return Verdict("fail", f"menu: {err}", o.recipe, matched)
     if o.boot_at is None:
         return Verdict("fail", "no 'BEAST: boot' record for the ISO (menu did not start it)", o.recipe, matched)
-    if len(matched) == len(want) and o.recipe_ok():
+    if len(matched) == len(want):
+        if not o.recipe_ok():
+            return Verdict("fail", "RESULT.TXT complete, but " + o.recipe_note(), o.recipe, matched)
         return Verdict("pass", "RESULT.TXT complete", o.recipe, matched)
     why = "RESULT.TXT missing" if result_txt is None else f"RESULT.TXT: {last_lines(got)}"
     note = "; " + o.recipe_note() if o.recipe_note() else ""
-    return Verdict("timeout" if timed_out else "fail", f"{why}; {len(matched)}/{len(want)} lines{note}",
+    return Verdict("timeout" if timed_out else "fail", f"{why}; {len(matched)}/{len(want)} lines (in order){note}",
                    o.recipe, matched)
 
 
@@ -594,8 +703,8 @@ def run_case(iso: Iso, drive: images.Drive, mode: str, fs: str) -> Verdict:
         extra += bbtest_args(bbtest)
     timeout = float(entry["timeout_s"])
     vm = VM(cid, mode=mode, disk=drive.path, workdir=work, log_dir=LOG_DIR, memory=int(entry["ram_mb"]),
-            smp=int(entry.get("smp", 2)), hard_timeout=timeout + 300, extra_args=extra, snapshot=True)
-    o = Oracle(entry, mode, iso_dest(iso))
+            smp=int(entry.get("smp", 2)), hard_timeout=(env.t(timeout) + 300) / env.t(1), extra_args=extra, snapshot=True)
+    o = Oracle(entry, mode, iso_dest(iso), fs)
     verdict = None
     timed_out = False
     vm.start()
@@ -609,13 +718,13 @@ def run_case(iso: Iso, drive: images.Drive, mode: str, fs: str) -> Verdict:
             if windows:
                 # The startup script writes RESULT.TXT and powers off.
                 o.records(vm.clean())
-                if o.error or o.mode_error or exited or timed_out:
+                if o.errors or o.mode_error or exited or timed_out:
                     break
                 continue
             verdict = judge_linux(o, vm.clean(), exited=exited, timed_out=timed_out,
                                   exit_code=vm.proc.returncode if exited else None)
             if verdict is not None:
-                if verdict.status == "fail" and not exited and o.failed(o.after_boot(vm.clean())):
+                if verdict.status == "fail" and not exited:
                     time.sleep(5)  # context for the log
                 break
             # An ISO's own GRUB menu (loopback.cfg) without a countdown despite
@@ -651,13 +760,45 @@ def record(entry: dict, mode: str, fs: str, verdict: Verdict, *, seconds: float,
         "matched": verdict.matched, "reason": verdict.reason,
         "log": str(LOG_DIR / f"{case_id(entry, mode, fs)}.log"), "seconds": round(seconds, 1),
         "iso_sha256": iso.sha256 if iso else None, "beastboot_version": beastboot_version(),
-        "expected_recipe": entry.get("recipe"), "when": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "expected_recipe": (entry.get("recipe_fs") or {}).get(fs, entry.get("recipe")), "when": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
     }
     with _results_lock:
         RESULTS.parent.mkdir(parents=True, exist_ok=True)
         with open(RESULTS, "a") as f:
             f.write(json.dumps(row) + "\n")
     return row
+
+
+def latest_results(rows: list[dict] | None = None, version: str | None = None,
+                   iso_sha256: dict[str, str] | None = None) -> list[dict]:
+    """Rows to summarise: the latest per (id, mode, fs), only for `version` (default:
+    the current beastboot_version) and only for the ISO hash now current for that id
+    (`iso_sha256`, else the hash of the id's newest row). Older runs never count."""
+    if rows is None:
+        try:
+            rows = [json.loads(ln) for ln in RESULTS.read_text().splitlines() if ln.strip()]
+        except OSError:
+            rows = []
+    version = beastboot_version() if version is None else version
+    rows = [r for r in rows if r.get("beastboot_version") == version]
+    current = dict(iso_sha256 or {})
+    if not iso_sha256:
+        for r in rows:  # the newest row with a hash defines the current ISO
+            if r.get("iso_sha256"):
+                current[r["id"]] = r["iso_sha256"]
+    latest: dict[tuple, dict] = {}
+    for r in rows:
+        want = current.get(r["id"])
+        if want and r.get("iso_sha256") not in (None, want):
+            continue
+        latest[(r["id"], r["mode"], r["fs"])] = r
+    return list(latest.values())
+
+
+def summary(rows: list[dict] | None = None) -> str:
+    """One line per case of the latest run (latest_results)."""
+    return "\n".join(f"{r['status']:7} {r['id']}-{r['mode']}-{r['fs']}  {r['reason'][:100]}"
+                     for r in latest_results(rows))
 
 
 def beastboot_version() -> str:
@@ -714,9 +855,14 @@ class Runner:
                 continue
             except Exception as ex:  # noqa: BLE001 - recorded per case
                 for mode, fs in cases(e):
-                    self._finish(e, mode, fs, Verdict("fail", f"fetch: {ex}"), time.monotonic() - t0, None)
+                    self._finish(e, mode, fs, Verdict("fail", str(ex) if isinstance(ex, Stale) else f"fetch: {ex}"), time.monotonic() - t0, None)
                 continue
             for fs in e["fs"]:
+                if why := fs_skip_reason(iso.size, fs):
+                    for mode, f in cases(e):
+                        if f == fs:
+                            self._finish(e, mode, fs, Verdict("skip", why), 0.0, iso)
+                    continue
                 self.pool.submit(self._group_job, iso, fs)
 
     def _group_job(self, iso: Iso, fs: str) -> None:
@@ -746,3 +892,7 @@ class Runner:
     def result(self, cid: str, timeout: float | None = None) -> dict:
         self.start()
         return self.futures[cid].result(timeout=timeout)
+
+
+if __name__ == "__main__":
+    print(summary())

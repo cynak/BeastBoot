@@ -14,7 +14,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 LIB = ROOT / "grub" / "beast" / "lib.cfg"
 MAIN = ROOT / "grub" / "beast" / "main.cfg"
-RECIPES = ("casper", "live-boot", "archiso", "dracut-live", "anaconda", "suse")
+RECIPES = ("casper", "live-boot", "archiso", "dracut-live", "anaconda", "suse", "debian-installer", "alpine")
 
 
 def function_body(text: str, name: str) -> str:

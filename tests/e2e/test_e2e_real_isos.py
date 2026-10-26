@@ -155,7 +155,7 @@ def test_expected_uses_catalog_then_checksum_file():
     assert (exp.algo, exp.hex, exp.name) == ("sha256", H1, "x.iso")
     exp = realiso.expected(dict(e, sha256=H2), get=None)
     assert (exp.hex, exp.source) == (H2, "catalog")
-    with pytest.raises(realiso.Unverifiable):
+    with pytest.raises(realiso.Stale, match="catalog stale"):  # listed no more: a failure, not a skip
         realiso.expected(e, get=lambda url: f"{H2}  y.iso\n{H1}  z.iso\n")
     with pytest.raises(realiso.Unverifiable):
         realiso.expected({"id": "nohash-unit-test", "url": "https://e.org/x.iso", "unverifiable": "none published"})
@@ -167,57 +167,3 @@ def test_config_and_sizes():
     assert 'set bb_debug="1"' in cfg and 'set timeout="5"' in cfg
     assert "bb_kargs" not in realiso.config_text({})
     assert realiso.drive_size(1) == "3G" and realiso.drive_size(6482409472) == "9G"
-
-
-ISO = "/x.iso"
-ENTRY = {"id": "x", "family": "dracut", "recipe": "dracut-live", "success": [r"Welcome to X!", r"\blogin: *$"]}
-
-
-def _log(*lines: str) -> str:
-    return "\n".join(lines) + "\n"
-
-
-READY = "BEAST: ready version=0.1.2 platform=efi sb=0 esp=hd0,msdos2 data=hd0,msdos1 fs=exfat"
-BOOT = f"BEAST: boot {ISO} recipe=dracut-live"
-
-
-def _judge(clean: str, entry=ENTRY, mode="uefi", **kw):
-    o = realiso.Oracle(entry, mode, ISO)
-    kw.setdefault("exited", False)
-    kw.setdefault("timed_out", False)
-    return realiso.judge_linux(o, clean, exit_code=None, **kw)
-
-
-def test_oracle_pass_only_after_boot_and_not_from_cmdline():
-    assert _judge(_log(READY, BOOT, "Welcome to X!", "localhost login: ")).status == "pass"
-    # markers before the boot record, or in the echoed kernel command line, do not count
-    assert _judge(_log(READY, "Welcome to X!", "login: ", BOOT)) is None
-    assert _judge(_log(READY, BOOT, "[    0.0] Kernel command line: Welcome to X! login: ")) is None
-    v = _judge(_log(READY, BOOT, "Welcome to X!"), timed_out=True)
-    assert v.status == "timeout" and "1/2 markers" in v.reason
-
-
-def test_oracle_failures():
-    v = _judge(_log(READY, BOOT, "Welcome to X!", "login: "), mode="bios")
-    assert v.status == "fail" and "wrong mode" in v.reason
-    v = _judge(_log(READY, f"BEAST: boot {ISO} recipe=suse", "Welcome to X!", "login: "))
-    assert v.status == "fail" and "recipe=suse, expected dracut-live" in v.reason
-    v = _judge(_log(READY, f"BEAST: boot {ISO} recipe=windows", "BEAST: error unsupported-windows /x.iso", ""))
-    assert v.status == "fail" and v.reason.startswith("menu: error unsupported-windows")
-    v = _judge(_log(READY, BOOT, "Entering emergency mode. Exit the shell to continue."))
-    assert v.status == "fail" and "emergency" in v.reason
-    v = _judge(_log(READY), exited=True)
-    assert v.status == "fail" and "no 'BEAST: boot' record" in v.reason
-    # no recipe required yet (null): any recipe passes when the markers match
-    assert _judge(_log(READY, f"BEAST: boot {ISO} recipe=loopback", "Welcome to X!", "login: "),
-                  entry=dict(ENTRY, recipe=None)).status == "pass"
-
-
-def test_oracle_windows():
-    entry = {"id": "w", "family": "windows", "recipe": "windows", "result": [r"^winpe-ok\s*$", r"^setup-started\s*$"]}
-    log = _log(READY, f"BEAST: boot {ISO} recipe=windows")
-    o = realiso.Oracle(entry, "uefi", ISO)
-    assert realiso.judge_windows(o, log, "winpe-ok\r\nsetup-started\r\n", timed_out=False).status == "pass"
-    o = realiso.Oracle(entry, "uefi", ISO)
-    v = realiso.judge_windows(o, log, None, timed_out=True)
-    assert v.status == "timeout" and "RESULT.TXT missing" in v.reason

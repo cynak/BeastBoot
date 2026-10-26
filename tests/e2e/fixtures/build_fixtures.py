@@ -139,6 +139,33 @@ FIXTURES: dict[str, dict] = {
             "/boot/x86_64/loader/initrd": dummy("suse initrd"),
         },
     },
+    "debian-installer": {
+        "label": "BB_DI",
+        "files": {
+            "/install.amd/vmlinuz": dummy("d-i kernel"),
+            "/install.amd/initrd.gz": dummy("d-i initrd"),
+            "/.disk/info": b"BeastBoot fixture netinst\n",
+            "/pool/main/l/linux-signed-amd64/loop-modules-6.12.0-amd64-di_6.12.0-1_amd64.udeb": dummy("loop udeb"),
+        },
+    },
+    "debian-installer-nokernelmods": {
+        # no loop-modules udeb: the menu must say so instead of booting a dead installer
+        "label": "BB_DI_NOLOOP",
+        "files": {
+            "/install.amd/vmlinuz": dummy("d-i kernel"),
+            "/install.amd/initrd.gz": dummy("d-i initrd"),
+            "/.disk/info": b"BeastBoot fixture netinst\n",
+        },
+    },
+    "alpine": {
+        "label": "BB_ALPINE",
+        "files": {
+            "/.alpine-release": b"3.24.0\n",
+            "/apks/.boot_repository": b"",
+            "/boot/vmlinuz-lts": dummy("alpine kernel"),
+            "/boot/initramfs-lts": dummy("alpine initramfs"),
+        },
+    },
     "windows": {
         # Like real Windows media: no Rock Ridge, lower-case names, and an EFI
         # loader too (windows must win over efi-chainload).
