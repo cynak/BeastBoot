@@ -10,11 +10,12 @@
 #
 # Every file is either copied unmodified from a named Debian/Ubuntu package
 # (and checked against that package's md5sums), built here from such files
-# plus repo inputs, copied from the repo, or - GRUB - built from pinned source
-# (build/grub/: Ubuntu's grub2 source package + our patches, checked against
-# their SHA-256). Downloads happen only on a cold cache: build/grub/ (GRUB
-# source, build-time .debs) and build/beastnet/ (pinned, hash-checked .debs
-# and linux-firmware catalog data).
+# plus repo inputs, copied from the repo, or - GRUB, wimboot - built from
+# pinned source (build/grub/: Ubuntu's grub2 source package + our patches;
+# build/wimboot/: iPXE's wimboot release + our patches; checked against their
+# SHA-256). Downloads happen only on a cold cache: build/grub/ (GRUB source,
+# build-time .debs), build/wimboot/ (its source archive) and build/beastnet/
+# (pinned, hash-checked .debs and linux-firmware catalog data).
 #
 # Inputs (environment):
 #   BB_MENU_DIR        menu scripts            (default: $BB_ROOT/grub)
@@ -28,6 +29,9 @@
 #                      (default: /usr/share/fonts/truetype/noto, then .tools)
 #   BB_GRUB_BUILDER    auto (default) | native | docker: how build/grub/grubsrc.py
 #                      builds GRUB; BB_GRUB_CACHE: its cache (.tools/cache/grub-src)
+#   BB_WIMBOOT_BUILDER auto (default) | native | docker: the same for
+#                      build/wimboot/wimbootsrc.py; BB_WIMBOOT_CACHE: .tools/cache/wimboot
+#   BB_SKIP_WIMBOOT=1  build without wimboot and the Windows PE files
 #   BB_SHIM_DIR        shim package directory (set by scripts/dev-env.sh)
 #   BB_DEBIAN_DIR      Debian shim packages (build/shim/fetch.py; default $BB_ROOT/.tools/debian)
 #
@@ -658,6 +662,41 @@ for h in m["vendor_dbx"]["sha256"]:
   extra secure_boot.beastnet_kernel_unsigned_sha256 "$BN_UNSIGNED_SHA"
   extra secure_boot.beastnet_kernel_replaced_signers "${bn_replaced:-none}"
   BUILD_ID_EXTRA+=(--unsigned "esp/beast-net/vmlinuz=$BN_UNSIGNED_SHA")
+fi
+
+# ---------------------------------------------------------------------------
+# Windows PE / Setup: iPXE's wimboot, built from its pinned release source by
+# build/wimboot/wimbootsrc.py (+ build/wimboot/patches: on UEFI it takes the
+# files GRUB passes with `initrd newc:...`), and the Windows PE start-up files
+# the menu injects (build/winpe/, shipped with CRLF line endings). One wimboot
+# serves BIOS (linux16) and UEFI (linux). It is not signed: the menu boots
+# Windows only with Secure Boot off. Cached under .tools/cache/wimboot/out/<key>.
+# BB_SKIP_WIMBOOT=1 leaves all of it out (the menu then refuses Windows ISOs).
+# ---------------------------------------------------------------------------
+if [ "${BB_SKIP_WIMBOOT:-0}" != 1 ]; then
+  WIMBOOTSRC=(python3 -I "$HERE/wimboot/wimbootsrc.py")
+  log "wimboot from source (build/wimboot/wimbootsrc.py)"
+  WIM_OUT="$("${WIMBOOTSRC[@]}" build ${BB_WIMBOOT_BUILDER:+--builder "$BB_WIMBOOT_BUILDER"})" \
+    || die "wimboot source build failed (build/wimboot/wimbootsrc.py build; logs under .tools/cache/wimboot/work/; BB_SKIP_WIMBOOT=1 builds without it)"
+  WIM_OUT="${WIM_OUT##*$'\n'}"
+  [ -f "$WIM_OUT/build-info.json" ] || die "build/wimboot/wimbootsrc.py printed no build directory"
+  { read -r WIM_VERSION; read -r WIM_KEY; read -r WIM_TAG; read -r WIM_COMMIT; } \
+    < <("${WIMBOOTSRC[@]}" info "$WIM_OUT" version key tag commit)
+  [ -n "$WIM_COMMIT" ] || die "cannot read $WIM_OUT/build-info.json"
+  WIM_INFO_SHA="$(sha256sum < "$WIM_OUT/build-info.json")"; WIM_INFO_SHA="${WIM_INFO_SHA%% *}"
+  # wimboot-src:<name>=<version>:<path in the build>: gen_sbom.py checks it against build-info.json
+  add_file "$WIM_OUT/wimboot" esp/beast-booter/wimboot "wimboot-src:wimboot=$WIM_VERSION:/wimboot"
+  extra build.wimboot_version "$WIM_VERSION"
+  extra build.wimboot_build_key "$WIM_KEY"
+  extra build.wimboot_build_info_sha256 "$WIM_INFO_SHA"
+  extra build.wimboot_source "ipxe/wimboot $WIM_TAG, commit $WIM_COMMIT (build/wimboot/source.lock.json) + build/wimboot/patches/series"
+  extra build.wimboot_patches[] "$(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$HERE/wimboot/patches/series" | tr '\n' ' ')"
+  extra build.wimboot_toolchain "$("${WIMBOOTSRC[@]}" info "$WIM_OUT" toolchain.gcc toolchain.ld | paste -sd ';' | sed 's/;/; /')"
+  for f in winpeshl.ini beastboot.cmd; do
+    sed -e 's/\r$//' -e 's/$/\r/' "$HERE/winpe/$f" > "$WORK/$f"
+    add_file "$WORK/$f" "esp/beast-booter/winpe/$f" "built:build/build.sh (CRLF line endings) from repo:build/winpe/$f"
+  done
+  log "wimboot $WIM_VERSION (key $WIM_KEY, unsigned) + Windows PE start-up files"
 fi
 
 # version.cfg last: its build id covers everything else, the beast-net helper included

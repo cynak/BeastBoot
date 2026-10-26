@@ -6,11 +6,13 @@
 #   --cert F    a beast-booter certificate you obtained independently (PEM or
 #               DER); grubx64.efi must verify against it and the certificate
 #               shipped in DIST must be the same one
-#   --rebuild   build GRUB from the pinned source (build/grub/grubsrc.py; a few
-#               minutes the first time, then cached), then compare the i386-pc
-#               modules, boot.img, core.img and the unsigned grubx64.efi with
-#               DIST byte for byte (needs a toolchain like the one recorded in
-#               the manifest, build.grub_toolchain)
+#   --rebuild   build GRUB and wimboot from the pinned source
+#               (build/grub/grubsrc.py: a few minutes the first time, then
+#               cached; build/wimboot/wimbootsrc.py: seconds), then compare the
+#               i386-pc modules, boot.img, core.img, the unsigned grubx64.efi
+#               and wimboot with DIST byte for byte (needs a toolchain like the
+#               one recorded in the manifest, build.grub_toolchain and
+#               build.wimboot_toolchain)
 #
 # What it checks:
 #   1. every file in DIST is listed in manifest.json with the right SHA-256
@@ -25,6 +27,10 @@
 #      is the manifest's, which is that of the Ubuntu kernel package it came
 #      from (compared with the .deb itself when it is in the beast-net cache)
 #   4. the SBAT embedded in grubx64.efi equals the manifest's
+#   5. wimboot (Windows PE loader) is a hybrid BIOS/UEFI image of the
+#      manifest's version, unsigned, with its SBAT lines, from the manifest's
+#      wimboot build (compared with that build when it is in the local cache);
+#      the Windows PE start-up files have CRLF line endings
 # and prints the SBAT and the certificate fingerprints. MokManager shows the
 # SHA-1 fingerprint when you choose "View key" - compare it before enrolling.
 set -euo pipefail
@@ -39,7 +45,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --cert) CERT="${2:?--cert needs a file}"; shift 2 ;;
     --rebuild) REBUILD=1; shift ;;
-    -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) echo "verify-dist: unknown option $1" >&2; exit 2 ;;
     *) DIST="$1"; shift ;;
   esac
@@ -172,9 +178,67 @@ if cmp -s "$T/sbat.csv" "$T/sbat.manifest"; then ok "embedded SBAT equals the ma
 info "SBAT check at build time: $(mget secure_boot.sbat_version_check)"
 info "shim's own revocation level: $(mget secure_boot.shim_sbat_level_latest)"
 
+echo
+echo "[5] wimboot (Windows PE loader, built from source by build/wimboot/wimbootsrc.py; unsigned)"
+WIM="$ESP/beast-booter/wimboot"
+WIM_VER="$(mget build.wimboot_version 2>/dev/null || true)"
+WIMSRC=(python3 -I "$HERE/wimboot/wimbootsrc.py")
+if [ -z "$WIM_VER" ] && [ ! -e "$WIM" ]; then
+  info "this build has no wimboot (built with BB_SKIP_WIMBOOT=1): Windows ISOs are refused"
+elif [ -z "$WIM_VER" ] || [ ! -f "$WIM" ]; then
+  bad "wimboot and the manifest's build.wimboot_version must come together (file: $([ -f "$WIM" ] && echo yes || echo no), version: '${WIM_VER}')"
+else
+  if facts="$("${WIMSRC[@]}" check "$WIM" "$WIM_VER" 2>"$T/wim.err")"; then
+    ok "beast-booter/wimboot $WIM_VER: bzImage header (BIOS, linux16), PE32+ x86_64 (UEFI, linux) with MajorImageVersion >= 1, no signature, upstream + beast-booter SBAT lines"
+    info "wimboot facts: $facts"
+  else
+    bad "beast-booter/wimboot: $(sed 's/^wimboot: error: //' "$T/wim.err")"
+  fi
+  wo="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["files"]["esp/beast-booter/wimboot"]["origin"])' "$DIST/manifest.json")"
+  if [ "$wo" = "wimboot-src:wimboot=$WIM_VER:/wimboot" ]; then ok "manifest origin: $wo"; else bad "manifest origin of beast-booter/wimboot is '$wo'"; fi
+  wkey="$(mget build.wimboot_build_key)"
+  winfo="${BB_WIMBOOT_CACHE:-$BB_ROOT/.tools/cache/wimboot}/out/$wkey/build-info.json"
+  if [ -f "$winfo" ] && [ "$(sha "$winfo")" = "$(mget build.wimboot_build_info_sha256)" ]; then
+    if [ "$("${WIMSRC[@]}" info "$(dirname "$winfo")" files.wimboot)" = "$(sha "$WIM")" ]; then
+      ok "beast-booter/wimboot is the file of wimboot build $wkey (its build-info.json is the manifest's)"
+    else
+      bad "beast-booter/wimboot differs from the file of wimboot build $wkey"
+    fi
+  else
+    info "wimboot build $wkey is not in the local cache: --rebuild builds it and compares"
+  fi
+  for f in winpeshl.ini beastboot.cmd; do
+    wf="$ESP/beast-booter/winpe/$f"
+    if [ ! -f "$wf" ]; then bad "beast-booter/winpe/$f missing"
+    elif [ "$(grep -c $'\r$' "$wf")" = "$(wc -l < "$wf")" ]; then
+      ok "beast-booter/winpe/$f has CRLF line endings"
+    else
+      bad "beast-booter/winpe/$f does not have CRLF line endings throughout"
+    fi
+  done
+fi
+
+if [ "$REBUILD" = 1 ] && [ -f "$WIM" ]; then
+  echo
+  echo "[6] rebuild wimboot from source (build/wimboot/wimbootsrc.py) and compare"
+  if WOUT="$("${WIMSRC[@]}" build --quiet 2>"$T/wimboot.log")"; then
+    WOUT="${WOUT##*$'\n'}"
+    if [ "$("${WIMSRC[@]}" info "$WOUT" version)" = "$WIM_VER" ]; then ok "wimboot $WIM_VER built from source in $WOUT"
+    else bad "this checkout builds wimboot $("${WIMSRC[@]}" info "$WOUT" version), the manifest says $WIM_VER"; fi
+    if [ "$("${WIMSRC[@]}" info "$WOUT" key)" != "$(mget build.wimboot_build_key)" ]; then
+      info "wimboot build key differs from the manifest's (other toolchain?); comparing the output anyway"
+    fi
+    if cmp -s "$WOUT/wimboot" "$WIM"; then ok "beast-booter/wimboot is byte-identical to the rebuilt one"
+    else bad "beast-booter/wimboot differs from the rebuilt one (other toolchain, see the build key above?)"; fi
+  else
+    tail -n 5 "$T/wimboot.log" | sed 's/^/        /'
+    bad "wimboot source build failed (python3 -I build/wimboot/wimbootsrc.py build)"
+  fi
+fi
+
 if [ "$REBUILD" = 1 ]; then
   echo
-  echo "[5] rebuild GRUB from source (build/grub/grubsrc.py) and compare"
+  echo "[7] rebuild GRUB from source (build/grub/grubsrc.py) and compare"
   info "manifest grubx64.efi origin: $(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["files"]["esp/EFI/BOOT/grubx64.efi"]["origin"])' "$DIST/manifest.json")"
   # A cache hit costs seconds; a cold build a few minutes (downloads the pinned source).
   if GOUT="$(python3 -I "$HERE/grub/grubsrc.py" build --quiet 2>"$T/grub.log")"; then

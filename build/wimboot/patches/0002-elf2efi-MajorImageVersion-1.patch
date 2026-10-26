@@ -1,0 +1,28 @@
+Subject: elf2efi: set MajorImageVersion to 1
+
+GRUB 2.12+ takes the LoadImage()/LoadFile2 path of its EFI "linux" command
+only for PE images with MajorImageVersion >= 1 (the Linux EFI stub
+convention for "loads its initrd via LoadFile2"). For other images it
+falls back to its legacy x86 loader, which exits boot services and enters
+the image without its EFI entry point: wimboot cannot run that way.
+Needs 0001.
+
+beast-booter (build/wimboot/); to be offered upstream with 0001.
+
+---
+--- a/src/elf2efi.c
++++ b/src/elf2efi.c
+@@ -291,6 +291,13 @@
+ 		.OptionalHeader = {
+ 			.Magic = EFI_IMAGE_NT_OPTIONAL_HDR_MAGIC,
+ 			.MajorLinkerVersion = 42,
++			/* GRUB's EFI "linux" command starts an image via
++			 * LoadImage() and serves its initrd via LoadFile2
++			 * only for MajorImageVersion >= 1 (the Linux EFI
++			 * stub convention); otherwise it uses its legacy
++			 * loader, which wimboot cannot use.
++			 */
++			.MajorImageVersion = 1,
+ 			.MinorLinkerVersion = 42,
+ 			.SectionAlignment = EFI_IMAGE_ALIGN,
+ 			.FileAlignment = EFI_FILE_ALIGN,

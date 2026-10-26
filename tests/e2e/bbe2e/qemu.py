@@ -86,6 +86,7 @@ class VM:
         disk_if: str | None = None,
         key_method: str | None = None,
         extra_args: list[str] | tuple = (),
+        snapshot: bool = False,
     ):
         if mode not in MODES:
             raise ValueError(f"mode must be one of {MODES}")
@@ -104,6 +105,7 @@ class VM:
         self.disk_if = disk_if or env.disk_interface()
         self.key_method = key_method or env.key_method(mode)
         self.extra_args = list(extra_args)
+        self.snapshot = snapshot  # writes go to a temporary overlay; `disk` stays unchanged
         if mode != "bios":
             self.vars_file = Path(vars_file) if vars_file else make_vars(mode, self.workdir / f"{name}.vars.fd", mok_certs)
         else:
@@ -138,6 +140,7 @@ class VM:
             vars_file=self.vars_file,
             disk=self.disk,
             bus=self.disk_if,
+            snapshot=self.snapshot,
             memory=self.memory,
             smp=self.smp,
             kvm=env.kvm_usable(),
@@ -399,6 +402,11 @@ class VM:
         end = time.monotonic() + 5
         while self._idle() < settle and time.monotonic() < end:
             time.sleep(0.05)
+        with self._lock:
+            return self.screen.menu()
+
+    def menu(self):
+        """The GRUB menu on the emulated serial screen right now, or None."""
         with self._lock:
             return self.screen.menu()
 

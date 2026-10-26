@@ -86,6 +86,10 @@ UPSTREAMS = {
              "supplier": "rhboot (UEFI shim maintainers)", "cpe_vendor": "redhat", "cpe_product": "shim",
              "website": "https://github.com/rhboot/shim",
              "vcs": "https://github.com/rhboot/shim", "license": "BSD-2-Clause"},
+    "wimboot": {"key": "ipxe-wimboot", "name": "wimboot", "group": "ipxe", "title": "iPXE wimboot",
+                "supplier": "iPXE project", "cpe_vendor": "ipxe", "cpe_product": "wimboot",
+                "website": "https://ipxe.org/wimboot",
+                "vcs": "https://github.com/ipxe/wimboot", "license": "GPL-2.0-or-later"},
 }
 SOURCE_FAMILY = {"grub2": "grub2", "grub2-unsigned": "grub2", "grub2-signed": "grub2",
                  "shim": "shim", "shim-signed": "shim", "shim-helpers-amd64-signed": "shim"}
@@ -145,6 +149,8 @@ ORIGIN_DEB = re.compile(r"deb:([a-z0-9][a-z0-9+.-]*)=([0-9][0-9A-Za-z.+~:-]*?)(?
 ORIGIN_REPO = re.compile(r"repo:([^\s,]+)")
 # GRUB built from source by build/grub/grubsrc.py: grub-src:grub2=<version>[:/<path in its build dir>]
 ORIGIN_GRUB = re.compile(r"grub-src:([a-z0-9][a-z0-9+.-]*)=([0-9][0-9A-Za-z.+~:-]*?)(?::(/[^\s,;)\]]*))?(?=[\s,;)\]]|$)")
+# wimboot built from source by build/wimboot/wimbootsrc.py: wimboot-src:wimboot=<version>:/<path in its build dir>
+ORIGIN_WIMBOOT = re.compile(r"wimboot-src:([a-z0-9][a-z0-9+.-]*)=([0-9][0-9A-Za-z.+~-]*?):(/[^\s,;)\]]*)(?=[\s,;)\]]|$)")
 
 
 def resigned_origin(path: Path, p: deb.DebPkg, member: str | None) -> str:
@@ -182,7 +188,9 @@ def parse_origin(origin: str) -> dict:
             for m in ORIGIN_DEB.finditer(origin)]
     grub = [{"name": m.group(1), "version": m.group(2), "path": m.group(3)}
             for m in ORIGIN_GRUB.finditer(origin)]
-    return {"kind": {"deb": "copied"}.get(kind, kind), "debs": debs, "grub": grub,
+    wimboot = [{"name": m.group(1), "version": m.group(2), "path": m.group(3)}
+               for m in ORIGIN_WIMBOOT.finditer(origin)]
+    return {"kind": {"deb": "copied"}.get(kind, kind), "debs": debs, "grub": grub, "wimboot": wimboot,
             "repo": ORIGIN_REPO.findall(origin), "signed_by_bb": "signed:beast-booter" in origin,
             "raw": origin}
 
@@ -229,6 +237,28 @@ def load_grub_build(root: Path, manifest: dict) -> dict | None:
         note = (f"GRUB build {key} is not in {cache.relative_to(root) if cache.is_relative_to(root) else cache}/out "
                 "(`python3 -I build/grub/grubsrc.py build` recreates it)")
     return {"version": ver, "key": key, "dir": out, "info": info, "note": note}
+
+
+def load_wimboot_build(root: Path, manifest: dict) -> dict | None:
+    """The source-built wimboot the manifest names (build.wimboot_*): its build-info.json from the
+    build/wimboot/wimbootsrc.py cache, accepted only if its SHA-256 is the one the manifest recorded."""
+    b = manifest.get("build", {})
+    ver, key = b.get("wimboot_version"), b.get("wimboot_build_key")
+    if not ver or not key:
+        return None
+    cache = Path(os.environ.get("BB_WIMBOOT_CACHE") or root / ".tools/cache/wimboot")
+    p = cache / "out" / key / "build-info.json"
+    info, note = None, None
+    if p.is_file():
+        raw = p.read_bytes()
+        if hashlib.sha256(raw).hexdigest() == b.get("wimboot_build_info_sha256"):
+            info = json.loads(raw)
+        else:
+            note = f"{p} is not the build-info.json the manifest recorded (wimboot_build_info_sha256)"
+    else:
+        note = (f"wimboot build {key} is not in the wimboot cache "
+                "(`python3 -I build/wimboot/wimbootsrc.py build` recreates it)")
+    return {"version": ver, "key": key, "info": info, "note": note}
 
 
 ORIGIN_REPO_FILE = re.compile(r"(?:repo|key):([^\s,]+)")
@@ -694,6 +724,49 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
                                                    "no purl here so findings are not reported twice"}})
         m.dep(grub_ref, sref, "GENERATED_FROM")
 
+    # ---- wimboot built from source (build/wimboot/wimbootsrc.py) ---------------------------
+    # Our patched build (the file on the drive), DESCENDANT_OF upstream iPXE wimboot, whose
+    # component carries the CPE (NVD names iPXE's projects with vendor "ipxe").
+    wim = load_wimboot_build(root, manifest)
+    wim_ref = None
+    if wim:
+        winfo = wim["info"] or {}
+        wim_ref = f"wimboot-src:wimboot@{wim['version']}"
+        if wim["note"]:
+            m.notes.append(wim["note"])
+        wup_ver = winfo.get("upstream_version") or wim["version"].split("+", 1)[0]
+        tag = winfo.get("tag") or f"v{wup_ver}"
+        wpatches = winfo.get("patches", [])
+        m.add({"ref": wim_ref, "kind": "source-build", "role": "shipped", "name": "wimboot",
+               "version": wim["version"], "purl": f"pkg:github/ipxe/wimboot@{quote(tag, safe='')}",
+               "supplier": "beast-booter maintainers", "homepage": UPSTREAMS["wimboot"]["website"],
+               "license": "GPL-2.0-or-later", "license_source": "wimboot LICENSE.txt and source headers",
+               "description": (f"iPXE wimboot {wup_ver} built by beast-booter (build/wimboot/wimbootsrc.py) from "
+                               f"the {tag} source archive plus {len(wpatches)} beast-booter patch(es); x86_64 "
+                               "hybrid image (BIOS via GRUB linux16, UEFI via GRUB linux), unsigned"),
+               "pedigree": {"patches": [{"type": "unofficial",
+                                         "diff": {"url": f"build/wimboot/patches/{p_['name']}"}}
+                                        for p_ in wpatches],
+                            "notes": "build/wimboot/patches/series on top of the release tag; each patch says why"}
+               if winfo else None,
+               "props": {"role": "shipped", "upstream": f"upstream:ipxe-wimboot@{wup_ver}",
+                         "source-commit": winfo.get("commit"),
+                         "source-archive": (f"{winfo['source']['name']} sha256:{winfo['source']['sha256']}"
+                                            if winfo.get("source") else None),
+                         "wimboot-build-key": wim["key"],
+                         "wimboot-build-info-sha256": manifest.get("build", {}).get("wimboot_build_info_sha256"),
+                         "built-by": "build/wimboot/wimbootsrc.py (inputs: build/wimboot/source.lock.json, patches/)",
+                         "toolchain": "; ".join(f"{k}: {winfo['toolchain'][k]}" for k in ("gcc", "ld")
+                                                if k in winfo.get("toolchain", {})) or None,
+                         "beast-booter-patches": [f"{p_['name']} sha256:{p_['sha256']}" for p_ in wpatches],
+                         "sbat": (winfo.get("sbat") or "").strip().replace("\n", " ") or None,
+                         "secure-boot": "not signed: the menu boots Windows only with Secure Boot off",
+                         "vulnerability-tracking": (f"CPE on upstream:ipxe-wimboot@{wup_ver} (NVD vendor ipxe, "
+                                                    f"product wimboot); the purl names the upstream tag {tag}")}})
+        m.dep(root_ref, wim_ref, "CONTAINS")
+        wup = add_upstream("wimboot", wup_ver, None, of=f"wimboot {wim['version']} (source build)")
+        m.dep(wim_ref, wup, "DESCENDANT_OF")
+
     # ---- tooling (build / install / test) ---------------------------------------------------
     for name, role, used in TOOLING:
         p = pkgs.get(name) or resolve(name, None)
@@ -782,6 +855,25 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
             if item["props"]["origin-verified"].startswith("MISMATCH"):
                 m.notes.append(f"{rel}: {item['props']['origin-verified']}")
                 m.provenance_errors.append(f"{rel}: {item['props']['origin-verified']}")
+        elif o["kind"] == "wimboot-src":
+            w = o["wimboot"][0] if o["wimboot"] else {}
+            if wim_ref is None or w.get("version") != wim["version"]:
+                item["props"]["origin-verified"] = "MISMATCH: origin names no file of the manifest's wimboot build"
+            elif wim["info"] is None:
+                item["props"]["origin-verified"] = f"UNVERIFIED: {wim['note']}"
+            else:
+                want = wim["info"]["files"].get(w["path"].lstrip("/"))
+                item["props"]["origin-verified"] = (
+                    f"sha256 matches build-info.json of wimboot build {wim['key']} ({w['path'].lstrip('/')})"
+                    if want == f["sha256"] else
+                    f"MISMATCH: differs from {w['path'].lstrip('/')} of wimboot build {wim['key']}")
+                item["props"]["package-path"] = w["path"]
+            if wim_ref:
+                item["parent"] = wim_ref
+                m.dep(fref, wim_ref, "CONTAINED_BY")
+            if item["props"]["origin-verified"].startswith("MISMATCH"):
+                m.notes.append(f"{rel}: {item['props']['origin-verified']}")
+                m.provenance_errors.append(f"{rel}: {item['props']['origin-verified']}")
         elif o["kind"] == "built":
             item["props"]["built-from"] = o["raw"].removeprefix("built:")
             tools = []
@@ -816,7 +908,8 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
             item["props"]["origin-verified"] = verify_repo_origin(root, dist / rel, o["raw"])
             if not item["props"]["origin-verified"].startswith("sha256 matches"):
                 m.notes.append(f"{rel}: {item['props']['origin-verified']}")
-        if o["kind"] not in ("copied", "grub-src") or (o["kind"] == "grub-src" and grub_ref is None):
+        if o["kind"] not in ("copied", "grub-src", "wimboot-src") or (o["kind"] == "grub-src" and grub_ref is None) \
+                or (o["kind"] == "wimboot-src" and wim_ref is None):
             m.dep(root_ref, fref, "CONTAINS")
         # EFI binaries: SBAT, Authenticode, signers
         if rel.lower().endswith(".efi"):

@@ -134,6 +134,11 @@ dist/
     beast-net/initrd.img     helper initramfs (build/beastnet/, docs/BEASTNET.md §5)
     beast-net/VERSION        "beast-net <bb version> kernel <kver>"
     beast-net/catalog.json   firmware pack catalog (docs/BEASTNET.md §6)
+    beast-booter/wimboot     iPXE's wimboot (Windows PE loader), built from its pinned release
+                             source + our patches (build/wimboot/); one x86_64 hybrid image for
+                             BIOS (GRUB linux16) and UEFI (GRUB linux); unsigned
+    beast-booter/winpe/      winpeshl.ini, beastboot.cmd: the Windows PE start-up files the menu
+                             injects with wimboot (build/winpe/, CRLF line endings)
 ```
 
 There is deliberately **no** `fbx64.efi` in `EFI/BOOT/`: shim would run the
@@ -147,6 +152,12 @@ and SHA-256 (`build.efi_memdisk`, `build.efi_memdisk_sha256`). The copies in
 `grub/fonts/` serve legacy BIOS. Theme files and PNGs load from the ESP in
 every mode. `BB_SKIP_BEASTNET=1` builds without `beast-net/`; the menu then
 hides its entry.
+
+wimboot and Secure Boot: our wimboot is patched (on UEFI it takes the files
+GRUB passes with `initrd newc:...` through LoadFile2, see
+build/wimboot/README.md) and not signed, so shim/GRUB refuse it under Secure
+Boot; the menu boots Windows ISOs only with Secure Boot off.
+`BB_SKIP_WIMBOOT=1` builds without `beast-booter/`.
 
 The installer adds to the ESP, outside `dist/`: `BEAST-BOOTER.ID` (install
 id and layout version), `grub/beast/device.cfg` (§5), `grub/grubenv` (1024
@@ -185,14 +196,18 @@ refuses to write if a file is missing or its SHA-256 does not match.
 The build also records `build_id`, a `build{}` section (tool and package
 versions; for GRUB, which is built from source by `build/grub/grubsrc.py`:
 `grub_version`, `grub_build_key`, `grub_build_info_sha256`, `grub_source`,
-`grub_patches`, `grub_toolchain`), and in `secure_boot`: `cert_sha1` (what
+`grub_patches`, `grub_toolchain`; for wimboot, built by
+`build/wimboot/wimbootsrc.py`: `wimboot_version`, `wimboot_build_key`,
+`wimboot_build_info_sha256`, `wimboot_source`, `wimboot_patches`,
+`wimboot_toolchain`), and in `secure_boot`: `cert_sha1` (what
 MokManager shows), `sbat_version_check`, `sbat_source`, `grub_security_fixes`,
 `shim_sbat_level_latest`, `shim_signers`, `shim_authenticode_sha256`,
 `shim_distro`, `grub_unsigned_sha256` and, for the re-signed helper kernel,
 `beastnet_kernel_source`, `beastnet_kernel_authenticode_sha256`,
 `beastnet_kernel_unsigned_sha256` and `beastnet_kernel_replaced_signers`. A `grub-src:` origin names
 a file of that GRUB build; gen_sbom.py and scan_vulns.py check it against the
-build's `build-info.json`. `sbsign` embeds a signing time, so a re-signed
+build's `build-info.json`. A `wimboot-src:wimboot=<version>:/wimboot` origin
+names the file of the wimboot build; gen_sbom.py checks it the same way. `sbsign` embeds a signing time, so a re-signed
 `grubx64.efi` differs byte-wise; the build keeps the existing signature when the
 unsigned image is unchanged (`BB_RESIGN=1` forces a new one), and
 `build/verify-dist.sh --rebuild` checks that the unsigned image and `core.img`

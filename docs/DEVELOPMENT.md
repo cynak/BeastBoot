@@ -124,6 +124,14 @@ does not run on the host. With `BB_OFFLINE=1`, the GRUB build downloads
 nothing. It needs the sources and `.deb`s in `.tools/cache/grub-src/dl/`,
 and the docker builder is refused because it needs the network.
 
+wimboot (`build/wimboot/wimbootsrc.py`, the Windows PE loader on the ESP)
+works the same way, in seconds: `BB_WIMBOOT_BUILDER` (`auto`, `native` with
+the host's gcc/binutils/make, or `docker` in GRUB's pinned image), cache
+`.tools/cache/wimboot/` (`BB_WIMBOOT_CACHE`), `BB_OFFLINE=1` honoured.
+`BB_SKIP_WIMBOOT=1` builds without it. See
+[build/wimboot/README.md](../build/wimboot/README.md) for the patches and why
+one binary serves BIOS and UEFI.
+
 `.venv/` is used by VS Code (interpreter, debugger, Test Explorer, ruff).
 Activate it in a shell with `source .venv/bin/activate` if you want its
 `pytest`/`ruff` on your `PATH`; `make` does not need it.
@@ -138,6 +146,8 @@ Activate it in a shell with `source .venv/bin/activate` if you want its
 | `grub/` | the menu: `grub.cfg` and `beast/*.cfg` (GRUB script) -> `dist/esp/grub/` |
 | `build/` | `build.sh` (writes `dist/`), `keygen.sh`, `verify-dist.sh`, module lists, SBAT template, `early-bios.cfg`, the release `Containerfile` |
 | `build/theme/` | `mktheme.py` (draws the graphical menu's theme images) and `mkmemdisk.py` (the font memdisk inside `grubx64.efi`) |
+| `build/wimboot/` | builds iPXE's wimboot (`dist/esp/beast-booter/wimboot`) from its pinned release source plus our patches; see [build/wimboot/README.md](../build/wimboot/README.md) |
+| `build/winpe/` | the Windows PE start-up files the menu injects with wimboot (`dist/esp/beast-booter/winpe/`): `winpeshl.ini`, `beastboot.cmd` |
 | `build/beastnet/` | builds the beast-net helper (`dist/esp/beast-net/`): pinned Ubuntu packages, module list, initramfs, firmware catalog; see [build/beastnet/README.md](../build/beastnet/README.md) |
 | `beastnet/` | the helper's own code: `python/beastnet/` (network, WiFi, download, hand-off, curses and plain UIs), `rootfs/` (`/init`, udhcpc script), `tests/` (unit tests) |
 | `keys/` | your local Secure Boot signing key (`make keys`; private files are git-ignored) |

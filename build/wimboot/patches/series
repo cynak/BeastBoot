@@ -1,0 +1,5 @@
+# beast-booter patches on top of wimboot (build/wimboot/source.lock.json),
+# applied in this order with patch -p1 -F0. Each patch says why in its header.
+0001-efi-initrd-via-LoadFile2.patch
+0002-elf2efi-MajorImageVersion-1.patch
+0003-sbat-beast-booter-vendor-line.patch

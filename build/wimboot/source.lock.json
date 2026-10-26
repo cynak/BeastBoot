@@ -1,0 +1,32 @@
+{
+  "comment": "Pinned input of the wimboot build (build/wimboot/wimbootsrc.py): iPXE's wimboot release tag as GitHub's source archive. The archive is checked against its SHA-256 and size before use, and its embedded commit id against 'commit'. To update: new tag, url, sha256, size, commit, source_date_epoch; then check that every patch in patches/series still applies (the build fails otherwise).",
+  "schema": 1,
+  "name": "wimboot",
+  "upstream_version": "2.9.0",
+  "tag": "v2.9.0",
+  "commit": "e5875648bd52a3b915ae54933d9adf8ac763baca",
+  "patch_level": 1,
+  "license": "GPL-2.0-or-later",
+  "homepage": "https://ipxe.org/wimboot",
+  "vcs": "https://github.com/ipxe/wimboot",
+  "source": {
+    "name": "wimboot-2.9.0.tar.gz",
+    "sha256": "3b83be6d55cf49a4a997189dbbb048024c5232b0d7f8a45fc864b290dc04a4e5",
+    "size": 663894,
+    "urls": ["https://github.com/ipxe/wimboot/archive/refs/tags/v2.9.0.tar.gz"]
+  },
+  "source_date_epoch": 1763423895,
+  "source_date_epoch_comment": "2025-11-17T23:58:15Z, the publication time of the v2.9.0 release: file times of the output",
+  "prebuilt": ["src/wimboot.i386", "src/wimboot.x86_64", "src/wimboot.arm64"],
+  "prebuilt_comment": "binaries committed in the upstream tree; deleted before the build so nothing prebuilt can reach the output",
+  "target": "wimboot.x86_64.efi",
+  "target_comment": "the x86_64 hybrid image: a bzImage header for BIOS (GRUB linux16, wimboot's own 16/32-bit code) plus a PE32+ EFI entry point for 64-bit UEFI - one file for both (upstream ships the same image as 'wimboot'). The make target that copies it to 'wimboot.x86_64' also compares pesign hashes; we skip it (no pesign, nothing is signed)",
+  "upstream_release_binary": {
+    "comment": "informational only: upstream's own x86_64 binary (in-tree src/wimboot.x86_64, unpatched, upstream toolchain) and the Microsoft-signed release asset. Neither is shipped; our patched build differs from both",
+    "intree_sha256": "05141a014069f97e9b21cffa67e08751bc99ff5be49eebd927aabb25255437a5",
+    "release_asset": "https://github.com/ipxe/wimboot/releases/download/v2.9.0/wimboot",
+    "release_asset_sha256": "5f067ccdc4d084d5bf77b6c853bd0f8402dfc2b4cd1b103d358993ae97fae8e3"
+  },
+  "docker_comment": "the docker builder uses GRUB's pinned image and apt snapshot (build/grub/source.lock.json 'docker') with these packages",
+  "docker_apt": ["gcc", "libc6-dev", "binutils", "make", "patch", "python3", "ca-certificates"]
+}

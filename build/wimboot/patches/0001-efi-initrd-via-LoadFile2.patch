@@ -1,0 +1,222 @@
+Subject: efi: take the files from an initrd passed via LoadFile2
+
+GRUB's EFI "linux" command (2.12 and later) starts an image with
+LoadImage()/StartImage() and passes its initrd, including GRUB-made
+"newc:" files, through EFI_LOAD_FILE2_PROTOCOL on the Linux initrd media
+device path (LINUX_EFI_INITRD_MEDIA_GUID), as the Linux EFI stub expects.
+Upstream wimboot reads its files only from the simple file system of its
+own device, and an image that GRUB starts from memory has none, so
+wimboot could not boot from GRUB on UEFI.
+
+When an initrd is provided this way, extract its CPIO files (as the BIOS
+path does) and skip the file system. Everything after extraction (BCD
+patching, bootmgfw extraction from the WIM, file injection) is unchanged.
+Without such an initrd, wimboot behaves exactly as upstream (iPXE).
+
+beast-booter (build/wimboot/); to be offered upstream.
+
+---
+--- a/src/efifile.c
++++ b/src/efifile.c
+@@ -30,6 +30,7 @@
+ #include <wchar.h>
+ #include "wimboot.h"
+ #include "vdisk.h"
++#include "cpio.h"
+ #include "cmdline.h"
+ #include "wimpatch.h"
+ #include "wimfile.h"
+@@ -121,10 +122,170 @@
+ 	}
+ }
+ 
++/** EFI_LOAD_FILE2_PROTOCOL GUID */
++static EFI_GUID efi_load_file2_protocol_guid = {
++	0x4006c0c1, 0xfcb3, 0x403e,
++	{ 0x99, 0x6d, 0x4a, 0x6c, 0x87, 0x24, 0xe0, 0x6d }
++};
++
++/** EFI_LOAD_FILE2_PROTOCOL */
++typedef struct _EFI_LOAD_FILE2_PROTOCOL EFI_LOAD_FILE2_PROTOCOL;
++struct _EFI_LOAD_FILE2_PROTOCOL {
++	EFI_STATUS ( EFIAPI * LoadFile ) ( EFI_LOAD_FILE2_PROTOCOL *This,
++					   EFI_DEVICE_PATH_PROTOCOL *FilePath,
++					   BOOLEAN BootPolicy,
++					   UINTN *BufferSize, VOID *Buffer );
++};
++
++/** Linux initrd media device path (LINUX_EFI_INITRD_MEDIA_GUID) */
++static struct {
++	VENDOR_DEVICE_PATH vendor;
++	EFI_DEVICE_PATH_PROTOCOL end;
++} __attribute__ (( packed )) efi_initrd_path = {
++	.vendor = {
++		.Header = EFI_DEVPATH_INIT ( efi_initrd_path.vendor,
++					     MEDIA_DEVICE_PATH,
++					     MEDIA_VENDOR_DP ),
++		.Guid = { 0x5568e427, 0x68fc, 0x4f3d,
++			  { 0xac, 0x74, 0xca, 0x55, 0x52, 0x31, 0xcc, 0x68 } },
++	},
++	.end = EFI_DEVPATH_END_INIT ( efi_initrd_path.end ),
++};
++
++/** WIM file found in the initrd */
++static struct vdisk_file *efi_initrd_wim;
++
++/** boot<arch>.efi found in the initrd */
++static struct vdisk_file *efi_initrd_bootarch;
++
++/**
++ * Read from file in the initrd
++ *
++ * @v vfile		Virtual file
++ * @v data		Data buffer
++ * @v offset		Offset
++ * @v len		Length
++ */
++static void efi_read_initrd_file ( struct vdisk_file *vfile, void *data,
++				   size_t offset, size_t len ) {
++
++	memcpy ( data, ( vfile->opaque + offset ), len );
++}
++
++/**
++ * Add file found in the initrd
++ *
++ * @v name		File name
++ * @v data		File data
++ * @v len		Length
++ * @ret rc		Return status code
++ */
++static int efi_add_initrd_file ( const char *name, void *data, size_t len ) {
++	char bootarch[ VDISK_NAME_LEN + 1 /* NUL */ ];
++	size_t name_len = strlen ( name );
++	struct vdisk_file *vfile;
++
++	/* Store file */
++	vfile = vdisk_add_file ( name, data, len, efi_read_initrd_file );
++
++	/* Check for special-case files (as for the file system below) */
++	snprintf ( bootarch, sizeof ( bootarch ), "%ls", efi_bootarch_wname() );
++	if ( strcasecmp ( name, bootarch ) == 0 ) {
++		DBG ( "...found bootloader file %s\n", name );
++		efi_initrd_bootarch = vfile;
++	} else if ( strcasecmp ( name, "bootmgfw.efi" ) == 0 ) {
++		DBG ( "...found bootloader file %s\n", name );
++		bootmgfw = vfile;
++	} else if ( strcasecmp ( name, "bootmgfw_EX.efi" ) == 0 ) {
++		DBG ( "...found bootloader file %s\n", name );
++		bootmgfw_ex = vfile;
++	} else if ( strcasecmp ( name, "BCD" ) == 0 ) {
++		DBG ( "...found BCD\n" );
++		vdisk_patch_file ( vfile, efi_patch_bcd );
++	} else if ( ( name_len >= 4 ) &&
++		    ( strcasecmp ( ( name + name_len - 4 ), ".wim" ) == 0 ) ) {
++		DBG ( "...found WIM file %s\n", name );
++		efi_initrd_wim = vfile;
++	}
++
++	return 0;
++}
++
++/**
++ * Extract files from an initrd provided via EFI_LOAD_FILE2_PROTOCOL
++ *
++ * @ret found		An initrd was found and extracted
++ *
++ * This is how GRUB's "linux" and "initrd" commands pass an initrd
++ * (including "newc:" files) to an EFI image (the Linux EFI stub
++ * convention).
++ */
++static int efi_extract_initrd ( void ) {
++	EFI_BOOT_SERVICES *bs = efi_systab->BootServices;
++	EFI_DEVICE_PATH_PROTOCOL *path = &efi_initrd_path.vendor.Header;
++	union {
++		EFI_LOAD_FILE2_PROTOCOL *lf2;
++		void *interface;
++	} lf2;
++	EFI_PHYSICAL_ADDRESS phys;
++	EFI_HANDLE handle;
++	UINTN size = 0;
++	UINTN pages;
++	void *data;
++	EFI_STATUS efirc;
++
++	/* Find initrd media */
++	if ( bs->LocateDevicePath ( &efi_load_file2_protocol_guid, &path,
++				    &handle ) != 0 ) {
++		DBG ( "...no initrd via LoadFile2\n" );
++		return 0;
++	}
++	if ( ( efirc = bs->OpenProtocol ( handle,
++					  &efi_load_file2_protocol_guid,
++					  &lf2.interface, efi_image_handle,
++					  NULL,
++					  EFI_OPEN_PROTOCOL_GET_PROTOCOL ))!=0){
++		die ( "Could not open initrd LoadFile2: %#lx\n",
++		      ( ( unsigned long ) efirc ) );
++	}
++
++	/* Get initrd size */
++	efirc = lf2.lf2->LoadFile ( lf2.lf2, path, FALSE, &size, NULL );
++	if ( ( efirc != EFI_BUFFER_TOO_SMALL ) || ( size == 0 ) ) {
++		die ( "Could not get initrd size: %#lx\n",
++		      ( ( unsigned long ) efirc ) );
++	}
++
++	/* Allocate memory (reusable by Windows once boot services exit) */
++	pages = ( ( size + PAGE_SIZE - 1 ) / PAGE_SIZE );
++	if ( ( efirc = bs->AllocatePages ( AllocateAnyPages,
++					   EfiBootServicesData, pages,
++					   &phys ) ) != 0 ) {
++		die ( "Could not allocate %ld pages for initrd: %#lx\n",
++		      ( ( unsigned long ) pages ), ( ( unsigned long ) efirc ) );
++	}
++	data = ( ( void * ) ( intptr_t ) phys );
++
++	/* Load initrd (the loader may serve it only once) */
++	if ( ( efirc = lf2.lf2->LoadFile ( lf2.lf2, path, FALSE, &size,
++					   data ) ) != 0 ) {
++		die ( "Could not load initrd: %#lx\n",
++		      ( ( unsigned long ) efirc ) );
++	}
++	DBG ( "...loaded initrd at [%p,%p) via LoadFile2\n",
++	      data, ( data + size ) );
++
++	/* Extract files */
++	if ( cpio_extract ( data, size, efi_add_initrd_file ) != 0 )
++		die ( "FATAL: could not extract initrd files\n" );
++
++	return 1;
++}
++
+ /**
+  * Extract files from EFI file system
+  *
+- * @v handle		Device handle
++ * @v handle		Device handle (not used if an initrd is provided)
+  */
+ void efi_extract ( EFI_HANDLE handle ) {
+ 	EFI_BOOT_SERVICES *bs = efi_systab->BootServices;
+@@ -146,6 +307,13 @@
+ 	CHAR16 *wname;
+ 	EFI_STATUS efirc;
+ 
++	/* Prefer an initrd provided by the boot loader via LoadFile2 */
++	if ( efi_extract_initrd() ) {
++		wim = efi_initrd_wim;
++		bootarch = efi_initrd_bootarch;
++		goto extracted;
++	}
++
+ 	/* Open file system */
+ 	if ( ( efirc = bs->OpenProtocol ( handle,
+ 					  &efi_simple_file_system_protocol_guid,
+@@ -214,6 +382,7 @@
+ 		}
+ 	}
+ 
++ extracted:
+ 	/* Use only boot<arch>.efi if provided */
+ 	if ( bootarch ) {
+ 		if ( bootmgfw )

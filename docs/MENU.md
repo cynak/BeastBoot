@@ -105,6 +105,7 @@ set bb_serial=1
 | `bb_gfxmode=WxH` | screen mode(s) for the graphical menu, a GRUB `gfxmode` list such as `1280x720` or `1024x768,auto`. Default: `1920x1080,1280x720,1024x768,auto` (the first mode the firmware offers) |
 | `bb_theme=/path/theme.txt` | use your own GRUB theme file from the data partition instead of BeastBoot's (see [Changing the look](#changing-the-look)) |
 | `bb_fs_addon=0` | do not use the [exFAT add-on](ISO_SUPPORT.md#the-exfat-add-on): casper and live-boot ISOs on an exFAT drive are started exactly as on FAT32 (with the ISO's own `loopback.cfg`). Default: on |
+| `bb_kargs="word ..."` | extra kernel parameters added at the end of the command line of every ISO started by one of BeastBoot's own Linux recipes (casper, live-boot, archiso, dracut-live, anaconda, suse), for example `bb_kargs="console=ttyS0,115200"`. Not added for an ISO started with its own `loopback.cfg` (GRUB cannot change those lines), for Windows or EFI loaders, or for the network helper. Default: empty. Used by the real-ISO tests ([tests/e2e/REAL_ISOS.md](../tests/e2e/REAL_ISOS.md)) |
 | `bb_beastnet_script=/path/plan.json` | start the network helper in script mode with this JSON plan (a path on the data partition) instead of asking questions; see [BEASTNET.md](BEASTNET.md) §5 |
 
 The same `bb_*` settings may also be put in `grub/beast/device.cfg` on the

@@ -1,0 +1,21 @@
+Subject: sbat: add a beast-booter vendor line
+
+A modified build keeps the upstream "wimboot" SBAT line and adds its own
+vendor line (SBAT.md, "product.vendor"), so the metadata describes the
+code truthfully. beast-booter ships wimboot unsigned (Windows boots with
+Secure Boot off), so the line is informational.
+
+---
+--- a/src/efimain.c
++++ b/src/efimain.c
+@@ -44,6 +44,10 @@
+ 	/* wimboot version */						\
+ 	"wimboot," SBAT_GENERATION ",iPXE,wimboot," VERSION ","		\
+ 	"https://ipxe.org/wimboot"					\
++	"\n"								\
++	/* Modified build (see the vendor's patches) */			\
++	"wimboot.beastboot,1,BeastBoot,wimboot," VERSION ","		\
++	"https://github.com/cynak/BeastBoot"				\
+ 	"\n"
+ 
+ /** SBAT metadata (with no terminating NUL) */
