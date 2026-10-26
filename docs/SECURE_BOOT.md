@@ -261,8 +261,10 @@ Debian (the key built into Debian's shim), and it is not revoked (firmware
 - **Unsigned kernels** (for example Arch Linux's official ISO, many rescue
   ISOs) do not boot with Secure Boot on. Turn Secure Boot off, or sign them
   yourself and enroll your key — your choice, not BeastBoot's.
-- **Windows installers** are not supported by BeastBoot 0.1 (with or
-  without Secure Boot).
+- **Windows ISOs** (installation, Windows PE) boot through wimboot, which
+  is not signed, so only with Secure Boot **off**. With Secure Boot on, the
+  menu stops with `windows-sb` and says to turn it off for that boot
+  ([ISO_SUPPORT.md](ISO_SUPPORT.md#windows)).
 
 BeastBoot never works around a failed check. The menu explains what failed
 and what you can do (trust Ubuntu's key, enroll that distribution's key, or

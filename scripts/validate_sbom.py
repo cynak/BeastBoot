@@ -296,8 +296,21 @@ def main() -> int:
             dep_of = {d["ref"]: set(d.get("dependsOn", [])) for d in cdx.get("dependencies", [])}
             file_ref = {c["name"]: c["bom-ref"] for c in file_comps.values()}
             reconciled, pk_missed = [], []
+            by_ref = {c["bom-ref"]: c for c in comps}
             for p in pkgs:
                 c = by_purl.get(p["purl"])
+                if c is None and not p["purl"]:
+                    # No purl (e.g. a PE version resource with only a product name, like our
+                    # beastmount.exe): accept it when the file it was found in depends on an SBOM
+                    # component of that name.
+                    named = [by_ref[r] for f in p["locations"] if f in file_ref
+                             for r in dep_of.get(file_ref[f], set())
+                             if r in by_ref and by_ref[r].get("name") == p["name"]]
+                    if named:
+                        reconciled.append({"syft": f"{p['name']} (no purl)", "sbom": named[0]["bom-ref"],
+                                           "files": [file_ref[f] for f in p["locations"] if f in file_ref],
+                                           "package": parent_of.get(named[0]["bom-ref"])})
+                        continue
                 if c is None:
                     pk_missed.append(p)
                     continue

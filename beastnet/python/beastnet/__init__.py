@@ -7,4 +7,4 @@ beastnet/README.md for how it is put together and tested.
 Standard library only, Python 3.10+.
 """
 
-__version__ = "0.1.2"
+__version__ = "0.2.0"
