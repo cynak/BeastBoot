@@ -493,6 +493,35 @@
       ]
     },
     {
+      "id": "win11-eval-pe",
+      "family": "windows",
+      "name": "Windows 11 Enterprise 26H2 evaluation (en-US) (Windows PE mode)",
+      "version": "26300.9457",
+      "url": "https://go.microsoft.com/fwlink/?LinkId=2382600&clcid=0x409&culture=en-us&country=us",
+      "file": "26300.9457.260913-1737.26h2_ge_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_x64FRE_en-us.iso",
+      "sha256": "bc3f24086ebadc94489066b5ad78089e2cf5c3491e90e790bb81a2b199c10e38",
+      "sha256_url": null,
+      "sha256_source": "https://go.microsoft.com/fwlink/?LinkId=2382606 (Microsoft: verify the authenticity of a Windows 11 Enterprise Evaluation ISO, EN-US DVD9)",
+      "size": 8225329152,
+      "recipe": "windows",
+      "modes": [
+        "uefi",
+        "bios"
+      ],
+      "fs": [
+        "exfat"
+      ],
+      "ram_mb": 8192,
+      "timeout_s": 900,
+      "result": [
+        "^winpe-ok\\s*$"
+      ],
+      "cache_id": "win11-eval",
+      "settings": {
+        "bb_windows": "pe"
+      }
+    },
+    {
       "id": "winserver2025-eval",
       "family": "windows",
       "name": "Windows Server 2025 evaluation (en-US)",

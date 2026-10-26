@@ -166,3 +166,18 @@ def test_recipe_by_filesystem():
     e = dict(ENTRY, recipe_fs={"ntfs": "loopback"})
     assert _judge(_log(READY.replace("fs=exfat", "fs=ntfs"), f"BEAST: boot {ISO} recipe=loopback", *OK), entry=e, fs="ntfs").status == "pass"
     assert _judge(_log(READY, f"BEAST: boot {ISO} recipe=loopback", *OK), entry=e).status == "fail"
+
+
+def test_settings_and_cache_id():
+    """`settings` become exported menu variables; `cache_id` shares another entry's download."""
+    entries = realiso.load()
+    by_id = {e["id"]: e for e in entries}
+    pe = by_id["win11-eval-pe"]
+    assert realiso.cache_dir(pe) == realiso.cache_dir(by_id["win11-eval"])
+    cfg = realiso.config_text(pe)
+    assert 'set bb_windows="pe"' in cfg and "export bb_windows" in cfg
+    bad = {"v": 1, "isos": [dict(pe, id="x1", cache_id="nope"),
+                            dict(pe, id="x2", cache_id="win11-eval", settings={"bb_windows": 'pe"; reboot'})]}
+    errs = realiso.validate(bad)
+    assert any("cache_id must name another entry" in e for e in errs)
+    assert any("settings must map" in e for e in errs)

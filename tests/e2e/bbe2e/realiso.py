@@ -149,6 +149,15 @@ def validate(cat: dict) -> list[str]:
             errs.append(f"{where}: recipe_fs must map data filesystems to recipe names")
         if '"' in e.get("kargs", "") or "\\" in e.get("kargs", ""):
             errs.append(f"{where}: kargs must not contain quotes or backslashes")
+        sets = e.get("settings") or {}
+        if not isinstance(sets, dict) or not all(
+                isinstance(k, str) and re.fullmatch(r"bb_[a-z][a-z0-9_]*", k) and k != "bb_kargs"
+                and isinstance(v, str) and re.fullmatch(r"[A-Za-z0-9_.,=:/-]*", v) for k, v in sets.items()):
+            errs.append(f"{where}: settings must map bb_* menu variables to plain values")
+    ids = {e.get("id") for e in cat.get("isos", [])}
+    for e in cat.get("isos", []):
+        if e.get("cache_id") and (e["cache_id"] not in ids or e["cache_id"] == e.get("id")):
+            errs.append(f"isos[{e.get('id')}]: cache_id must name another entry (same ISO)")
     return errs
 
 
@@ -307,7 +316,9 @@ class Iso:
 
 
 def cache_dir(entry: dict) -> Path:
-    return CACHE_DIR / entry["id"]
+    """Download cache of the entry's ISO; entries with `cache_id` share another entry's
+    (the same ISO booted with other settings)."""
+    return CACHE_DIR / entry.get("cache_id", entry["id"])
 
 
 def _read_meta(entry: dict) -> dict | None:
@@ -346,7 +357,8 @@ def fetch(entry: dict, get=http_text) -> Iso:
     """The verified ISO for `entry`: BB_ISO_<ID>, else the cache, else a download."""
     with _fetch_lock:  # one download at a time in this process
         exp = expected(entry, get)
-        override = os.environ.get(env_name(entry["id"]))
+        override = os.environ.get(env_name(entry["id"])) or (
+            entry.get("cache_id") and os.environ.get(env_name(entry["cache_id"])))
         if override:
             path = Path(override).expanduser().resolve()
             got = _verify(path, exp)
@@ -413,6 +425,8 @@ def config_text(entry: dict) -> str:
     lines = []
     if entry.get("kargs"):
         lines += [f'set bb_kargs="{entry["kargs"]}"', "export bb_kargs"]
+    for k, v in sorted((entry.get("settings") or {}).items()):  # menu variables (validated)
+        lines += [f'set {k}="{v}"', f"export {k}"]
     return images.user_config(debug=True, timeout=5, extra="\n".join(lines))
 
 
