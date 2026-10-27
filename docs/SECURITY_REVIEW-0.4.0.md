@@ -4,7 +4,7 @@ Scope: what 0.4.0 adds for Windows ISOs with Secure Boot on: the BeastBoot-signe
 wimboot, the menu's prepared-copy path, the helper action `winboot` and the host
 command `beast-boot prepare-windows`. Four read-only reviews (wimboot; menu and
 helper; host tool and UDF reader, with 7 M fuzz cases; SBOM and vulnerability
-scan). Status: **fixes in progress**.
+scan). Status: **fixed** (W1-W3: wimboot patches 0004-0007, fuzzed; H1-H5, N1-N3, S1, D1: 929df86). D2 and D3 moved to 0.5.0.
 
 ## Findings to fix before release
 
