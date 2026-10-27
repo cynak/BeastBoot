@@ -129,6 +129,33 @@
       "vendor_commits": ["debian: https://salsa.debian.org/grub-team/grub/-/commit/8719ef8a523f2a89aeff1b86f5e14c3bba7a7d11 (changes debian/patches/secure-boot/efi-peimage.patch; build/grub/upstream/debian-8719ef8a523f2a89aeff1b86f5e14c3bba7a7d11.patch)"],
       "where": "build/grub/patches/0003-efi-peimage-only-register-loader-when-shim-loader-protocol-absent.patch (Debian's change, applied to the patched peimage.c)",
       "evidence": [{"patch": "patches/0003-efi-peimage-only-register-loader-when-shim-loader-protocol-absent.patch"}]
+    },
+    {
+      "id": "CVE-2024-56737",
+      "summary": "fs/hfs: stack out-of-bounds write with grub_strcpy() in grub_hfs_mount() (also CVE-2024-45782); module hfs ships only in /grub/i386-pc",
+      "cvss31": "MEDIUM",
+      "sbat": "none needed (older than the November 2025 push; part of 2.14, so grub,6 already covers it)",
+      "upstream_commits": ["417547c10410b714e43f08f74137c24015f8f4c3"],
+      "where": "upstream GRUB 2.14 release (grub2_2.14.orig.tar.xz = grub-2.14.tar.xz)",
+      "evidence": [{"commit": "417547c10410b714e43f08f74137c24015f8f4c3"}]
+    },
+    {
+      "id": "CVE-2024-49504",
+      "summary": "disk/cryptodisk: the CLI stayed usable after a TPM key unlocked the root device; it now needs the LUKS password",
+      "cvss31": "MEDIUM",
+      "sbat": "none needed (older than the November 2025 push; part of 2.14, so grub,6 already covers it)",
+      "upstream_commits": ["13febd78db3cd85dcba67d8ad03ad4d42815f11e"],
+      "where": "upstream GRUB 2.14 release (grub2_2.14.orig.tar.xz = grub-2.14.tar.xz)",
+      "evidence": [{"commit": "13febd78db3cd85dcba67d8ad03ad4d42815f11e", "files": ["grub-core/disk/cryptodisk.c",  "grub-core/kern/main.c", "grub-core/normal/auth.c", "grub-core/normal/main.c", "grub-core/normal/menu_entry.c"], "skip_hunks_matching": "^\\+grub_cryptodisk_challenge_password \\(void\\)", "fuzz": 2}]
+    },
+    {
+      "id": "CVE-2025-4382",
+      "summary": "kern/rescue_reader: rescue mode was reachable, with the TPM-released LUKS key still in memory, without CLI authentication",
+      "cvss31": "5.9 MEDIUM",
+      "sbat": "none needed (older than the November 2025 push; part of 2.14, so grub,6 already covers it)",
+      "upstream_commits": ["c448f511e74cb7c776b314fcb7943f98d3f22b6d"],
+      "where": "upstream GRUB 2.14 release (grub2_2.14.orig.tar.xz = grub-2.14.tar.xz)",
+      "evidence": [{"commit": "c448f511e74cb7c776b314fcb7943f98d3f22b6d", "fuzz": 2}]
     }
   ]
 }

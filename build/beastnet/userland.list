@@ -90,3 +90,7 @@ exclude usr/lib/python3.14/uuid.py usr/lib/python3.14/lib-dynload/_uuid.*
 exclude usr/*bin/tar usr/*bin/cpio usr/*bin/unzip usr/*bin/rpm usr/*bin/rpm2cpio
 exclude usr/*bin/dpkg usr/*bin/dpkg-deb usr/*bin/ar usr/*bin/wget usr/*bin/ssl_client
 exclude usr/*bin/httpd usr/*bin/netstat usr/*bin/udhcpc6 usr/*bin/awk
+# findfs + swapon/swapoff: the busybox volume-id prober (romfs, CVE-2026-88832)
+# is reachable only through these and `mount LABEL=/UUID=`; /init finds the
+# partition with util-linux blkid and mounts /dev paths.
+exclude usr/*bin/findfs usr/*bin/swapon usr/*bin/swapoff

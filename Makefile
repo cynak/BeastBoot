@@ -8,7 +8,7 @@ LAYOUT ?= msdos
 FS     ?= exfat
 
 .PHONY: help tools keys build test image e2e net-sources e2e-live clean dev doctor dev-image vm vm-sb menu-sync \
-	sbom vulns portable lint release
+	sbom vulns portable lint release prerelease
 
 help:
 	@echo "make tools   fetch the build/test toolchain into .tools/ (no root needed)"
@@ -32,6 +32,7 @@ help:
 	@echo "make vulns      SBOM + vulnerability and boot-chain scan -> sbom/VULNERABILITIES.md"
 	@echo "make portable   build the no-install portable package(s) into out/portable (ARGS=--all)"
 	@echo "make release    build every release file locally into out/release (see docs/RELEASING.md)"
+	@echo "make prerelease run the full local pre-release routine before tagging (ARGS=--quick, --skip-real-iso)"
 
 tools:
 	./scripts/bootstrap-tools.sh
@@ -98,6 +99,9 @@ lint:
 
 release:
 	scripts/release/build_release.sh $(ARGS)
+
+prerelease:
+	scripts/release/prerelease.sh $(ARGS)
 
 clean:
 	rm -rf dist out

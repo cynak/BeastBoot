@@ -3,28 +3,28 @@
   "schema": 1,
   "project": "python-build-standalone",
   "project_url": "https://github.com/astral-sh/python-build-standalone",
-  "release": "20261021",
-  "python": "3.13.17",
+  "release": "20261026",
+  "python": "3.15.2",
   "targets": {
     "linux-x86_64": {
-      "asset": "cpython-3.13.17+20261021-x86_64-unknown-linux-gnu-install_only.tar.gz",
-      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261021/cpython-3.13.17%2B20261021-x86_64-unknown-linux-gnu-install_only.tar.gz",
-      "sha256": "cbda6f7767884fc456860b11fd184391a9320cae00a86c0f49a1c7ac6e236f7a"
+      "asset": "cpython-3.15.2+20261026-x86_64-unknown-linux-gnu-install_only.tar.gz",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.15.2%2B20261026-x86_64-unknown-linux-gnu-install_only.tar.gz",
+      "sha256": "08d4ae9024a7cfbd3b70e559241afa2571cd3208d7bd5f96f88e0080dd4092aa"
     },
     "windows-x86_64": {
-      "asset": "cpython-3.13.17+20261021-x86_64-pc-windows-msvc-install_only.tar.gz",
-      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261021/cpython-3.13.17%2B20261021-x86_64-pc-windows-msvc-install_only.tar.gz",
-      "sha256": "e10b46d9b03a3a494297f336770f55f86474d683061137b1cf595e12e47bcef5"
+      "asset": "cpython-3.15.2+20261026-x86_64-pc-windows-msvc-install_only.tar.gz",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.15.2%2B20261026-x86_64-pc-windows-msvc-install_only.tar.gz",
+      "sha256": "17769f04c4c8c228e9fb838a37d92f6a6401b170c5cd27fb3073f233f73bb2f9"
     },
     "macos-x86_64": {
-      "asset": "cpython-3.13.17+20261021-x86_64-apple-darwin-install_only.tar.gz",
-      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261021/cpython-3.13.17%2B20261021-x86_64-apple-darwin-install_only.tar.gz",
-      "sha256": "b7d7c2dd63545cabe996191b6f20f0b652c7de123d9ca451dda7e5f1ebbcbbbc"
+      "asset": "cpython-3.15.2+20261026-x86_64-apple-darwin-install_only.tar.gz",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.15.2%2B20261026-x86_64-apple-darwin-install_only.tar.gz",
+      "sha256": "c09fb50147ca9743a6d21e765d6243d8a21da04aed2d83b74f5a5c164d8d85bc"
     },
     "macos-arm64": {
-      "asset": "cpython-3.13.17+20261021-aarch64-apple-darwin-install_only.tar.gz",
-      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261021/cpython-3.13.17%2B20261021-aarch64-apple-darwin-install_only.tar.gz",
-      "sha256": "9c985cbf327425873469896ce748c7134b6deca8edb81e93c589ad2fc5aff445"
+      "asset": "cpython-3.15.2+20261026-aarch64-apple-darwin-install_only.tar.gz",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.15.2%2B20261026-aarch64-apple-darwin-install_only.tar.gz",
+      "sha256": "285a6b924713bec9c1cdf442ba5ebfbafbab070060b34d607c30546b758e64a6"
     }
   }
 }

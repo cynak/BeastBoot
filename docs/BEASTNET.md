@@ -110,7 +110,7 @@ all versions recorded in the manifest:
   digest matches the manifest (and the kernel in the `.deb`, when that is in
   the beast-net cache). The SBOM lists it under its `linux-image` package,
   marked re-signed.
-- `busybox` (sh, mount, udhcpc, ip, mdev, findfs …; the dynamic build, linked
+- `busybox` (sh, mount, udhcpc, ip, mdev …; the dynamic build, linked
   against the shipped libc6), `kmod` (modprobe),
   `wpasupplicant` (wpa_supplicant, wpa_cli), `iw`, `ca-certificates`,
   `python3.14-minimal` + the stdlib modules the app needs (ssl, hashlib,

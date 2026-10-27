@@ -3,8 +3,8 @@
   "@id": "https://beast-boot.invalid/vex/beast-boot-userland",
   "author": "beast-boot maintainers",
   "role": "Document Creator",
-  "timestamp": "2026-10-25T00:00:00Z",
-  "version": 2,
+  "timestamp": "2026-10-27T00:00:00Z",
+  "version": 4,
   "tooling": "hand-maintained; see .claude/skills/sbom-vuln/references/remediation.md",
   "statements": [
     {
@@ -13,7 +13,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/wpasupplicant@2%3A2.11-0ubuntu5?arch=amd64&distro=ubuntu-26.04&upstream=wpa"
@@ -32,10 +32,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -51,7 +51,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/wpasupplicant@2%3A2.11-0ubuntu5?arch=amd64&distro=ubuntu-26.04&upstream=wpa"
@@ -70,10 +70,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -89,7 +89,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -108,7 +108,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -127,7 +127,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -146,10 +146,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -165,10 +165,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -184,7 +184,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libexpat1@2.7.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=expat"
@@ -203,7 +203,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -222,7 +222,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -241,7 +241,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -260,7 +260,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libexpat1@2.7.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=expat"
@@ -279,10 +279,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -298,7 +298,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -317,7 +317,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -336,7 +336,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -355,7 +355,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -374,7 +374,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -393,7 +393,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -412,7 +412,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -431,7 +431,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -450,7 +450,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -469,7 +469,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -488,7 +488,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -507,7 +507,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -526,7 +526,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -545,7 +545,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -564,7 +564,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -583,7 +583,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -601,7 +601,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -619,7 +619,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -637,7 +637,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libc6@2.43-2ubuntu2.4?arch=amd64&distro=ubuntu-26.04&upstream=glibc"
@@ -656,7 +656,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -675,7 +675,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -694,7 +694,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -713,7 +713,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -732,7 +732,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -751,7 +751,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -770,7 +770,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -789,7 +789,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -808,7 +808,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -827,7 +827,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -846,7 +846,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -865,7 +865,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -884,10 +884,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -903,10 +903,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -922,10 +922,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -941,10 +941,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -960,10 +960,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -975,65 +975,11 @@
     },
     {
       "vulnerability": {
-        "name": "CVE-2026-38754"
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-boot@0.2.0",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
-            }
-          ]
-        }
-      ],
-      "status": "affected",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "action_statement": "ash ifsbreakup() heap overflow: busybox sh is /init and runs beastnet/rootfs/usr/share/beastnet/udhcpc.script, which word-splits DHCP-supplied values ($router, $dns), so a rogue DHCP server can feed it input. Wait for Ubuntu's fix (the shipped version is the newest in Ubuntu 26.04); when it is published, re-run build/beastnet/lock.py so packages.lock picks it up, then make build, make e2e and re-scan."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-38755"
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-boot@0.2.0",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
-            }
-          ]
-        }
-      ],
-      "status": "affected",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "action_statement": "ash evalcommand() heap overflow: busybox sh is /init and runs beastnet/rootfs/usr/share/beastnet/udhcpc.script, which word-splits DHCP-supplied values ($router, $dns), so a rogue DHCP server can feed it input. Wait for Ubuntu's fix (the shipped version is the newest in Ubuntu 26.04); when it is published, re-run build/beastnet/lock.py so packages.lock picks it up, then make build, make e2e and re-scan."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-49878"
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-boot@0.2.0",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/wpasupplicant@2%3A2.11-0ubuntu5?arch=amd64&distro=ubuntu-26.04&upstream=wpa"
-            }
-          ]
-        }
-      ],
-      "status": "affected",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "action_statement": "Robust AV (SCS) support is compiled into Ubuntu's wpa_supplicant and the receive handler processes action frames from the associated AP, so it cannot be ruled out for networks beast-net joins. Wait for Ubuntu's fix (the shipped version is the newest in Ubuntu 26.04); when it is published, re-run build/beastnet/lock.py so packages.lock picks it up, then make build, make e2e and re-scan."
-    },
-    {
-      "vulnerability": {
         "name": "CVE-2026-57175"
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1052,7 +998,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1071,7 +1017,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1090,7 +1036,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1109,7 +1055,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1128,7 +1074,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1147,7 +1093,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1166,7 +1112,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1185,7 +1131,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1204,7 +1150,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1223,7 +1169,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1242,7 +1188,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1261,7 +1207,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1280,7 +1226,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1299,7 +1245,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1318,7 +1264,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1337,7 +1283,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1356,7 +1302,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1375,7 +1321,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1394,7 +1340,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1413,7 +1359,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1432,10 +1378,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -1451,7 +1397,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libexpat1@2.7.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=expat"
@@ -1470,7 +1416,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/wpasupplicant@2%3A2.11-0ubuntu5?arch=amd64&distro=ubuntu-26.04&upstream=wpa"
@@ -1489,7 +1435,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1508,7 +1454,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1527,7 +1473,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1546,7 +1492,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1565,7 +1511,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1584,7 +1530,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1603,7 +1549,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libc6@2.43-2ubuntu2.4?arch=amd64&distro=ubuntu-26.04&upstream=glibc"
@@ -1622,7 +1568,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libc6@2.43-2ubuntu2.4?arch=amd64&distro=ubuntu-26.04&upstream=glibc"
@@ -1641,7 +1587,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1660,7 +1606,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1679,7 +1625,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
@@ -1698,10 +1644,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -1717,10 +1663,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -1736,10 +1682,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -1751,39 +1697,21 @@
     },
     {
       "vulnerability": {
-        "name": "CVE-2026-88832"
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-boot@0.2.0",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
-            }
-          ]
-        }
-      ],
-      "status": "affected",
-      "timestamp": "2026-10-24T00:00:00Z",
-      "action_statement": "The romfs volume-id probe is compiled in ('-rom1fs-' in the binary) and /init runs findfs (beastnet/rootfs/init:109), which probes every block device, so a crafted partition on an attached disk reaches it. Wait for Ubuntu's fix (the shipped version is the newest in Ubuntu 26.04); when it is published, re-run build/beastnet/lock.py so packages.lock picks it up, then make build, make e2e and re-scan."
-    },
-    {
-      "vulnerability": {
         "name": "CVE-2026-88833"
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
       ],
       "status": "affected",
       "timestamp": "2026-10-24T00:00:00Z",
-      "action_statement": "udhcpc is beast-net's DHCP client (beastnet/python/beastnet/net.py:251), so an attacker on the LAN can send the packet (denial of service of the network setup). Wait for Ubuntu's fix (the shipped version is the newest in Ubuntu 26.04); when it is published, re-run build/beastnet/lock.py so packages.lock picks it up, then make build, make e2e and re-scan."
+      "action_statement": "udhcpc is beast-net's DHCP client (beastnet/python/beastnet/net.py:251), so an attacker on the LAN can send the packet (denial of service of the network setup). Wait for Ubuntu's fix (the shipped 1:1.38.0-3ubuntu4 from Ubuntu 26.10 is the newest; no fixed busybox is published); when it is published, re-run build/beastnet/lock.py so packages.lock picks it up, then make build, make e2e and re-scan."
     },
     {
       "vulnerability": {
@@ -1791,10 +1719,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -1810,10 +1738,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -1829,10 +1757,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -1848,10 +1776,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -1867,10 +1795,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -1886,10 +1814,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -1905,10 +1833,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -1924,10 +1852,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -1943,7 +1871,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libc6@2.43-2ubuntu2.4?arch=amd64&distro=ubuntu-26.04&upstream=glibc"
@@ -1962,10 +1890,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -1981,10 +1909,10 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
-              "@id": "pkg:deb/ubuntu/busybox@1%3A1.37.0-7ubuntu1?arch=amd64&distro=ubuntu-26.04"
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
             }
           ]
         }
@@ -2000,7 +1928,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libexpat1@2.7.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=expat"
@@ -2019,7 +1947,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libc6@2.43-2ubuntu2.4?arch=amd64&distro=ubuntu-26.04&upstream=glibc"
@@ -2038,7 +1966,7 @@
       },
       "products": [
         {
-          "@id": "pkg:generic/beast-boot@0.2.0",
+          "@id": "pkg:generic/beast-boot@0.3.1",
           "subcomponents": [
             {
               "@id": "pkg:deb/ubuntu/libc6@2.43-2ubuntu2.4?arch=amd64&distro=ubuntu-26.04&upstream=glibc"
@@ -2050,6 +1978,1083 @@
       "timestamp": "2026-10-24T00:00:00Z",
       "justification": "vulnerable_code_not_present",
       "impact_statement": "Only the POWER8-optimized strncasecmp (sysdeps/powerpc) is affected; the shipped libc6 is the amd64 build."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-88832"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The romfs volume-id probe is reachable only through the busybox applets that identify filesystems by label or UUID: findfs, swapon, swapoff, blkid and mount LABEL=/UUID=. build/beastnet/userland.list excludes the findfs, swapon and swapoff links; /usr/sbin/blkid is util-linux's, not an applet link; /init finds the data partition with util-linux blkid (beastnet/rootfs/init find_dev) and beast-net mounts /dev paths only (no LABEL=/UUID= spec anywhere in beastnet/python or rootfs), so a crafted romfs partition is never handed to the busybox prober."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-103111"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libpcre2-8-0@10.46-1build1?arch=amd64&distro=ubuntu-26.04&upstream=pcre2"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "libpcre2-8.so.0 is in the initramfs only because libselinux.so.1 (needed by lvm, smartctl, libmount, libdevmapper) links it. libselinux imports just pcre2_compile_8, pcre2_match_8, pcre2_match_data_*, pcre2_code_free_8, pcre2_config_8, pcre2_get_error_message_8 and pcre2_serialize_decode_8 (nm -D on the shipped file); JIT API misuse: no pcre2_jit_* function is imported by libselinux, so no pattern is JIT-compiled or JIT-matched. SELinux is not active in the initramfs and there is no /etc/selinux policy or file_contexts, so libselinux never compiles or matches a pattern."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-86145"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libpcre2-8-0@10.46-1build1?arch=amd64&distro=ubuntu-26.04&upstream=pcre2"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "libpcre2-8.so.0 is in the initramfs only because libselinux.so.1 (needed by lvm, smartctl, libmount, libdevmapper) links it. libselinux imports just pcre2_compile_8, pcre2_match_8, pcre2_match_data_*, pcre2_code_free_8, pcre2_config_8, pcre2_get_error_message_8 and pcre2_serialize_decode_8 (nm -D on the shipped file); pcre2_dfa_match is not imported by libselinux. SELinux is not active in the initramfs and there is no /etc/selinux policy or file_contexts, so libselinux never compiles or matches a pattern."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-89156"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libpcre2-8-0@10.46-1build1?arch=amd64&distro=ubuntu-26.04&upstream=pcre2"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "libpcre2-8.so.0 is in the initramfs only because libselinux.so.1 (needed by lvm, smartctl, libmount, libdevmapper) links it. libselinux imports just pcre2_compile_8, pcre2_match_8, pcre2_match_data_*, pcre2_code_free_8, pcre2_config_8, pcre2_get_error_message_8 and pcre2_serialize_decode_8 (nm -D on the shipped file); The out-of-bounds read follows a JIT fallback; libselinux never JIT-compiles, and its subjects are file paths, not attacker UTF streams. SELinux is not active in the initramfs and there is no /etc/selinux policy or file_contexts, so libselinux never compiles or matches a pattern."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-89157"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libpcre2-8-0@10.46-1build1?arch=amd64&distro=ubuntu-26.04&upstream=pcre2"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "libpcre2-8.so.0 is in the initramfs only because libselinux.so.1 (needed by lvm, smartctl, libmount, libdevmapper) links it. libselinux imports just pcre2_compile_8, pcre2_match_8, pcre2_match_data_*, pcre2_code_free_8, pcre2_config_8, pcre2_get_error_message_8 and pcre2_serialize_decode_8 (nm -D on the shipped file); 32-bit platforms only (pcre2_pattern_convert is not imported either); beast-net is x86_64. SELinux is not active in the initramfs and there is no /etc/selinux policy or file_contexts, so libselinux never compiles or matches a pattern."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-89158"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libpcre2-8-0@10.46-1build1?arch=amd64&distro=ubuntu-26.04&upstream=pcre2"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "libpcre2-8.so.0 is in the initramfs only because libselinux.so.1 (needed by lvm, smartctl, libmount, libdevmapper) links it. libselinux imports just pcre2_compile_8, pcre2_match_8, pcre2_match_data_*, pcre2_code_free_8, pcre2_config_8, pcre2_get_error_message_8 and pcre2_serialize_decode_8 (nm -D on the shipped file); pcre2_compile_32 on 32-bit platforms only; libselinux uses the 8-bit library on x86_64. SELinux is not active in the initramfs and there is no /etc/selinux policy or file_contexts, so libselinux never compiles or matches a pattern."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-89160"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libpcre2-8-0@10.46-1build1?arch=amd64&distro=ubuntu-26.04&upstream=pcre2"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "libpcre2-8.so.0 is in the initramfs only because libselinux.so.1 (needed by lvm, smartctl, libmount, libdevmapper) links it. libselinux imports just pcre2_compile_8, pcre2_match_8, pcre2_match_data_*, pcre2_code_free_8, pcre2_config_8, pcre2_get_error_message_8 and pcre2_serialize_decode_8 (nm -D on the shipped file); Needs PCRE2_MATCH_INVALID_UTF matching of attacker-supplied subjects; the only caller (libselinux) matches policy patterns that do not exist here. SELinux is not active in the initramfs and there is no /etc/selinux policy or file_contexts, so libselinux never compiles or matches a pattern."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-89161"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libpcre2-8-0@10.46-1build1?arch=amd64&distro=ubuntu-26.04&upstream=pcre2"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "libpcre2-8.so.0 is in the initramfs only because libselinux.so.1 (needed by lvm, smartctl, libmount, libdevmapper) links it. libselinux imports just pcre2_compile_8, pcre2_match_8, pcre2_match_data_*, pcre2_code_free_8, pcre2_config_8, pcre2_get_error_message_8 and pcre2_serialize_decode_8 (nm -D on the shipped file); pcre2_jit_match is not imported by libselinux. SELinux is not active in the initramfs and there is no /etc/selinux policy or file_contexts, so libselinux never compiles or matches a pattern."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-89162"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libpcre2-8-0@10.46-1build1?arch=amd64&distro=ubuntu-26.04&upstream=pcre2"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "libpcre2-8.so.0 is in the initramfs only because libselinux.so.1 (needed by lvm, smartctl, libmount, libdevmapper) links it. libselinux imports just pcre2_compile_8, pcre2_match_8, pcre2_match_data_*, pcre2_code_free_8, pcre2_config_8, pcre2_get_error_message_8 and pcre2_serialize_decode_8 (nm -D on the shipped file); pcre2_serialize_encode is not imported by libselinux (only pcre2_serialize_decode_8). SELinux is not active in the initramfs and there is no /etc/selinux policy or file_contexts, so libselinux never compiles or matches a pattern."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-18739"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libpopt0@1.19%2Bdfsg-2build1?arch=amd64&distro=ubuntu-26.04&upstream=popt"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "libpopt.so.0 is used only by /usr/sbin/cryptsetup, which imports poptGetContext, poptGetNextOpt, poptGetArg(s), poptGetOptArg, poptBadOption, poptStrerror, poptPrintHelp, poptPrintUsage, poptSetOtherOptionHelp, poptGetInvocationName and poptFreeContext (nm -D). It never calls poptReadDefaultConfig/poptReadConfigFile/poptAddAlias, and the initramfs has no /etc/popt* or ~/.popt, so no alias or config content exists. poptStuffArgs is reached only through option aliases, and none can be defined."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-18743"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libpopt0@1.19%2Bdfsg-2build1?arch=amd64&distro=ubuntu-26.04&upstream=popt"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "libpopt.so.0 is used only by /usr/sbin/cryptsetup, which imports poptGetContext, poptGetNextOpt, poptGetArg(s), poptGetOptArg, poptBadOption, poptStrerror, poptPrintHelp, poptPrintUsage, poptSetOtherOptionHelp, poptGetInvocationName and poptFreeContext (nm -D). It never calls poptReadDefaultConfig/poptReadConfigFile/poptAddAlias, and the initramfs has no /etc/popt* or ~/.popt, so no alias or config content exists. poptConfigFileToString runs only when a popt config file is read, which cryptsetup does not do."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-18839"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libpopt0@1.19%2Bdfsg-2build1?arch=amd64&distro=ubuntu-26.04&upstream=popt"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "libpopt.so.0 is used only by /usr/sbin/cryptsetup, which imports poptGetContext, poptGetNextOpt, poptGetArg(s), poptGetOptArg, poptBadOption, poptStrerror, poptPrintHelp, poptPrintUsage, poptSetOtherOptionHelp, poptGetInvocationName and poptFreeContext (nm -D). It never calls poptReadDefaultConfig/poptReadConfigFile/poptAddAlias, and the initramfs has no /etc/popt* or ~/.popt, so no alias or config content exists. Help formatting runs only for 'cryptsetup --help'/usage errors; beast-net never passes --help, its argument vector is built by beastnet/python/beastnet/disks; the help text is a fixed table."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-6862"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libefivar1t64@39-2?arch=amd64&distro=ubuntu-26.04&upstream=efivar"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The affected parser is the EFI device-path node parser (efidp_parse_*/libefiboot). The only user of libefivar.so.1 is /usr/bin/mokutil, which imports just efi_get/set/del_variable, efi_get_variable_size, efi_chmod_variable, efi_variables_supported and the GUID helpers (nm -D): it reads and writes raw variable bytes and never parses device paths. libefiboot.so is not shipped."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-76642"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/util-linux@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "mount(8) post-mount hooks (X-mount.idmap/owner) for unprivileged users: the util-linux mount binary is not shipped (the mount/umount commands are busybox links, losetup comes from the 'mount' package), and libmount's mount context is not called by lsblk/findmnt (no mnt_context_* import). Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-76642"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/mount@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "mount(8) post-mount hooks (X-mount.idmap/owner) for unprivileged users: the util-linux mount binary is not shipped (the mount/umount commands are busybox links, losetup comes from the 'mount' package), and libmount's mount context is not called by lsblk/findmnt (no mnt_context_* import). Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-76642"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/fdisk@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "mount(8) post-mount hooks (X-mount.idmap/owner) for unprivileged users: the util-linux mount binary is not shipped (the mount/umount commands are busybox links, losetup comes from the 'mount' package), and libmount's mount context is not called by lsblk/findmnt (no mnt_context_* import). Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-76642"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libblkid1@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "mount(8) post-mount hooks (X-mount.idmap/owner) for unprivileged users: the util-linux mount binary is not shipped (the mount/umount commands are busybox links, losetup comes from the 'mount' package), and libmount's mount context is not called by lsblk/findmnt (no mnt_context_* import). Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-76642"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libfdisk1@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "mount(8) post-mount hooks (X-mount.idmap/owner) for unprivileged users: the util-linux mount binary is not shipped (the mount/umount commands are busybox links, losetup comes from the 'mount' package), and libmount's mount context is not called by lsblk/findmnt (no mnt_context_* import). Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-76642"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libmount1@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "mount(8) post-mount hooks (X-mount.idmap/owner) for unprivileged users: the util-linux mount binary is not shipped (the mount/umount commands are busybox links, losetup comes from the 'mount' package), and libmount's mount context is not called by lsblk/findmnt (no mnt_context_* import). Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-76642"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libsmartcols1@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "mount(8) post-mount hooks (X-mount.idmap/owner) for unprivileged users: the util-linux mount binary is not shipped (the mount/umount commands are busybox links, losetup comes from the 'mount' package), and libmount's mount context is not called by lsblk/findmnt (no mnt_context_* import). Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-76642"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libuuid1@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "mount(8) post-mount hooks (X-mount.idmap/owner) for unprivileged users: the util-linux mount binary is not shipped (the mount/umount commands are busybox links, losetup comes from the 'mount' package), and libmount's mount context is not called by lsblk/findmnt (no mnt_context_* import). Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78408"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/util-linux@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "nsenter --join-cgroup: util-linux nsenter is not shipped (/usr/bin/nsenter is a busybox applet link, which has no --join-cgroup). Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78408"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/mount@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "nsenter --join-cgroup: util-linux nsenter is not shipped (/usr/bin/nsenter is a busybox applet link, which has no --join-cgroup). Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78408"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/fdisk@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "nsenter --join-cgroup: util-linux nsenter is not shipped (/usr/bin/nsenter is a busybox applet link, which has no --join-cgroup). Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78408"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libblkid1@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "nsenter --join-cgroup: util-linux nsenter is not shipped (/usr/bin/nsenter is a busybox applet link, which has no --join-cgroup). Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78408"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libfdisk1@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "nsenter --join-cgroup: util-linux nsenter is not shipped (/usr/bin/nsenter is a busybox applet link, which has no --join-cgroup). Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78408"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libmount1@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "nsenter --join-cgroup: util-linux nsenter is not shipped (/usr/bin/nsenter is a busybox applet link, which has no --join-cgroup). Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78408"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libsmartcols1@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "nsenter --join-cgroup: util-linux nsenter is not shipped (/usr/bin/nsenter is a busybox applet link, which has no --join-cgroup). Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78408"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libuuid1@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "nsenter --join-cgroup: util-linux nsenter is not shipped (/usr/bin/nsenter is a busybox applet link, which has no --join-cgroup). Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78409"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/util-linux@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "X-mount.subdir in a restricted (SUID) mount(8) by an fstab-authorised unprivileged user: util-linux mount is not shipped. Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78409"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/mount@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "X-mount.subdir in a restricted (SUID) mount(8) by an fstab-authorised unprivileged user: util-linux mount is not shipped. Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78409"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/fdisk@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "X-mount.subdir in a restricted (SUID) mount(8) by an fstab-authorised unprivileged user: util-linux mount is not shipped. Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78409"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libblkid1@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "X-mount.subdir in a restricted (SUID) mount(8) by an fstab-authorised unprivileged user: util-linux mount is not shipped. Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78409"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libfdisk1@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "X-mount.subdir in a restricted (SUID) mount(8) by an fstab-authorised unprivileged user: util-linux mount is not shipped. Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78409"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libmount1@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "X-mount.subdir in a restricted (SUID) mount(8) by an fstab-authorised unprivileged user: util-linux mount is not shipped. Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78409"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libsmartcols1@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "X-mount.subdir in a restricted (SUID) mount(8) by an fstab-authorised unprivileged user: util-linux mount is not shipped. Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78409"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libuuid1@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "X-mount.subdir in a restricted (SUID) mount(8) by an fstab-authorised unprivileged user: util-linux mount is not shipped. Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78410"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/util-linux@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "restricted bind mounts through SUID mount(8): util-linux mount is not shipped. Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78410"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/mount@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "restricted bind mounts through SUID mount(8): util-linux mount is not shipped. Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78410"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/fdisk@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "restricted bind mounts through SUID mount(8): util-linux mount is not shipped. Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78410"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libblkid1@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "restricted bind mounts through SUID mount(8): util-linux mount is not shipped. Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78410"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libfdisk1@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "restricted bind mounts through SUID mount(8): util-linux mount is not shipped. Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78410"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libmount1@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "restricted bind mounts through SUID mount(8): util-linux mount is not shipped. Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78410"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libsmartcols1@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "restricted bind mounts through SUID mount(8): util-linux mount is not shipped. Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78410"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libuuid1@2.41.3-3ubuntu2.2?arch=amd64&distro=ubuntu-26.04&upstream=util-linux"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "restricted bind mounts through SUID mount(8): util-linux mount is not shipped. Also the initramfs has no setuid file, no /etc/fstab and no unprivileged user: beast-net and the Disk tools run as root only, so there is no privilege to gain."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-19617"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libdevmapper1.02.1@2%3A1.02.205-2ubuntu3?arch=amd64&distro=ubuntu-26.04&upstream=lvm2%402.03.31-2ubuntu3"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The recursion is in libdm's config-file parser (dm_config_parse*). /usr/sbin/lvm carries its own copy of that parser (it defines dm_config_from_string/dm_config_parse itself), so the shared libdevmapper.so.1.02.1 parser is called by nobody: dmsetup, libcryptsetup and libdevmapper-event import no dm_config_* symbol (nm -D). Only lvm itself reads LVM metadata text."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-19617"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libdevmapper-event1.02.1@2%3A1.02.205-2ubuntu3?arch=amd64&distro=ubuntu-26.04&upstream=lvm2%402.03.31-2ubuntu3"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The recursion is in libdm's config-file parser (dm_config_parse*). /usr/sbin/lvm carries its own copy of that parser (it defines dm_config_from_string/dm_config_parse itself), so the shared libdevmapper.so.1.02.1 parser is called by nobody: dmsetup, libcryptsetup and libdevmapper-event import no dm_config_* symbol (nm -D). Only lvm itself reads LVM metadata text."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-19617"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/dmsetup@2%3A1.02.205-2ubuntu3?arch=amd64&distro=ubuntu-26.04&upstream=lvm2%402.03.31-2ubuntu3"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The recursion is in libdm's config-file parser (dm_config_parse*). /usr/sbin/lvm carries its own copy of that parser (it defines dm_config_from_string/dm_config_parse itself), so the shared libdevmapper.so.1.02.1 parser is called by nobody: dmsetup, libcryptsetup and libdevmapper-event import no dm_config_* symbol (nm -D). Only lvm itself reads LVM metadata text."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-19617"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/lvm2@2.03.31-2ubuntu3?arch=amd64&distro=ubuntu-26.04"
+            }
+          ]
+        }
+      ],
+      "status": "affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "action_statement": "Disk tools run 'lvm' (pvs, vgs, lvs and vgchange -ay, beastnet/python/beastnet/disks) on attached disks, so a crafted deeply nested LVM metadata area can exhaust the stack of that one lvm process (denial of service of LVM discovery; the report names no memory corruption). Each lvm call is a separate short-lived process, so beast-net itself keeps running and reports the failed command. Wait for Ubuntu's fix (2.03.31-2ubuntu3 is the newest in Ubuntu 26.04 and 26.10); when it is published, re-run build/beastnet/lock.py, make build, make e2e and re-scan."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-40228"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libsystemd0@259.9-0ubuntu0.1?arch=amd64&distro=ubuntu-26.04&upstream=systemd"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The bug is in systemd-journald (ForwardToWall). Only the libsystemd0/libudev1 libraries are shipped; systemd-journald, logger -p emerg forwarding and any systemd unit are not in the initramfs."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-40228"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libudev1@259.9-0ubuntu0.1?arch=amd64&distro=ubuntu-26.04&upstream=systemd"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The bug is in systemd-journald (ForwardToWall). Only the libsystemd0/libudev1 libraries are shipped; systemd-journald, logger -p emerg forwarding and any systemd unit are not in the initramfs."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-49878"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/wpasupplicant@2%3A2.11-0ubuntu5?arch=amd64&distro=ubuntu-26.04&upstream=wpa"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "wpas_handle_robust_av_scs_recv_action (robust_av.c) returns at its first check unless wpa_s->ongoing_scs_req is set; that flag is set only by wpas_send_scs_req, whose only caller is the 'SCS' control-interface command (hostap 2.11 ctrl_iface.c). beast-net's control-socket client (beastnet/python/beastnet/wifi.py WpaCtrl) sends only ATTACH and STATUS, wpa_cli is never run, and the socket is in the root-only /run/beastnet/wpa, so an AP's SCS response frame is dropped before the vulnerable code."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-115557"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/python3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
+            }
+          ]
+        }
+      ],
+      "status": "affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "action_statement": "Python 3.14.4's ssl module lacks the denylist of known-compromised certificates. beast-net verifies HTTPS downloads against the Ubuntu CA bundle, so only a stolen key of a certificate that still validates for the contacted host could be abused. Ubuntu has no fix in 26.04 (the 26.10 python 3.14.8 needs OpenSSL 4 and glibc 2.44, which this helper does not carry). When Ubuntu publishes a fix for 26.04, re-run build/beastnet/lock.py, make build, make e2e and re-scan."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-115557"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libpython3.14-minimal@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
+            }
+          ]
+        }
+      ],
+      "status": "affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "action_statement": "Python 3.14.4's ssl module lacks the denylist of known-compromised certificates. beast-net verifies HTTPS downloads against the Ubuntu CA bundle, so only a stolen key of a certificate that still validates for the contacted host could be abused. Ubuntu has no fix in 26.04 (the 26.10 python 3.14.8 needs OpenSSL 4 and glibc 2.44, which this helper does not carry). When Ubuntu publishes a fix for 26.04, re-run build/beastnet/lock.py, make build, make e2e and re-scan."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-115557"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/libpython3.14-stdlib@3.14.4-1ubuntu0.2?arch=amd64&distro=ubuntu-26.04&upstream=python3.14"
+            }
+          ]
+        }
+      ],
+      "status": "affected",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "action_statement": "Python 3.14.4's ssl module lacks the denylist of known-compromised certificates. beast-net verifies HTTPS downloads against the Ubuntu CA bundle, so only a stolen key of a certificate that still validates for the contacted host could be abused. Ubuntu has no fix in 26.04 (the 26.10 python 3.14.8 needs OpenSSL 4 and glibc 2.44, which this helper does not carry). When Ubuntu publishes a fix for 26.04, re-run build/beastnet/lock.py, make build, make e2e and re-scan."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-38754"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "status_notes": "busybox 1:1.38.0-3 (Debian, carried into Ubuntu 26.10 as 1:1.38.0-3ubuntu4, which beast-net now takes from the stonking pocket) fixes it: its changelog lists ash-fix-out-of-bounds-read-in-ifsbreakup-CVE-2026-38754.patch (Closes: #1142472). The Ubuntu tracker has not marked it yet."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-38755"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/beast-boot@0.3.1",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/ubuntu/busybox@1%3A1.38.0-3ubuntu4?arch=amd64&distro=ubuntu-26.10"
+            }
+          ]
+        }
+      ],
+      "status": "fixed",
+      "timestamp": "2026-10-27T00:00:00Z",
+      "status_notes": "busybox 1:1.38.0-3 (Debian, carried into Ubuntu 26.10 as 1:1.38.0-3ubuntu4, which beast-net now takes from the stonking pocket) fixes it: its changelog lists ash-fix-stack-overflow-in-evalfun-CVE-2026-38755.patch (Closes: #1142472). The Ubuntu tracker has not marked it yet."
     }
   ]
 }

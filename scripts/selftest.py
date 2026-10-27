@@ -63,8 +63,19 @@ def check(name: str, ok: bool, detail: str = "") -> bool:
     return bool(ok)
 
 
+def validate_python() -> str:
+    """validate_sbom.py needs jsonschema + referencing, which .venv lacks: pick an
+    interpreter that has them, like scripts/sbom-vuln.sh does."""
+    for py in (sys.executable, shutil.which("python3"), "/usr/bin/python3", "/usr/local/bin/python3"):
+        if py and Path(py).exists() and subprocess.run(
+                [py, "-I", "-c", "import jsonschema, referencing"], capture_output=True).returncode == 0:
+            return py
+    return sys.executable
+
+
 def run(*cmd, root: Path) -> subprocess.CompletedProcess:
-    return subprocess.run([sys.executable, "-I", *map(str, cmd), "--root", str(root)],
+    py = validate_python() if Path(str(cmd[0])).name == "validate_sbom.py" else sys.executable
+    return subprocess.run([py, "-I", *map(str, cmd), "--root", str(root)],
                           capture_output=True, text=True, timeout=900)
 
 
@@ -487,6 +498,9 @@ def test_kernel_vex(base: Path) -> None:
     check("kernel-vex: shipped module -> present", st["drivers/net/shipped.c"][0] == "present")
     check("kernel-vex: built-in -> present", st["drivers/net/core.c"][:2] == ("present", "built-in"))
     check("kernel-vex: other architecture -> not present", st["arch/arm64/kernel/cpu.c"][1] == "other-arch")
+    check("kernel-vex: renamed/missing file of another architecture -> not present",
+          b.classify("arch/s390/kvm/interrupt.c")[:2] == ("absent", "other-arch") and
+          b.classify("arch/x86/kvm/missing.c")[0] == "unknown", str(b.classify("arch/s390/kvm/interrupt.c")))
     check("kernel-vex: unset config -> not present",
           st["drivers/net/gone.c"][:2] == ("absent", "config-not-set") and "CONFIG_UNSET is not set" in
           st["drivers/net/gone.c"][2], str(st["drivers/net/gone.c"]))

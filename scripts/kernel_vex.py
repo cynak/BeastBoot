@@ -102,6 +102,11 @@ VENDOR_SPECIFIC = {
 }
 EVIDENCE_FILES = {p for v in VENDOR_SPECIFIC.values() for p in v["source"]}
 ARCH = "x86"
+# Architectures that are never built for an x86_64 kernel. Only these count as "other
+# architecture": arch/x86_64 or arch/i386 (old x86 names) must not close a CVE as absent.
+OTHER_ARCHES = frozenset({"alpha", "arc", "arm", "arm64", "csky", "hexagon", "loongarch", "m68k",
+                          "microblaze", "mips", "nios2", "openrisc", "parisc", "powerpc", "riscv",
+                          "s390", "sh", "sparc", "um", "xtensa", "ia64", "nds32", "h8300", "c6x"})
 VEX_ID = "https://beast-boot.invalid/vex/beast-boot-kernel"
 UNK = "\x01?\x01"          # marker for a value the evaluator cannot know
 
@@ -1466,7 +1471,12 @@ class Build:
         if top == "scripts":
             return "unknown", "scripts", f"{path}: host build tool; its output may be in the kernel", False
         if path not in self.tree.files:
-            return "unknown", "not-in-tree", f"{path} is not in the Ubuntu 7.0 source tree (renamed?)", False
+            parts = path.split("/")
+            if parts[0] == "arch" and len(parts) > 2 and parts[1] in OTHER_ARCHES and ext in CODE_EXT:
+                # a source file of another architecture is never compiled on x86_64, whether or
+                # not this file still exists in the tree (the descent is arch/$(SRCARCH)/ only)
+                return "absent", "other-arch", f"{path}: arch/{parts[1]}/ is another architecture (not descended by the x86_64 build)", False
+            return "unknown", "not-in-tree", f"{path} is not in the Ubuntu kernel source tree (renamed?)", False
         if path.startswith(TOOLS_BUILD):
             return "unknown", "build-tool", f"{path}: build-host tool that rewrites kernel objects (objtool, resolve_btfids)", False
         if top == "tools":
@@ -1494,7 +1504,7 @@ class Build:
     def _unreached_reason(self, d: str) -> tuple[str, str] | None:
         """Why directory D is never descended by Kbuild, or None if that cannot be shown."""
         parts = d.split("/")
-        if parts[0] == "arch" and len(parts) > 1 and parts[1] != ARCH:
+        if parts[0] == "arch" and len(parts) > 1 and parts[1] in OTHER_ARCHES:
             return "other-arch", f"arch/{parts[1]}/ is another architecture (the x86_64 build descends only arch/$(SRCARCH)/ = arch/{ARCH}/)"
         # nearest reached ancestor and its line naming the child directory
         child = d

@@ -1446,6 +1446,10 @@ def write_markdown(path: Path, rep: dict) -> None:
     s = rep["summary"]
     a("# beast-boot vulnerability report")
     a("")
+    if s.get("incomplete"):
+        a(f"> **INCOMPLETE REPORT:** {', '.join(s['incomplete'])} failed, so the counts below are "
+          "partial (a lower bound). Do not release on this report.")
+        a("")
     a(f"Generated {rep['generated']} by `scripts/scan_vulns.py` from "
       f"`{rep['sbom']['path']}` (serial `{rep['sbom']['serialNumber']}`, beast-boot {rep['sbom']['version']}, "
       f"build `{rep['sbom']['build_id']}`). Machine-readable: `sbom/vulnerabilities.json`.")
@@ -1927,6 +1931,9 @@ def main() -> int:
                 "osv": sum(len(p.get("vulnerabilities", [])) for o in (o1, o2) for p in o.get("packages", []))},
         "merged": len(findings),
         "components_affected": len({f["component"]["bom-ref"] for f in findings}),
+        # scanners that did not run: every count above is then a lower bound
+        "incomplete": [n for n, r in (("grype", g), (f"osv-scanner ({o1['label']})", o1),
+                                      (f"osv-scanner ({o2['label']})", o2)) if not r.get("ok")],
     }
     findings.sort(key=lambda f: (f["scope"] != "shipped", -SEV_RANK[f["severity"]], f["id"], f["component"]["name"]))
     proposals = vex_proposals(findings, ts, bom["metadata"]["component"].get("purl") or "beast-boot", modules)
@@ -1966,18 +1973,25 @@ def main() -> int:
     (out_dir / "vex.proposed.openvex.json").write_text(json.dumps(proposals, indent=2) + "\n")
     write_markdown(out_dir / "VULNERABILITIES.md", rep)
     so, bo = summary["open"]["shipped"], summary["open"]["boot_chain"]
+    failed_scanners = summary["incomplete"]
     rel = out_dir.relative_to(root) if out_dir.is_relative_to(root) else out_dir
     log(f"wrote {rel}/vulnerabilities.json, {rel}/VULNERABILITIES.md, {rel}/vex.proposed.openvex.json")
     print("scan: open boot-chain: " + ", ".join(f"{k}={v}" for k, v in bo.items() if v))
     print("scan: open shipped:    " + ", ".join(f"{k}={v}" for k, v in so.items() if v))
     print("scan: open build-time: " + ", ".join(f"{k}={v}" for k, v in summary["open"]["build"].items() if v))
     print(f"scan: closed by VEX: {summary['closed']}; VEX proposals: {summary['proposals']}; VEX problems: {len(vex_errs)}")
+    if failed_scanners:
+        # A failed scanner silently lowers every count: never let a partial report pass as complete.
+        print(f"scan: INCOMPLETE: {', '.join(failed_scanners)} failed; the counts above are partial"
+              + ("" if a.offline else " - fix the network/tool and re-run (exit 4)"))
     not_run = [f["id"] for f in bc_findings if f["id"].endswith("-NOT-CHECKED")]
     if not_run:
         print(f"scan: boot-chain checks NOT RUN (no data): {', '.join(not_run)} - see R-DATA-UNAVAILABLE")
     worst = max([SEV_RANK[f["severity"]] for f in all_f if f["scope"] == "shipped" and f["status"] in open_st] or [0])
     if a.fail_on != "none" and (worst >= SEV_RANK[a.fail_on] or not_run):
         return 3
+    if failed_scanners and not a.offline:
+        return 4
     return 0
 
 
