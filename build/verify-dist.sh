@@ -28,8 +28,10 @@
 #      from (compared with the .deb itself when it is in the beast-net cache)
 #   4. the SBAT embedded in grubx64.efi equals the manifest's
 #   5. wimboot (Windows PE loader) is a hybrid BIOS/UEFI image of the
-#      manifest's version, unsigned, with its SBAT lines, from the manifest's
-#      wimboot build (compared with that build when it is in the local cache);
+#      manifest's version, with its SBAT lines and exactly one signature, which
+#      verifies with the beast-boot certificate; without that signature it is
+#      the manifest's wimboot build (wimboot_unsigned_sha256; compared with that
+#      build when it is in the local cache);
 #      the Windows PE start-up files have CRLF line endings; beastmount.exe
 #      (attaches the ISO in Windows PE) is a PE32+ x86_64 console program
 #      without time stamp or signature that imports only KERNEL32/msvcrt, from
@@ -183,7 +185,7 @@ info "SBAT check at build time: $(mget secure_boot.sbat_version_check)"
 info "shim's own revocation level: $(mget secure_boot.shim_sbat_level_latest)"
 
 echo
-echo "[5] wimboot (Windows PE loader, built from source by build/wimboot/wimbootsrc.py; unsigned)"
+echo "[5] wimboot (Windows PE loader, built from source by build/wimboot/wimbootsrc.py; signed by the beast-boot key)"
 WIM="$ESP/beast-booter/wimboot"
 WIM_VER="$(mget build.wimboot_version 2>/dev/null || true)"
 WIMSRC=(python3 -I "$HERE/wimboot/wimbootsrc.py")
@@ -202,19 +204,34 @@ if [ -z "$WIM_VER" ] && [ ! -e "$WIM" ]; then
 elif [ -z "$WIM_VER" ] || [ ! -f "$WIM" ]; then
   bad "wimboot and the manifest's build.wimboot_version must come together (file: $([ -f "$WIM" ] && echo yes || echo no), version: '${WIM_VER}')"
 else
-  if facts="$("${WIMSRC[@]}" check "$WIM" "$WIM_VER" 2>"$T/wim.err")"; then
-    ok "beast-booter/wimboot $WIM_VER: bzImage header (BIOS, linux16), PE32+ x86_64 (UEFI, linux) with MajorImageVersion >= 1, no signature, upstream + beast-boot SBAT lines"
+  if facts="$("${WIMSRC[@]}" check "$WIM" "$WIM_VER" --signed 2>"$T/wim.err")"; then
+    ok "beast-booter/wimboot $WIM_VER: bzImage header (BIOS, linux16), PE32+ x86_64 (UEFI, linux) with MajorImageVersion >= 1, signed, upstream + beast-boot SBAT lines"
     info "wimboot facts: $facts"
   else
     bad "beast-booter/wimboot: $(sed 's/^wimboot: error: //' "$T/wim.err")"
   fi
+  sigs="$(sbverify --list "$WIM" 2>/dev/null)" || true
+  n="$(grep -c '^signature ' <<<"$sigs" || true)"
+  if [ "$n" = 1 ]; then ok "beast-booter/wimboot has exactly one signature (sbverify)"; else bad "beast-booter/wimboot has $n signatures (expected 1)"; fi
+  if efi_inspect require "$WIM" --only "beast-boot=$VERIFY_PEM" >/dev/null 2>&1; then
+    ok "beast-booter/wimboot has exactly one signature, which verifies with the beast-boot certificate"
+  else
+    bad "beast-booter/wimboot is not signed by the beast-boot certificate alone"
+  fi
+  # the build output is unsigned: everything below compares the file with its signature removed
+  cp "$WIM" "$T/wimboot-unsigned"
+  if sbattach --remove "$T/wimboot-unsigned" >/dev/null 2>&1 && [ "$(sha "$T/wimboot-unsigned")" = "$(mget secure_boot.wimboot_unsigned_sha256)" ]; then
+    ok "beast-booter/wimboot without its signature = manifest wimboot_unsigned_sha256 $(mget secure_boot.wimboot_unsigned_sha256 | cut -c1-16)..."
+  else
+    bad "beast-booter/wimboot without its signature does not match wimboot_unsigned_sha256"
+  fi
   wo="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["files"]["esp/beast-booter/wimboot"]["origin"])' "$DIST/manifest.json")"
-  if [ "$wo" = "wimboot-src:wimboot=$WIM_VER:/wimboot" ]; then ok "manifest origin: $wo"; else bad "manifest origin of beast-booter/wimboot is '$wo'"; fi
+  if [ "$wo" = "wimboot-src:wimboot=$WIM_VER:/wimboot, signed:beast-boot" ]; then ok "manifest origin: $wo"; else bad "manifest origin of beast-booter/wimboot is '$wo'"; fi
   wkey="$(mget build.wimboot_build_key)"
   winfo="${BB_WIMBOOT_CACHE:-$BB_ROOT/.tools/cache/wimboot}/out/$wkey/build-info.json"
   if [ -f "$winfo" ] && [ "$(sha "$winfo")" = "$(mget build.wimboot_build_info_sha256)" ]; then
-    if [ "$("${WIMSRC[@]}" info "$(dirname "$winfo")" files.wimboot)" = "$(sha "$WIM")" ]; then
-      ok "beast-booter/wimboot is the file of wimboot build $wkey (its build-info.json is the manifest's)"
+    if [ "$("${WIMSRC[@]}" info "$(dirname "$winfo")" files.wimboot)" = "$(sha "$T/wimboot-unsigned")" ]; then
+      ok "beast-booter/wimboot without its signature is the file of wimboot build $wkey (its build-info.json is the manifest's)"
     else
       bad "beast-booter/wimboot differs from the file of wimboot build $wkey"
     fi
@@ -281,7 +298,7 @@ if [ "$REBUILD" = 1 ] && [ -f "$WIM" ]; then
     if [ "$("${WIMSRC[@]}" info "$WOUT" key)" != "$(mget build.wimboot_build_key)" ]; then
       info "wimboot build key differs from the manifest's (other toolchain?); comparing the output anyway"
     fi
-    if cmp -s "$WOUT/wimboot" "$WIM"; then ok "beast-booter/wimboot is byte-identical to the rebuilt one"
+    if cmp -s "$WOUT/wimboot" "$T/wimboot-unsigned"; then ok "beast-booter/wimboot without its signature is byte-identical to the rebuilt one"
     else bad "beast-booter/wimboot differs from the rebuilt one (other toolchain, see the build key above?)"; fi
   else
     tail -n 5 "$T/wimboot.log" | sed 's/^/        /'

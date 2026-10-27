@@ -5,7 +5,9 @@
     python3 -I build/wimboot/wimbootsrc.py key    [--cache DIR]   print the cache key of the current inputs
     python3 -I build/wimboot/wimbootsrc.py verify OUTDIR          check OUTDIR against its build-info.json
     python3 -I build/wimboot/wimbootsrc.py info   OUTDIR FIELD... print build-info.json fields
-    python3 -I build/wimboot/wimbootsrc.py check  FILE VERSION    check a wimboot image (headers, unsigned, SBAT)
+    python3 -I build/wimboot/wimbootsrc.py check  FILE VERSION [--signed]
+                                                  check a wimboot image (headers, SBAT; unsigned, or
+                                                  with --signed carrying a signature: the shipped file)
 
 `build` prints the output directory (.tools/cache/wimboot/out/<key>) on stdout
 as its last line; everything else goes to stderr. OUTDIR/wimboot is the file
@@ -252,7 +254,9 @@ def pe_facts(data: bytes) -> dict:
     return facts
 
 
-def check_output(path: Path, version: str) -> dict:
+def check_output(path: Path, version: str, signed: bool = False) -> dict:
+    """The build output is unsigned; build/build.sh signs the shipped copy (signed=True). Who
+    signed it is checked by the callers (efi_inspect.py require --only)."""
     f = pe_facts(path.read_bytes())
     problems = []
     if not f["bzimage"]:
@@ -261,8 +265,10 @@ def check_output(path: Path, version: str) -> dict:
         problems.append(f"PE machine {f['machine']}, not x86_64")
     if f["major_image_version"] < 1:
         problems.append("PE MajorImageVersion 0: GRUB would not pass the initrd on UEFI (patch 0002 missing?)")
-    if f["signed"]:
+    if f["signed"] and not signed:
         problems.append("the image carries a signature (we build it unsigned)")
+    if signed and not f["signed"]:
+        problems.append("the image carries no signature (the shipped wimboot is signed with the beast-boot key)")
     if not re.search(r"^wimboot,\d+,iPXE,wimboot,", f["sbat"], re.M):
         problems.append("SBAT lacks upstream's wimboot line")
     if f"wimboot.beastboot,1,BeastBoot,wimboot,v{version}," not in f["sbat"]:
@@ -444,6 +450,7 @@ def main() -> int:
     c = sub.add_parser("check", help="check FILE as a wimboot VERSION image of ours; print its facts")
     c.add_argument("file")
     c.add_argument("version")
+    c.add_argument("--signed", action="store_true", help="FILE is the shipped (signed) wimboot")
     a = ap.parse_args()
     try:
         if a.cmd == "build":
@@ -457,7 +464,7 @@ def main() -> int:
             verify(Path(a.outdir))
             return 0
         if a.cmd == "check":
-            facts = check_output(Path(a.file), a.version)
+            facts = check_output(Path(a.file), a.version, a.signed)
             print(json.dumps({k: v for k, v in facts.items() if k != "sbat"}, sort_keys=True))
             return 0
         if a.cmd == "info":
