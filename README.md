@@ -36,7 +36,7 @@
 
 ## Why
 
-I wanted a all in one utility for booting my operating systems from a USB drive, but I also wanted to be able to store data on the drive as well. I also wanted to be able to download/boot ISO from the internet in the case I dont have any ISO on my drive and my system is completly borked (has happened a couple times). Im also very paranoid about security and in todays age where the next zero day is a vibe code away it requires a level of caution and trust to download and use something from the internet. The goal of this project is to provide a fully transparent application that anyone can vet.
+I wanted a all in one utility for booting my operating systems from a USB drive, but I also wanted to be able to store data on the drive as well. I also wanted to be able to download/boot ISO from the internet in the case I dont have any ISO on my drive and my system is completely borked (has happened a couple times). Im also very paranoid about security and in todays age where the next zero day is a vibe code away it requires a level of caution and trust to download and use something from the internet. The goal of this project is to provide a fully transparent application that anyone can vet.
 
 ## What it is
 
