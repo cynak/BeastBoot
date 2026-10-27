@@ -71,6 +71,7 @@ stop_step() {  # TERM the running step's process tree, then KILL what is left
   [ -n "$CUR_PID" ] || return 0
   kill_tree "$CUR_PID" TERM; sleep 5; kill_tree "$CUR_PID" KILL
 }
+# shellcheck disable=SC2329  # called through trap
 on_interrupt() {
   stop_step
   echo "prerelease: interrupted" | tee -a "$OUT/summary.txt"
