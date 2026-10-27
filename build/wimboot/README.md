@@ -33,9 +33,15 @@ compares it byte for byte.
      only for such images; otherwise it uses its legacy loader, which wimboot
      cannot run under.
   3. `0003` an SBAT vendor line for our modified build.
+  4. `0004`-`0007` memory-safety fixes for input from the boot medium
+     (signing wimboot makes them Secure Boot relevant): WIM chunk table
+     and resource bounds (a crafted `boot.wim` could write over the stack),
+     the XCA/LZX/Huffman decoders, the CPIO initrd parser and the EFI
+     command line. Found by review and fuzzing, see [fuzz/](fuzz/README.md).
 
   Without a LoadFile2 initrd, the patched wimboot behaves exactly like
-  upstream. 0001 and 0002 are candidates for upstream.
+  upstream on valid input. 0001, 0002 and 0004-0007 are candidates for
+  upstream.
 
 ## One binary for BIOS and UEFI
 

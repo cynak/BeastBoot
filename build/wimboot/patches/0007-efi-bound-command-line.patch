@@ -1,0 +1,47 @@
+Subject: efi: bound the command line copy
+
+The command line was copied into a stack VLA sized by LoadOptionsSize
+and converted with "%ls", which reads until a NUL even when the load
+options have none (reading past them), and dereferences LoadOptions even
+when it is NULL. Copy at most LoadOptionsSize bytes, at most 4096
+characters, into a static buffer (review W3). Command lines that fit
+behave exactly as before.
+
+beast-boot (build/wimboot/); to be offered upstream.
+
+---
+--- a/src/efimain.c
++++ b/src/efimain.c
+@@ -53,18 +53,29 @@
+ /** SBAT metadata (with no terminating NUL) */
+ const char sbat[ sizeof ( SBAT_CSV ) - 1 ] __sbat = SBAT_CSV;
+ 
++/** Longest command line used (longer load options are cut here) */
++#define EFI_CMDLINE_MAX 4096
++
+ /**
+  * Process command line
+  *
+  * @v loaded		Loaded image protocol
+  */
+ static void efi_cmdline ( EFI_LOADED_IMAGE_PROTOCOL *loaded ) {
++	static char cmdline[ EFI_CMDLINE_MAX + 1 /* NUL */ ];
+ 	size_t cmdline_len = ( loaded->LoadOptionsSize / sizeof ( wchar_t ) );
+-	char cmdline[ cmdline_len + 1 /* NUL */ ];
+ 	const wchar_t *wcmdline = loaded->LoadOptions;
++	size_t i;
+ 
+-	/* Convert command line to ASCII */
+-	snprintf ( cmdline, sizeof ( cmdline ), "%ls", wcmdline );
++	/* Convert command line to ASCII (as "%ls" does), reading no more
++	 * than LoadOptionsSize bytes: the options need not end in a NUL */
++	if ( ! wcmdline )
++		cmdline_len = 0;
++	if ( cmdline_len > EFI_CMDLINE_MAX )
++		cmdline_len = EFI_CMDLINE_MAX;
++	for ( i = 0 ; ( i < cmdline_len ) && wcmdline[i] ; i++ )
++		cmdline[i] = wcmdline[i];
++	cmdline[i] = '\0';
+ 
+ 	/* Process command line */
+ 	process_cmdline ( cmdline );

@@ -1,0 +1,82 @@
+Subject: cpio: check name and file sizes; efi: check the initrd size
+
+The initrd (the LoadFile2 initrd of patch 0001, or the BIOS initrd)
+comes from the boot medium. cpio_extract() used the name without
+checking that its size fits in the archive or that it ends in a NUL
+(strcmp/strlen read past the archive), and accepted a sign in the size
+fields ("-0000010"), whose wrapped file length passed the bounds check:
+the file then covered memory outside the initrd. Both header fields must
+now be eight hex digits, the name must end in a NUL inside the archive,
+and the file data must fit (review W2, confirmed by fuzzing).
+
+Also, after LoadFile2 loads the initrd, the size it reports must still
+fit the pages allocated for it.
+
+beast-boot (build/wimboot/); to be offered upstream.
+
+---
+--- a/src/cpio.c
++++ b/src/cpio.c
+@@ -46,13 +46,20 @@
+  * Parse CPIO field value
+  *
+  * @v field		ASCII field
+- * @ret value		Field value
++ * @ret value		Field value, or ~0UL if not eight hex digits
+  */
+ static unsigned long cpio_value ( const char *field ) {
+ 	char buf[9];
++	unsigned int i;
+ 
+ 	memcpy ( buf, field, ( sizeof ( buf ) - 1 ) );
+ 	buf[ sizeof ( buf ) - 1 ] = '\0';
++	for ( i = 0 ; i < ( sizeof ( buf ) - 1 ) ; i++ ) {
++		if ( ! ( ( ( buf[i] >= '0' ) && ( buf[i] <= '9' ) ) ||
++			 ( ( ( buf[i] | 0x20 ) >= 'a' ) &&
++			   ( ( buf[i] | 0x20 ) <= 'f' ) ) ) )
++			return ~0UL;
++	}
+ 	return strtoul ( buf, NULL, 16 );
+ }
+ 
+@@ -72,6 +79,7 @@
+ 	const char *file_name;
+ 	void *file_data;
+ 	size_t file_name_len;
++	size_t header_len;
+ 	size_t file_len;
+ 	size_t cpio_len;
+ 	int rc;
+@@ -108,9 +116,19 @@
+ 		/* Extract file parameters */
+ 		file_name = ( ( void * ) ( cpio + 1 ) );
+ 		file_name_len = cpio_value ( cpio->c_namesize );
+-		file_data = ( data + cpio_align ( sizeof ( *cpio ) +
+-						  file_name_len ) );
++		if ( ( file_name_len == 0 ) ||
++		     ( file_name_len > ( len - sizeof ( *cpio ) ) ) ||
++		     ( file_name[ file_name_len - 1 ] != '\0' ) ) {
++			DBG ( "Bad CPIO file name\n" );
++			return -1;
++		}
++		header_len = cpio_align ( sizeof ( *cpio ) + file_name_len );
+ 		file_len = cpio_value ( cpio->c_filesize );
++		if ( ( header_len > len ) || ( file_len > ( len - header_len ) ) ) {
++			DBG ( "Truncated CPIO file\n" );
++			return -1;
++		}
++		file_data = ( data + header_len );
+ 		cpio_len = ( file_data + file_len - data );
+ 		if ( cpio_len < len )
+ 			cpio_len = cpio_align ( cpio_len );
+--- a/src/efifile.c
++++ b/src/efifile.c
+@@ -272,6 +272,8 @@
+ 		die ( "Could not load initrd: %#lx\n",
+ 		      ( ( unsigned long ) efirc ) );
+ 	}
++	if ( size > ( pages * PAGE_SIZE ) )
++		die ( "Initrd grew to %#lx bytes\n", ( ( unsigned long ) size ) );
+ 	DBG ( "...loaded initrd at [%p,%p) via LoadFile2\n",
+ 	      data, ( data + size ) );
+ 
