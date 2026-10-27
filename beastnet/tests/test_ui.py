@@ -2,6 +2,7 @@ import curses
 import io
 import os
 import select
+import signal
 import sys
 import threading
 import time
@@ -221,7 +222,15 @@ def test_tui_in_a_real_terminal():
         assert read_until(b"RESULT="), out[-500:]
         read_until(b"\n", 2)
     finally:
-        _, status = os.waitpid(pid, 0)
+        # A failed check above leaves the menu waiting for keys: stop it, or waitpid
+        # blocks forever and the test hangs instead of failing.
+        done, status = os.waitpid(pid, os.WNOHANG)
+        if done == 0:
+            time.sleep(2)
+            done, status = os.waitpid(pid, os.WNOHANG)
+        if done == 0:
+            os.kill(pid, signal.SIGKILL)
+            _, status = os.waitpid(pid, 0)
         os.close(fd)
     assert b"RESULT=b" in out
     assert b"beast-boot" in out and b"HomeNet" in out and b"[||||]" in out
