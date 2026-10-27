@@ -31,6 +31,7 @@ firmware (Secure Boot db: Microsoft UEFI CA 2011 and/or 2023)
 | `EFI/BOOT/BOOTX64.EFI` (shim 16.1, Debian `shim-signed 1.51+16.1-2`, unmodified) | Microsoft, twice over the same Authenticode digest: one signature chains to Microsoft Corporation UEFI CA 2011, the other to Microsoft UEFI CA 2023 | one of those CAs is in the firmware `db`: old PCs have the 2011 CA, new ones may have only the 2023 CA |
 | `EFI/BOOT/mmx64.efi` (MokManager, Debian `shim-helpers-amd64-signed 1+16.1+2`, unmodified) | Debian Secure Boot Signer 2022 - shim | shim has Debian's CA built in |
 | `EFI/BOOT/grubx64.efi` (BeastBoot GRUB) | the BeastBoot key | you enrolled `ENROLL_THIS_KEY_IN_MOKMANAGER.cer` in MokManager |
+| `beast-booter/wimboot` (iPXE wimboot 2.9.0 + our patches, 0.4.0) | the BeastBoot key (signed by the build; it carries the BeastBoot SBAT line, so a vulnerable build can be revoked) | the same enrolled BeastBoot key |
 | `beast-net/vmlinuz` (Ubuntu's kernel, code unchanged) | the BeastBoot key (the build removes Canonical's signature and signs it again) | the same enrolled BeastBoot key |
 | kernels inside ISOs | their distribution | see [section 6](#6-which-isos-boot-with-secure-boot-on) |
 
@@ -262,9 +263,18 @@ Debian (the key built into Debian's shim), and it is not revoked (firmware
   ISOs) do not boot with Secure Boot on. Turn Secure Boot off, or sign them
   yourself and enroll your key — your choice, not BeastBoot's.
 - **Windows ISOs** (installation, Windows PE) boot through wimboot, which
-  is not signed, so only with Secure Boot **off**. With Secure Boot on, the
-  menu stops with `windows-sb` and says to turn it off for that boot
-  ([ISO_SUPPORT.md](ISO_SUPPORT.md#windows)).
+  since 0.4.0 is signed with the BeastBoot key (the key you already enrolled
+  for GRUB, so there is nothing new to trust). GRUB cannot read Microsoft's
+  UDF ISOs while Secure Boot is on, so the ISO's `boot.wim` is copied once to
+  the data partition (**Prepare this Windows ISO for Secure Boot** in the
+  menu, or `beast-boot prepare-windows` on the computer). The copy needs no
+  trust: the firmware verifies Windows' own boot manager and Windows verifies
+  the rest. Limit: Windows' boot manager must be trusted by the PC's `db` and
+  not be revoked in `dbx`. An old ISO on an updated PC, or a `db` without the
+  right Microsoft CA, fails exactly as Microsoft's own USB media would;
+  wimboot then shows `Could not load ...` and the menu only sees
+  `boot-failed`. Details: [ISO_SUPPORT.md](ISO_SUPPORT.md#windows) and
+  [WINDOWS_SECURE_BOOT.md](WINDOWS_SECURE_BOOT.md).
 
 BeastBoot never works around a failed check. The menu explains what failed
 and what you can do (trust Ubuntu's key, enroll that distribution's key, or

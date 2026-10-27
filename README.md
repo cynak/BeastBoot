@@ -302,7 +302,10 @@ BeastBoot and opens MokManager. Choose **Enroll key from disk**, select
 fingerprint, confirm, and reboot. This is a one-time step per computer.
 ISOs then boot if their kernel is signed by a key the machine trusts:
 Debian out of the box; other distributions after you enroll their key;
-unsigned ones only with Secure Boot off.
+unsigned ones only with Secure Boot off. Windows ISOs boot with Secure
+Boot on after a one-time preparation ("Prepare this Windows ISO for Secure
+Boot" in the menu, or `beast-boot prepare-windows`); see
+[docs/ISO_SUPPORT.md](docs/ISO_SUPPORT.md#windows).
 
 **Ubuntu and Ubuntu-based ISOs** (Linux Mint and others that use Ubuntu's
 signed kernel): since 0.1.2 the drive's shim is Debian's, which does not

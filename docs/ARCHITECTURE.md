@@ -136,7 +136,7 @@ dist/
     beast-net/catalog.json   firmware pack catalog (docs/BEASTNET.md §6)
     beast-booter/wimboot     iPXE's wimboot (Windows PE loader), built from its pinned release
                              source + our patches (build/wimboot/); one x86_64 hybrid image for
-                             BIOS (GRUB linux16) and UEFI (GRUB linux); unsigned
+                             BIOS (GRUB linux16) and UEFI (GRUB linux); signed with the BeastBoot key
     beast-booter/winpe/      winpeshl.ini, beastboot.cmd: the Windows PE start-up files the menu
                              injects with wimboot (build/winpe/, CRLF line endings)
 ```
@@ -155,8 +155,14 @@ hides its entry.
 
 wimboot and Secure Boot: our wimboot is patched (on UEFI it takes the files
 GRUB passes with `initrd newc:...` through LoadFile2, see
-build/wimboot/README.md) and not signed, so shim/GRUB refuse it under Secure
-Boot; the menu boots Windows ISOs only with Secure Boot off.
+build/wimboot/README.md) and signed by the build with the BeastBoot key (the
+one that signs GRUB; manifest `secure_boot.wimboot_unsigned_sha256` is the
+image without its signature). GRUB cannot read UDF under Secure Boot, so the
+menu boots a copy of the ISO's `boot.wim` from
+`($data)/beast-booter/winboot/<iso>/` (made once by the helper action
+`winboot` or by `beast-boot prepare-windows`); see
+[WINDOWS_SECURE_BOOT.md](WINDOWS_SECURE_BOOT.md). With Secure Boot off the
+menu reads the ISO directly.
 `beast-booter/winpe/beastmount.exe` (attaches the ISO in Windows PE) is our
 own program, built reproducibly with pinned MinGW-w64 packages
 (build/winpe/beastmountsrc.py). `BB_SKIP_WIMBOOT=1` builds without `beast-booter/`.
@@ -206,7 +212,7 @@ MokManager shows), `sbat_version_check`, `sbat_source`, `grub_security_fixes`,
 `shim_sbat_level_latest`, `shim_signers`, `shim_authenticode_sha256`,
 `shim_distro`, `grub_unsigned_sha256` and, for the re-signed helper kernel,
 `beastnet_kernel_source`, `beastnet_kernel_authenticode_sha256`,
-`beastnet_kernel_unsigned_sha256` and `beastnet_kernel_replaced_signers`. A `grub-src:` origin names
+`beastnet_kernel_unsigned_sha256`, `beastnet_kernel_replaced_signers` and `wimboot_unsigned_sha256` (wimboot is signed with the BeastBoot key). A `grub-src:` origin names
 a file of that GRUB build; gen_sbom.py and scan_vulns.py check it against the
 build's `build-info.json`. A `wimboot-src:wimboot=<version>:/wimboot` origin
 names the file of the wimboot build; gen_sbom.py checks it the same way. `sbsign` embeds a signing time, so a re-signed
@@ -298,7 +304,7 @@ BEAST: error <code> <free text>
 ```
 
 Error codes: `no-data-partition`, `iso-not-found`, `loopback-failed`,
-`no-recipe`, `ntfs-unsupported`, `windows-sb`, `windows-bad-name`, `windows-no-wimboot`, `grubenv-not-writable`, `iso-too-large`,
+`no-recipe`, `ntfs-unsupported`, `windows-sb-no-helper`, `windows-bad-name`, `windows-no-wimboot`, `grubenv-not-writable`, `iso-too-large`,
 `sb-verify-failed`, `boot-failed`, `oneshot-not-cleared`.
 
 ## 6. ISO boot recipes
@@ -317,7 +323,7 @@ ISO's volume label (`probe --label (loop)`).
 | 5 | `dracut-live` | `/LiveOS/squashfs.img` and `/images/pxeboot/vmlinuz` | `/images/pxeboot/vmlinuz` / `/images/pxeboot/initrd.img` | `root=live:CDLABEL=<label> rd.live.image iso-scan/filename=<path> quiet` |
 | 6 | `anaconda` | `/images/pxeboot/vmlinuz` (no `/LiveOS`) | same as above | `inst.stage2=hd:UUID=<uuid>:<path> quiet` |
 | 7 | `suse` | `/boot/x86_64/loader/linux` | that / `/boot/x86_64/loader/initrd` | `isofrom_device=/dev/disk/by-uuid/<uuid> isofrom_system=<path> splash=silent` |
-| 8 | `windows` | `/sources/boot.wim` and (`/bootmgr` or `/efi/microsoft/boot/bcd`) | `($esp)/beast-booter/wimboot` / `newc:boot.wim:(loop)/sources/boot.wim` + the Windows PE start-up files | Secure Boot on: `BEAST: error windows-sb` and explain. Install media (`/sources/install.wim`, `.esd`, `.swm`): menu `windows.cfg` (Windows Setup, default; or Windows PE `index=1`), ISO path and mode saved to `grub/grubenv` for `beastboot.cmd`; other `boot.wim` ISOs as they are. BIOS `linux16`/`initrd16`, UEFI `linux`/`initrd` (tests/e2e/REAL_ISOS.md "Windows") |
+| 8 | `windows` | `/sources/boot.wim` and (`/bootmgr` or `/efi/microsoft/boot/bcd`) | `($esp)/beast-booter/wimboot` / `newc:boot.wim:(loop)/sources/boot.wim` + the Windows PE start-up files | Secure Boot on: boots the prepared copy `newc:boot.wim:$bb_wb_dir/boot.wim` (record `windows mode=<m> copy=<dir>`); an unprepared UDF-bridge ISO gets the "Prepare this Windows ISO for Secure Boot" entry (`windows-prepare`), or `windows-sb-no-helper` without the helper. Install media (`/sources/install.wim`, `.esd`, `.swm`): menu `windows.cfg` (Windows Setup, default; or Windows PE `index=1`), ISO path and mode saved to `grub/grubenv` for `beastboot.cmd`; other `boot.wim` ISOs as they are. BIOS `linux16`/`initrd16`, UEFI `linux`/`initrd` (tests/e2e/REAL_ISOS.md "Windows") |
 | 9 | `efi-chainload` | UEFI only: `/EFI/BOOT/BOOTX64.EFI` (any case) | – | `chainloader (loop)/EFI/BOOT/BOOTX64.EFI`, with a warning that many ISOs cannot find their files this way |
 | – | none | – | – | `BEAST: error no-recipe ...` and explain |
 

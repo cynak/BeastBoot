@@ -2,7 +2,7 @@
 
 Goal: prove that real, official ISOs of each supported family **really boot**
 from a BeastBoot drive: the ISO's own system starts, from the ISO file on
-the data partition. Modes: UEFI and BIOS, Secure Boot off. ESXi is out of
+the data partition. Modes: UEFI and BIOS, Secure Boot off (Windows with Secure Boot on: pending e2e, see "Windows"). ESXi is out of
 scope.
 
 This file is the contract between the parts built in parallel. Keep it in
@@ -137,7 +137,7 @@ What the build ships (build/wimboot/, build/winpe/; `BB_SKIP_WIMBOOT=1` leaves i
 
 | ESP file | what |
 |---|---|
-| `beast-booter/wimboot` | iPXE wimboot 2.9.0 + our patches (`2.9.0+bb1`), built from pinned source. One x86_64 hybrid image: GRUB `linux16` on BIOS, `linux` on UEFI. Unsigned. |
+| `beast-booter/wimboot` | iPXE wimboot 2.9.0 + our patches (`2.9.0+bb1`), built from pinned source. One x86_64 hybrid image: GRUB `linux16` on BIOS, `linux` on UEFI. Signed with the BeastBoot key by build.sh (0.4.0). |
 | `beast-booter/winpe/winpeshl.ini` | injected: makes Windows PE run `beastboot.cmd` instead of its default shell |
 | `beast-booter/winpe/beastboot.cmd` | injected: the start-up script (below) |
 | `beast-booter/winpe/beastmount.exe` | injected (setup mode): attaches the ISO read-only; `--running L: N` proves Setup runs from `L:`; `--sleep N` is the script's timer. Built from `build/winpe/beastmount.c` by `build/winpe/beastmountsrc.py` with Ubuntu 26.04's MinGW-w64 13 as pinned .debs (`build/winpe/mingw-w64.lock.json`); every build compiles twice in two directories and must give the same bytes (no time stamp, no symbols); imports only KERNEL32/msvcrt |
@@ -150,10 +150,13 @@ otherwise it uses its legacy loader, which exits boot services. Patch 0001
 reads the LoadFile2 initrd, 0002 sets the image version, 0003 adds an SBAT
 vendor line. BIOS works unpatched (`linux16` + `initrd16`).
 
-Secure Boot: wimboot is unsigned, so with Secure Boot on the recipe must not
-try it; it shows `BEAST: error windows-sb` ("turn Secure Boot off to boot
-this Windows ISO") instead. (Upstream's Microsoft-signed release binary is
-unpatched, so it cannot boot from GRUB on UEFI either.)
+Secure Boot (0.4.0): wimboot is signed with the BeastBoot key. GRUB cannot
+read UDF under Secure Boot, so the recipe boots a prepared copy of `boot.wim`
+from `/beast-booter/winboot/<iso>/` (see docs/WINDOWS_SECURE_BOOT.md); an
+unprepared ISO gets the "Prepare this Windows ISO for Secure Boot" entry, or
+`windows-sb-no-helper` without the helper. The `windows-sb` error was removed.
+Secure Boot results: **pending e2e**. The listing below is the Secure Boot
+off path.
 
 ### Recipe (grub/beast/lib.cfg `bb_r_windows`, `bb_win_boot`; grub/beast/windows.cfg)
 
@@ -165,7 +168,7 @@ injected, no save_env. Debug lines: `BEAST: windows mode=<m>`; in a dry run
 `BEAST: dryrun save_env bb_winpe_iso=<path> bb_winpe_mode=<m>`, `BEAST:
 dryrun linux16|linux <esp>/beast-booter/wimboot [index=1]` and `BEAST: dryrun
 initrd16|initrd newc:boot.wim:(loop)/sources/boot.wim newc:...`. Errors:
-`windows-sb`, `windows-no-wimboot`, `grubenv-not-writable`.
+`windows-sb-no-helper`, `windows-no-wimboot`, `grubenv-not-writable`.
 The design it implements:
 
 Detection stays as now: `/sources/boot.wim` (case-insensitive). Official
@@ -183,7 +186,7 @@ own winpeshl.ini/startnet.cmd run). Tests may inject in pe mode to get
 
 ```
 # $bb_iso = ISO path on ($bb_data), e.g. /Win11.iso; bb_sb = 1 under Secure Boot
-if [ "$bb_sb" = "1" ]; then bb_err windows-sb "$bb_iso"; return; fi
+# (0.4.0: no Secure Boot refusal; with bb_sb=1 bb_wb_dir selects the prepared copy)
 set bb_winpe_iso="$bb_iso"
 set bb_winpe_mode="setup"                 # or "pe"
 # the start-up script reads both from the env block GRUB injects as beastboot.txt

@@ -840,7 +840,9 @@ Common failures:
 | `BEAST: error iso-not-found` | `bb_autoboot` (or a menu path) points to a file that is not there | fix the path; it is relative to the data partition root |
 | `BEAST: error loopback-failed` | GRUB could not open the ISO as a loop device | check the file (checksum); try copying it again |
 | `BEAST: error no-recipe` | the ISO layout is not recognised | [ISO_SUPPORT.md](ISO_SUPPORT.md#recipes); report it with the `BEAST:` output |
-| `BEAST: error windows-sb` | Windows ISO with Secure Boot on (wimboot is unsigned) | turn Secure Boot off for that boot |
+| `BEAST: error windows-sb-no-helper` | Windows ISO with Secure Boot on, not prepared, and the beast-net helper is not on the drive | `beast-boot prepare-windows ISO` on the computer, or update the drive to get the helper (`windows-sb` was removed in 0.4.0) |
+| `BEAST: windows-prepare <iso>` (record) | the menu offers "Prepare this Windows ISO for Secure Boot" | choose it; it runs the helper action `winboot` |
+| helper error `winboot` (`errors.py` `WINBOOT`) | preparing the ISO was refused or failed (data partition NTFS, not enough space, `boot.wim` over 4 GiB on FAT32, not a Windows ISO) | read the helper screen; fix and retry. Spec: [WINDOWS_SECURE_BOOT.md](WINDOWS_SECURE_BOOT.md) |
 | `BEAST: error grubenv-not-writable` | `save_env` to `($esp)/grub/grubenv` failed (Windows setup/pe mode) | the drive's grubenv is missing or damaged: `beast-boot update` recreates it |
 | `BEAST: error sb-verify-failed` | shim refused the ISO's kernel (unsigned, or signed by a key this machine does not trust) | enroll that distribution's key via "Enroll a key (MokManager)", or turn Secure Boot off for that boot |
 | `BEAST: error boot-failed` | GRUB's `linux`, `initrd`, `chainloader` or `boot` failed without Secure Boot | read the GRUB error just above; `debug=linux,loader` |
