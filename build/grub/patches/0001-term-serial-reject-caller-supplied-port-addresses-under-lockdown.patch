@@ -5,7 +5,7 @@ Description: term/serial: Reject caller-supplied port addresses under lockdown
  GRUB then probes/programs a UART at that address, which writes to fixed
  offsets from it: a write primitive against arbitrary memory for anyone who
  controls grub.cfg, enough to bypass lockdown and Secure Boot. On a
- beast-booter drive grub.cfg and the menu scripts are on a FAT ESP that
+ beast-boot drive grub.cfg and the menu scripts are on a FAT ESP that
  anyone holding the drive can change, so this is reachable.
  .
  With the fix, under lockdown an address is accepted only if a port is

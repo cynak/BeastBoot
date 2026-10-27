@@ -11,7 +11,7 @@ Checks (each one PASS/FAIL, written to sbom/validation.json):
                     every LicenseRef declared, every file has SHA1 + SHA256
   cdx-structure     unique bom-refs, every dependency ref exists, every dist/ file once
   origin-verified   every file copied from a package (origin deb:...) or from our GRUB
-                    source build (grub-src:...) carries beast-booter:origin-verified and it
+                    source build (grub-src:...) carries beast-boot:origin-verified and it
                     is a match, not MISMATCH (the shipped bytes equal the package's file:
                     dpkg md5sums or the .deb contents; GRUB: its build-info.json);
                     repo:/key: files that differ from the working tree are listed as warnings
@@ -93,7 +93,7 @@ def main() -> int:
     sbom_dir = root / "sbom"
     bindir = root / ".tools" / "bin"
     schemas = root / ".tools" / "cache" / "schemas"
-    cdx_path, spdx_path = sbom_dir / "beast-booter.cdx.json", sbom_dir / "beast-booter.spdx.json"
+    cdx_path, spdx_path = sbom_dir / "beast-boot.cdx.json", sbom_dir / "beast-boot.spdx.json"
     cdx, spdx = json.loads(cdx_path.read_text()), json.loads(spdx_path.read_text())
     manifest = json.loads((root / "dist" / "manifest.json").read_text())
     results: dict[str, dict] = {}
@@ -173,7 +173,7 @@ def main() -> int:
     for name, c in sorted(file_comps.items()):
         pr = {p["name"]: p["value"] for p in c.get("properties", [])}
         origin = manifest["files"].get(name, {}).get("origin", "")
-        v = pr.get("beast-booter:origin-verified")
+        v = pr.get("beast-boot:origin-verified")
         if origin.startswith(("deb:", "grub-src:")):     # package files, files of our GRUB build
             if v is None:
                 unverified.append(name)
@@ -333,7 +333,7 @@ def main() -> int:
                                    "headers (the beast-net kernel). Each must be an SBOM component with the same "
                                    "purl, linked to the file syft found it in. Package attribution otherwise comes "
                                    "from manifest.json origins, verified per file against dpkg md5sums or the .deb "
-                                   "contents (property beast-booter:origin-verified).")})
+                                   "contents (property beast-boot:origin-verified).")})
 
         # ---- syft purls for the same packages -----------------------------------------
         # (not our GRUB source build: its purl names the Ubuntu source it tracks, it is no .deb)
@@ -342,7 +342,7 @@ def main() -> int:
         host, loose = [], []
         for c in deb_comps:
             pr = {p["name"]: p["value"] for p in c.get("properties", [])}
-            (host if pr.get("beast-booter:package-origin") == "host dpkg database" else loose).append(c)
+            (host if pr.get("beast-boot:package-origin") == "host dpkg database" else loose).append(c)
         mism = []
         with tempfile.TemporaryDirectory(prefix="bb-syft-") as td:
             t = Path(td)
@@ -358,12 +358,12 @@ def main() -> int:
         for c in host:
             if syft_host.get(c["name"]) != c["purl"]:
                 mism.append({"ours": c["purl"], "syft": syft_host.get(c["name"])})
-        # .deb archives: .tools/debs and the beast-net cache (property beast-booter:package-origin
+        # .deb archives: .tools/debs and the beast-net cache (property beast-boot:package-origin
         # "<dir>/<file>.deb sha256:..."); each directory is scanned once.
         deb_dirs = {root / ".tools" / "debs"}
         for c in loose:
             pr = {p["name"]: p["value"] for p in c.get("properties", [])}
-            path = pr.get("beast-booter:package-origin", "").split(" sha256:")[0]
+            path = pr.get("beast-boot:package-origin", "").split(" sha256:")[0]
             if path.endswith(".deb"):
                 deb_dirs.add((root / path).parent)
         syft_loose = {}
@@ -383,7 +383,7 @@ def main() -> int:
                 stanzas = []
                 for c in missing:
                     pr = {p["name"]: p["value"] for p in c.get("properties", [])}
-                    path = root / pr.get("beast-booter:package-origin", "").split(" sha256:")[0]
+                    path = root / pr.get("beast-boot:package-origin", "").split(" sha256:")[0]
                     if path.suffix == ".deb" and path.is_file():
                         r = run(["dpkg-deb", "-f", str(path)])
                         if r.returncode == 0:

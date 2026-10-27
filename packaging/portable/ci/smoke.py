@@ -5,7 +5,7 @@
 
 PACKAGE_DIR is the unpacked top folder (the one with PACKAGE-MANIFEST.json).
 Checks, in order (each prints PASS/FAIL/WARN):
-  cli-version     CLI launcher --version prints "beast-booter <VERSION>"
+  cli-version     CLI launcher --version prints "beast-boot <VERSION>"
   cli-help        CLI launcher --help lists the commands
   hostile-env     --version still works with PYTHONHOME/PYTHONPATH/TCL_LIBRARY set
                   to junk (the launchers use -s -E -B -S and unset the Tcl variables)
@@ -96,7 +96,7 @@ class Smoke:
 
     def cli_version(self) -> None:
         p, out = self.run([*self.cli, "--version"])
-        want = f"beast-booter {self.manifest['version']}"
+        want = f"beast-boot {self.manifest['version']}"
         self.check("cli-version", p is not None and p.returncode == 0 and out == want,
                    f"expected {want!r}, got exit {p and p.returncode}: {out}")
 
@@ -149,7 +149,7 @@ class Smoke:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="Smoke-test an unpacked beast-booter portable package.")
+    ap = argparse.ArgumentParser(description="Smoke-test an unpacked beast-boot portable package.")
     ap.add_argument("package", type=Path, help="unpacked package folder (has PACKAGE-MANIFEST.json)")
     ap.add_argument("--clean-env", action="store_true", help="run launchers with only HOME and a minimal PATH")
     ap.add_argument("--extra-path", action="append", default=[], help="append to PATH for the launchers")

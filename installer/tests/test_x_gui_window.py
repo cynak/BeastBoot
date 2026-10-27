@@ -169,7 +169,7 @@ old = drive(demo.OLD_BEAST)
 wait(lambda: a.drives.version == c.rows_version and c.update_notice
      and (a.notice.winfo_manager() or a.head_notice.winfo_manager()))  # a card, or one line in a short window
 shown = a.notice_text if a.notice.winfo_manager() else a.head_notice
-assert "has beast-booter 0.0.9" in shown.cget("text"), shown.cget("text")
+assert "has beast-boot 0.0.9" in shown.cget("text"), shown.cget("text")
 badges = [w.cget("text") for w in a.drives.cards[old].winfo_children() if w.winfo_class() == "TLabel"]
 assert any("0.0.9" in t and "update available" in t for t in badges), badges
 a.notice_button.invoke() if a.notice.winfo_manager() else a._select_notice_drive()
@@ -192,7 +192,7 @@ def test_demo_run_success_and_failure(tmp_path, fake_dist):
                           env=ENV, capture_output=True, text=True, timeout=180)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     lines = [line.split(" ", 3)[1:] for line in proc.stdout.splitlines() if line.startswith("RESULT")]
-    assert lines == [["done", "None", "beast-booter is ready"],
+    assert lines == [["done", "None", "beast-boot is ready"],
                      ["failed", "write-failed", "Installation failed"]]
 
 

@@ -287,11 +287,11 @@ def make_zip(src_dir, zip_path, prefix="dist/", extra=()):
 @needs_tools
 @pytest.mark.parametrize("prefix", ["dist/", ""])
 def test_dist_zip(tmp_path, fake_dist, prefix):
-    z = make_zip(fake_dist, tmp_path / "beast-booter-dist.zip", prefix)
+    z = make_zip(fake_dist, tmp_path / "beast-boot-dist.zip", prefix)
     img = tmp_path / "z.img"
     assert install(img, z, tmp_path / "p.jsonl") == 0
     assert info_json(img)["version"] == "0.1.0"
-    leftovers = [p for p in tmp_path.iterdir() if p.name.startswith(".beast-booter-")]
+    leftovers = [p for p in tmp_path.iterdir() if p.name.startswith(".beast-boot-")]
     assert leftovers == []  # the extracted copy is removed
 
 
@@ -325,7 +325,7 @@ def test_dist_zip_symlink_and_garbage(tmp_path, capsys):
     empty = tmp_path / "empty.zip"
     zipfile.ZipFile(empty, "w").close()
     assert install(tmp_path / "a.img", empty, tmp_path / "r.jsonl") == 1
-    assert "does not contain a beast-booter dist directory" in capsys.readouterr().err
+    assert "does not contain a beast-boot dist directory" in capsys.readouterr().err
 
 
 # --------------------------------------------------------------------------- the GUI's argv, minimal environment

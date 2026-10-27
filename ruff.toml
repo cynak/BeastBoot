@@ -1,4 +1,4 @@
-# ruff (https://docs.astral.sh/ruff/, MIT licence) settings for beast-booter.
+# ruff (https://docs.astral.sh/ruff/, MIT licence) settings for beast-boot.
 # Run through scripts/lint.sh (or `make lint`); editors pick this file up too.
 # See docs/CODE_QUALITY.md.
 

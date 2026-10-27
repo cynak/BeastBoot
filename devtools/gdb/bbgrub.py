@@ -1,4 +1,4 @@
-"""gdb helpers for debugging beast-booter's GRUB under QEMU (`bb-dev gdb`).
+"""gdb helpers for debugging beast-boot's GRUB under QEMU (`bb-dev gdb`).
 
 Sourced by the session file `bb-dev gdb` writes, before pc.gdb / efi.gdb.
 A Python-only replacement for GRUB's own gdb_grub + gdb_helper.py from

@@ -94,7 +94,7 @@ def du():
 
 @pytest.fixture
 def backend(du, monkeypatch):
-    monkeypatch.setattr(common, "program_paths", lambda: ["/Applications/beast-booter/app"])
+    monkeypatch.setattr(common, "program_paths", lambda: ["/Applications/beast-boot/app"])
     return DarwinBackend(runner=du)
 
 
@@ -194,7 +194,7 @@ def test_check_safe(backend, du):
 
 
 def test_check_safe_running_from_stick(backend, monkeypatch):
-    monkeypatch.setattr(common, "program_paths", lambda: ["/Volumes/STICK/beast-booter/python/bin/python3"])
+    monkeypatch.setattr(common, "program_paths", lambda: ["/Volumes/STICK/beast-boot/python/bin/python3"])
     with pytest.raises(BeastError, match="running from /dev/disk4"):
         backend.check_safe(backend.get_disk("disk4"), allow_fixed=False)
 
@@ -602,7 +602,7 @@ def test_supervised_command_exit_status_and_signals(tmp_path, shell):
 
 @pytest.mark.parametrize("rc,stderr,expected", [
     (0, "", 0),
-    (1, "0:96: execution error: beast-booter: error: refusing: /dev/disk0 holds the running macOS (1)", 1),
+    (1, "0:96: execution error: beast-boot: error: refusing: /dev/disk0 holds the running macOS (1)", 1),
     (1, "0:96: execution error: some output (with parentheses) and more (2)\n", 2),
     (1, "0:132: execution error: User canceled. (-128)", ELEVATION_CANCELLED),
     (1, "0:132: execution error: The administrator user name or password was incorrect. (-60007)", ELEVATION_FAILED),

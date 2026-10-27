@@ -46,7 +46,7 @@ MAX_REDIRECTS = 10
 MAX_CHECKSUM_FILE = 1024 * 1024
 SPACE_MARGIN = 8 * 1024 * 1024
 FAT32_MAX_FILE = 4 * 1024 ** 3 - 1
-USER_AGENT = f"beast-net/{__version__} (beast-booter)"
+USER_AGENT = f"beast-net/{__version__} (beast-boot)"
 REDIRECT_CODES = (301, 302, 303, 307, 308)
 RETRYABLE_STATUS = (408, 425, 429, 500, 502, 503, 504)
 

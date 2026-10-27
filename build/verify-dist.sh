@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# beast-booter: check a dist/ directory (or an unpacked release) for yourself.
+# beast-boot: check a dist/ directory (or an unpacked release) for yourself.
 #
 # Usage: build/verify-dist.sh [DIST] [--cert FILE] [--rebuild]
 #   DIST        the dist/ directory to check (default: $BB_ROOT/dist)
-#   --cert F    a beast-booter certificate you obtained independently (PEM or
+#   --cert F    a beast-boot certificate you obtained independently (PEM or
 #               DER); grubx64.efi must verify against it and the certificate
 #               shipped in DIST must be the same one
 #   --rebuild   build GRUB, wimboot and beastmount.exe from the pinned source
@@ -21,7 +21,7 @@
 #      digest (checked with openssl against build/shim/microsoft-uefi-ca-*.pem);
 #      MokManager is signed through shim's built-in (Debian) vendor key
 #   3. grubx64.efi carries exactly one signature, which verifies with the
-#      beast-booter certificate; without that signature it is exactly the image
+#      beast-boot certificate; without that signature it is exactly the image
 #      recorded in the manifest (grub_unsigned_sha256). The beast-net helper
 #      kernel likewise carries only our signature, and its Authenticode digest
 #      is the manifest's, which is that of the Ubuntu kernel package it came
@@ -74,7 +74,7 @@ ESP="$DIST/esp"
 GRUB="$ESP/EFI/BOOT/grubx64.efi"; SHIM="$ESP/EFI/BOOT/BOOTX64.EFI"; MM="$ESP/EFI/BOOT/mmx64.efi"
 CER="$ESP/ENROLL_THIS_KEY_IN_MOKMANAGER.cer"
 
-echo "beast-booter $(mget version) build $(mget build_id) in $DIST"
+echo "beast-boot $(mget version) build $(mget build_id) in $DIST"
 echo
 echo "[1] file hashes (manifest.json)"
 # shellcheck disable=SC2001  # indent every line; ${var//} cannot anchor at line starts
@@ -82,7 +82,7 @@ if out="$(bbtool manifest-verify "$DIST" 2>&1)"; then ok "$out"; else echo "$out
 if [ ! -e "$ESP/EFI/BOOT/fbx64.efi" ]; then ok "no fbx64.efi (no firmware boot entries are ever created)"; else bad "fbx64.efi present"; fi
 
 echo
-echo "[2] beast-booter certificate"
+echo "[2] beast-boot certificate"
 openssl x509 -inform DER -in "$CER" -out "$T/dist.pem" 2>/dev/null || { bad "cannot parse $CER"; cp /dev/null "$T/dist.pem"; }
 if [ -s "$T/dist.pem" ]; then
   subj="$(openssl x509 -in "$T/dist.pem" -noout -subject -nameopt RFC2253 | sed 's/^subject=//')"
@@ -123,7 +123,7 @@ fi
 sigs="$(sbverify --list "$GRUB" 2>/dev/null)" || true
 n="$(grep -c '^signature ' <<<"$sigs" || true)"
 if [ "$n" = 1 ]; then ok "grubx64.efi has exactly one signature"; else bad "grubx64.efi has $n signatures (expected 1)"; fi
-if sbverify --cert "$VERIFY_PEM" "$GRUB" >/dev/null 2>&1; then ok "grubx64.efi signature verifies with the beast-booter certificate"; else bad "grubx64.efi signature does NOT verify"; fi
+if sbverify --cert "$VERIFY_PEM" "$GRUB" >/dev/null 2>&1; then ok "grubx64.efi signature verifies with the beast-boot certificate"; else bad "grubx64.efi signature does NOT verify"; fi
 cp "$GRUB" "$T/grub-unsigned.efi"
 if sbattach --remove "$T/grub-unsigned.efi" >/dev/null 2>&1 && [ "$(sha "$T/grub-unsigned.efi")" = "$(mget secure_boot.grub_unsigned_sha256)" ]; then
   ok "grubx64.efi without its signature = manifest grub_unsigned_sha256 $(mget secure_boot.grub_unsigned_sha256 | cut -c1-16)..."
@@ -135,10 +135,10 @@ if [ -f "$BN_K" ]; then
   sigs="$(sbverify --list "$BN_K" 2>/dev/null)" || true
   n="$(grep -c '^signature ' <<<"$sigs" || true)"
   if [ "$n" = 1 ]; then ok "beast-net/vmlinuz has exactly one signature (sbverify)"; else bad "beast-net/vmlinuz has $n signatures (expected 1)"; fi
-  if efi_inspect require "$BN_K" --only "beast-booter=$VERIFY_PEM" >/dev/null 2>&1; then
-    ok "beast-net/vmlinuz has exactly one signature, which verifies with the beast-booter certificate"
+  if efi_inspect require "$BN_K" --only "beast-boot=$VERIFY_PEM" >/dev/null 2>&1; then
+    ok "beast-net/vmlinuz has exactly one signature, which verifies with the beast-boot certificate"
   else
-    bad "beast-net/vmlinuz is not signed by the beast-booter certificate alone"
+    bad "beast-net/vmlinuz is not signed by the beast-boot certificate alone"
   fi
   bn_auth="$(efi_inspect authenticode "$BN_K")"
   bn_src="$(mget secure_boot.beastnet_kernel_source)" || bn_src=""
@@ -203,7 +203,7 @@ elif [ -z "$WIM_VER" ] || [ ! -f "$WIM" ]; then
   bad "wimboot and the manifest's build.wimboot_version must come together (file: $([ -f "$WIM" ] && echo yes || echo no), version: '${WIM_VER}')"
 else
   if facts="$("${WIMSRC[@]}" check "$WIM" "$WIM_VER" 2>"$T/wim.err")"; then
-    ok "beast-booter/wimboot $WIM_VER: bzImage header (BIOS, linux16), PE32+ x86_64 (UEFI, linux) with MajorImageVersion >= 1, no signature, upstream + beast-booter SBAT lines"
+    ok "beast-booter/wimboot $WIM_VER: bzImage header (BIOS, linux16), PE32+ x86_64 (UEFI, linux) with MajorImageVersion >= 1, no signature, upstream + beast-boot SBAT lines"
     info "wimboot facts: $facts"
   else
     bad "beast-booter/wimboot: $(sed 's/^wimboot: error: //' "$T/wim.err")"

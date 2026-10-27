@@ -1,4 +1,4 @@
-"""bb-dev: development and debugging helpers for beast-booter.
+"""bb-dev: development and debugging helpers for beast-boot.
 
 Each subcommand lives in bbdev/commands/<name>.py and exposes:
 
@@ -33,7 +33,7 @@ COMMANDS = (
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="bb-dev",
-        description="Development and debugging helpers for beast-booter.",
+        description="Development and debugging helpers for beast-boot.",
     )
     parser.add_argument("--version", action="version", version=f"bb-dev {__version__}")
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""beast-booter: build the memdisk embedded in grubx64.efi (called by build/build.sh).
+"""beast-boot: build the memdisk embedded in grubx64.efi (called by build/build.sh).
 
 With UEFI Secure Boot on, Ubuntu's GRUB refuses font files from disk (they are
 not signed); it loads fonts only from the memdisk inside its own, signed EFI

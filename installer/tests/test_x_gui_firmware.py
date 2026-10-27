@@ -230,7 +230,7 @@ def test_invalid_catalog_is_explained(make, fw_dist):
 
 def test_blockers_in_order(make):
     c, f, _ = make()
-    assert f.available and f.install_blocker() == "Choose the beast-booter drive or image first."
+    assert f.available and f.install_blocker() == "Choose the beast-boot drive or image first."
     f.set_target_drive(STICK.id)
     assert f.target.disk == STICK and f.install_blocker() == "Select the packs to install."
     f.set_selected("intel-wifi", True)
@@ -743,7 +743,7 @@ def test_demo_drive_has_a_pack_and_the_fake_cli_agrees(fake):
     run(f)
     assert f.phase is FwPhase.DONE and f.is_installed("intel-wifi")
     f.dismiss()
-    f.set_target_drive(drive(c, "SanDisk"))  # not a beast-booter drive: nothing known without a run
+    f.set_target_drive(drive(c, "SanDisk"))  # not a beast-boot drive: nothing known without a run
     assert f.installed_on_target is None
 
 

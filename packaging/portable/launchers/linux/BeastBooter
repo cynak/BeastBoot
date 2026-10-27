@@ -1,5 +1,5 @@
 #!/bin/sh
-# beast-booter portable (Linux): start the GUI.
+# beast-boot portable (Linux): start the GUI.
 #
 # Runs only what is in this folder: the bundled Python (runtime/), the
 # installer sources (app/) and the verified boot files (payload/dist).

@@ -57,7 +57,7 @@ class FakeLinux:
         monkeypatch.setattr(devmod, "_exclusive_probe", self.probed.append)
         monkeypatch.setattr(devmod, "_exclusive_open", self._exclusive_open)
         monkeypatch.setattr(devmod, "settle", self._settle)
-        monkeypatch.setattr(common, "program_paths", lambda: ["/opt/beast-booter/app"])
+        monkeypatch.setattr(common, "program_paths", lambda: ["/opt/beast-boot/app"])
         self.files: dict[str, str] = {}  # path -> st_dev "major:minor" (others: found by mount prefix)
         monkeypatch.setattr(linux, "_file_devnum", self.files.get)
         self.proc = root / "proc"
@@ -295,8 +295,8 @@ def test_check_safe_swap_holders_sector_size(fake, backend):
 
 
 def test_check_safe_refuses_disk_we_run_from(fake, backend, monkeypatch):
-    monkeypatch.setattr(common, "program_paths", lambda: ["/media/user/MY STICK/beast-booter/python/bin/python3"])
-    with pytest.raises(BeastError, match="beast-booter itself is running from"):
+    monkeypatch.setattr(common, "program_paths", lambda: ["/media/user/MY STICK/beast-boot/python/bin/python3"])
+    with pytest.raises(BeastError, match="beast-boot itself is running from"):
         backend.check_safe(backend.get_disk("sdb"), allow_fixed=False)
 
 

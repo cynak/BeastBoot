@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the no-install portable packages of beast-booter (docs/PORTABLE.md).
+"""Build the no-install portable packages of beast-boot (docs/PORTABLE.md).
 
     python3 -I packaging/portable/build.py --all
     python3 -I packaging/portable/build.py --target linux-x86_64 [--target ...]
@@ -23,7 +23,7 @@ files you can read, and the launchers run it with -B, so it never writes any.
 
 On macOS runtime/, app/, payload/, docs/ and VERSION live in BeastBooter.app/Contents/Resources.
 
-Outputs go to out/portable/: beast-booter-<VERSION>-<target>.(tar.gz|zip) and
+Outputs go to out/portable/: beast-boot-<VERSION>-<target>.(tar.gz|zip) and
 SHA256SUMS. The archives are reproducible: sorted entries, every timestamp set to
 SOURCE_DATE_EPOCH (default: last git commit time, else the mtime of VERSION),
 owner 0/0, permissions normalised to 0644 / 0755 (symlinks kept as symlinks).
@@ -208,7 +208,7 @@ def fetch_runtime(spec: dict, cache_dir: Path, *, offline: bool) -> Path:
     fd, tmp = tempfile.mkstemp(dir=cache_dir, prefix=f".{spec['asset']}.", suffix=".part")
     h = hashlib.sha256()
     try:
-        req = urllib.request.Request(spec["url"], headers={"User-Agent": "beast-booter-portable-build"})
+        req = urllib.request.Request(spec["url"], headers={"User-Agent": "beast-boot-portable-build"})
         with os.fdopen(fd, "wb") as out, urllib.request.urlopen(req, timeout=60) as resp:
             while chunk := resp.read(1 << 20):
                 h.update(chunk)
@@ -261,7 +261,7 @@ def load_dist(dist_dir: Path) -> DistSnapshot:
         manifest_bytes = mpath.read_bytes()
         manifest = json.loads(manifest_bytes)
     except FileNotFoundError:
-        raise BuildError(f"{mpath} is missing; is {dist_dir} a beast-booter dist directory?") from None
+        raise BuildError(f"{mpath} is missing; is {dist_dir} a beast-boot dist directory?") from None
     except (OSError, ValueError) as e:
         raise BuildError(f"cannot read {mpath}: {e}") from None
     if not isinstance(manifest, dict) or manifest.get("schema") != DIST_MANIFEST_SCHEMA:
@@ -353,16 +353,16 @@ def load_sbom(sbom_dir: Path, dist: DistSnapshot) -> tuple[dict[str, bytes], dic
     expected = sha256(dist.manifest_bytes)
     recorded = None
     try:
-        cdx = json.loads(files.get("beast-booter.cdx.json", b"null"))
+        cdx = json.loads(files.get("beast-boot.cdx.json", b"null"))
         for prop in cdx["metadata"]["component"]["properties"]:
-            if prop.get("name") == "beast-booter:manifest-sha256":
+            if prop.get("name") == "beast-boot:manifest-sha256":
                 recorded = prop.get("value")
     except (ValueError, KeyError, TypeError):
         pass
     if recorded is None:
         raise BuildError(
-            f"{sbom_dir}: cannot tell which dist/ it describes (no beast-booter:manifest-sha256 in "
-            "beast-booter.cdx.json); regenerate the SBOM or build with --no-sbom"
+            f"{sbom_dir}: cannot tell which dist/ it describes (no beast-boot:manifest-sha256 in "
+            "beast-boot.cdx.json); regenerate the SBOM or build with --no-sbom"
         )
     if recorded != expected:
         raise BuildError(
@@ -443,7 +443,7 @@ class Package:
         self.target = target
         self.os, self.ext = TARGETS[target]
         self.version = version
-        self.top = f"beast-booter-{version}-{target}"
+        self.top = f"beast-boot-{version}-{target}"
         self.archive_name = f"{self.top}.{self.ext}"
         # Where runtime/, app/, payload/ and VERSION go.
         self.res = MACOS_RESOURCES if self.os == "macos" else ""
@@ -696,22 +696,22 @@ def assemble(target: str, inp: Inputs, runtime: bytes) -> tuple[Package, bytes]:
                  executable=True)
 
     if pkg.os == "linux":
-        gui, cli = "BeastBooter", "beast-booter"
-        for name in ("BeastBooter", "beast-booter", "beast-booter.desktop"):
+        gui, cli = "BeastBooter", "beast-boot"
+        for name in ("BeastBooter", "beast-boot", "beast-boot.desktop"):
             data, origin = launcher(f"linux/{name}", crlf=False)
             pkg.add_file(name, data, origin, executable=True)
         python_cli = "runtime/bin/python3"
     elif pkg.os == "windows":
-        gui, cli = "BeastBooter.cmd", "beast-booter.cmd"
+        gui, cli = "BeastBooter.cmd", "beast-boot.cmd"
         for name in (gui, cli):
             data, origin = launcher(f"windows/{name}", crlf=True)
             pkg.add_file(name, data, origin, executable=True)
         python_cli = "runtime/python.exe"
     else:
-        gui, cli = f"{APP_NAME}.app/Contents/MacOS/{APP_NAME}", "beast-booter.command"
+        gui, cli = f"{APP_NAME}.app/Contents/MacOS/{APP_NAME}", "beast-boot.command"
         data, origin = launcher("macos/BeastBooter", crlf=False)
         pkg.add_file(gui, data, origin, executable=True)
-        data, origin = launcher("macos/beast-booter.command", crlf=False)
+        data, origin = launcher("macos/beast-boot.command", crlf=False)
         pkg.add_file(cli, data, origin, executable=True)
         min_os = macho_min_os(pkg.entries[python_exe].data)
         if not min_os:
@@ -758,7 +758,7 @@ def package_manifest(pkg: Package, inp: Inputs, spec: dict, *, gui: str, cli: st
     res = pkg.res
     manifest = {
         "schema": MANIFEST_SCHEMA,
-        "name": "beast-booter",
+        "name": "beast-boot",
         "version": inp.version,
         "target": pkg.target,
         "top": pkg.top,
@@ -801,7 +801,7 @@ def package_manifest(pkg: Package, inp: Inputs, spec: dict, *, gui: str, cli: st
         },
         "origins": {
             "runtime:<path>": "file <path> of the runtime asset in sources.runtime, unmodified",
-            "repo:<path>": "file <path> of the beast-booter source tree, unmodified",
+            "repo:<path>": "file <path> of the beast-boot source tree, unmodified",
             "dist:<path>": "boot file <path> of dist/, checked against dist/manifest.json "
                            "(which names where it came from: dist_origin)",
             "generated:<path>": "written by packaging/portable/build.py from the template <path>",
@@ -887,8 +887,8 @@ def verify_archives(paths: list[Path]) -> bool:
 
 def write_sums(out_dir: Path, version: str) -> Path:
     names = sorted(
-        f"beast-booter-{version}-{t}.{ext}" for t, (_os, ext) in TARGETS.items()
-        if (out_dir / f"beast-booter-{version}-{t}.{ext}").is_file()
+        f"beast-boot-{version}-{t}.{ext}" for t, (_os, ext) in TARGETS.items()
+        if (out_dir / f"beast-boot-{version}-{t}.{ext}").is_file()
     )
     text = "".join(f"{sha256_file(out_dir / n)}  {n}\n" for n in names)
     dest = out_dir / "SHA256SUMS"
@@ -955,7 +955,7 @@ def build(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     sys.dont_write_bytecode = True  # imports below must not leave __pycache__ in the source tree
     ap = argparse.ArgumentParser(
-        prog="build.py", description="Build beast-booter's no-install portable packages.",
+        prog="build.py", description="Build beast-boot's no-install portable packages.",
         epilog="Run with python3 -I from the repository root. See docs/PORTABLE.md.",
     )
     what = ap.add_mutually_exclusive_group(required=True)

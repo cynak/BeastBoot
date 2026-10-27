@@ -431,7 +431,7 @@ def plan_layout(size: int, sector_size: int = 512, *, cluster_size: int | None =
     """Compute the volume geometry for `size` bytes (the algorithm of mkfs.exfat 1.3).
 
     FatOffset and ClusterHeapOffset are rounded up to BOUNDARY_ALIGN (1 MiB),
-    measured from the start of the volume (beast-booter partitions start on a
+    measured from the start of the volume (beast-boot partitions start on a
     1 MiB boundary of the disk, so this is also disk-aligned). The FAT is
     sized for the most clusters that could fit behind it, each costing one
     cluster in the heap plus 4 bytes of FAT.

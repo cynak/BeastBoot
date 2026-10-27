@@ -28,7 +28,11 @@ from .layout import (
     LAYOUTS,
 )
 
+# On-disk identifier, kept from before the rename to beast-boot: drives made by
+# 0.1.x/0.2.0 carry it, and writing it unchanged keeps them and new drives alike.
+# parse_marker also accepts the new spelling.
 MARKER_MAGIC = "beast-booter"
+MARKER_MAGICS = (MARKER_MAGIC, "beast-boot")
 
 # --------------------------------------------------------------------------
 # GRUB `set` lines
@@ -94,7 +98,7 @@ class DeviceConfig:
 
 
 def render_marker(install_id: str, version: str) -> str:
-    """BEAST-BOOTER.ID: identifies a beast-booter ESP (key=value lines)."""
+    """BEAST-BOOTER.ID: identifies a beast-boot ESP (key=value lines)."""
     return (
         f"{MARKER_MAGIC}\n"
         f"install_id={install_id}\n"
@@ -104,9 +108,9 @@ def render_marker(install_id: str, version: str) -> str:
 
 
 def parse_marker(text: str) -> dict[str, str] | None:
-    """Parsed marker, or None if the text is not a beast-booter marker."""
+    """Parsed marker, or None if the text is not a beast-boot marker."""
     lines = text.splitlines()
-    if not lines or lines[0].strip() != MARKER_MAGIC:
+    if not lines or lines[0].strip() not in MARKER_MAGICS:
         return None
     out = {}
     for line in lines[1:]:

@@ -111,7 +111,7 @@ def read_summary(loc: DistLocation) -> DistSummary:
     try:
         manifest = json.loads(mpath.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return DistSummary(root, False, f"{mpath} is missing: is {root} a beast-booter dist directory?")
+        return DistSummary(root, False, f"{mpath} is missing: is {root} a beast-boot dist directory?")
     except (OSError, UnicodeDecodeError, ValueError) as e:
         return DistSummary(root, False, f"Cannot read {mpath}: {e}")
     if not isinstance(manifest, dict):
@@ -168,7 +168,7 @@ def verify(path: Path) -> VerifyResult:
     from ..dist import load_dist
     from ..errors import BeastError
 
-    with tempfile.TemporaryDirectory(prefix="beast-booter-verify-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="beast-boot-verify-") as tmp:
         try:
             d = load_dist(path, os.path.join(tmp, "staging"))
         except BeastError as e:

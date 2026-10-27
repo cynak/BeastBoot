@@ -32,8 +32,8 @@ How release builds are made, signed and published:
 
 Every release publishes `SHA256SUMS`, GitHub build-provenance attestations
 for its files, and the Secure Boot certificate with its fingerprints
-(`beast-booter-<v>-ENROLL_THIS_KEY_IN_MOKMANAGER.cer`,
-`beast-booter-<v>-CERTIFICATE.txt`). Check all three before you run or
+(`beast-boot-<v>-ENROLL_THIS_KEY_IN_MOKMANAGER.cer`,
+`beast-boot-<v>-CERTIFICATE.txt`). Check all three before you run or
 enroll anything.
 
 1. **Hashes.** Download `SHA256SUMS` from the same release page, next to the
@@ -51,7 +51,7 @@ enroll anything.
    release page belongs to):
 
    ```sh
-   gh attestation verify beast-booter-<v>-linux-x86_64.tar.gz --repo cynak/BeastBoot
+   gh attestation verify beast-boot-<v>-linux-x86_64.tar.gz --repo cynak/BeastBoot
    ```
 3. **Certificate.** `CERTIFICATE.txt` gives the subject, validity and the
    SHA-1 and SHA-256 fingerprints of the signing certificate. They must
@@ -60,7 +60,7 @@ enroll anything.
    **View key** (SHA-1) before you enroll it:
 
    ```sh
-   openssl x509 -inform DER -in beast-booter-<v>-ENROLL_THIS_KEY_IN_MOKMANAGER.cer \
+   openssl x509 -inform DER -in beast-boot-<v>-ENROLL_THIS_KEY_IN_MOKMANAGER.cer \
      -noout -subject -enddate -fingerprint -sha1 -fingerprint -sha256
    ```
 

@@ -1,7 +1,7 @@
 """beast-net: "Download an ISO from a link" end to end (docs/BEASTNET.md).
 
 The chain: the root menu's tool entry -> the helper kernel (Ubuntu's, re-signed
-with the beast-booter key by build.sh) boots through our GRUB (also under
+with the beast-boot key by build.sh) boots through our GRUB (also under
 Secure Boot, verified by shim) -> DHCP on a
 virtio NIC (QEMU slirp) -> HTTP download from a host-side server with SHA-256
 verification -> one-shot entry in ESP:/grub/grubenv -> reboot -> the menu

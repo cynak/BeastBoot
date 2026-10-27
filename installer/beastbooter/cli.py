@@ -43,11 +43,11 @@ class _Parser(argparse.ArgumentParser):
 
 def build_parser(on_error=None) -> argparse.ArgumentParser:
     p = _Parser(
-        prog="beast-booter",
-        description="Create and update beast-booter multi-boot USB drives and images.",
+        prog="beast-boot",
+        description="Create and update beast-boot multi-boot USB drives and images.",
         on_error=on_error,
     )
-    p.add_argument("--version", action="version", version=f"beast-booter {__version__}")
+    p.add_argument("--version", action="version", version=f"beast-boot {__version__}")
     sub = p.add_subparsers(dest="command", metavar="COMMAND", required=True)
 
     def target(sp, *, size: bool) -> None:
@@ -73,7 +73,7 @@ def build_parser(on_error=None) -> argparse.ArgumentParser:
                         help="stop cleanly once PATH exists, checked between steps and while writing "
                              "(error event 'cancelled', exit 130); SIGTERM and SIGINT do the same")
 
-    sp = sub.add_parser("install", help="make a drive or image into a beast-booter drive (erases it)",
+    sp = sub.add_parser("install", help="make a drive or image into a beast-boot drive (erases it)",
                         on_error=on_error)
     target(sp, size=True)
     sp.add_argument("--layout", choices=LAYOUTS, default=DEFAULT_LAYOUT, help="partition table (default: %(default)s)")
@@ -86,15 +86,15 @@ def build_parser(on_error=None) -> argparse.ArgumentParser:
     target(sp, size=False)
     common(sp)
 
-    sp = sub.add_parser("info", help="show the layout of a beast-booter drive or image", on_error=on_error)
+    sp = sub.add_parser("info", help="show the layout of a beast-boot drive or image", on_error=on_error)
     target(sp, size=False)
     sp.add_argument("--json", action="store_true", help="machine-readable output")
 
-    sp = sub.add_parser("list-devices", help="list the drives beast-booter can write to", on_error=on_error)
+    sp = sub.add_parser("list-devices", help="list the drives beast-boot can write to", on_error=on_error)
     sp.add_argument("--json", action="store_true", help="machine-readable output")
     sp.add_argument("--all", action="store_true", help="also list fixed and system disks (not eligible)")
     sp.add_argument("--check-installed", action="store_true",
-                    help="also show which beast-booter version each drive has (may mount its boot "
+                    help="also show which beast-boot version each drive has (may mount its boot "
                          "partition read-only for a moment)")
 
     fw = sub.add_parser("firmware", help="optional firmware packs for beast-net (docs/BEASTNET.md section 6)",
@@ -140,7 +140,7 @@ def build_parser(on_error=None) -> argparse.ArgumentParser:
     fw_dist(sp, "is used without --catalog")
     fw_run(sp)
 
-    sp = fws.add_parser("install", help="write fetched packs to a beast-booter drive or image", on_error=on_error)
+    sp = fws.add_parser("install", help="write fetched packs to a beast-boot drive or image", on_error=on_error)
     target(sp, size=False)
     sp.add_argument("--from", dest="from_dir", metavar="DIR", required=True, help="the folder fetch wrote")
     fw_dist(sp, "is used when the drive has no catalog")
@@ -168,7 +168,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             events = ProgressFile(progress_path)
         except BeastError as e:
-            print(f"beast-booter: error: {e}", file=sys.stderr)
+            print(f"beast-boot: error: {e}", file=sys.stderr)
             return 1
     try:
         def usage_error(message: str) -> None:
@@ -234,22 +234,22 @@ def _run(parser: argparse.ArgumentParser, args: argparse.Namespace, rep: Reporte
     try:
         return _dispatch(parser, args, rep)
     except Cancelled as e:
-        print(f"beast-booter: {e}", file=sys.stderr)
+        print(f"beast-boot: {e}", file=sys.stderr)
         rep.error("cancelled", str(e))
         return 130
     except BeastError as e:
-        print(f"beast-booter: error: {e}", file=sys.stderr)
+        print(f"beast-boot: error: {e}", file=sys.stderr)
         rep.error(code_for(e), str(e))
         return 1
     except KeyboardInterrupt:
         sig = (stop.received if stop else None) or "SIGINT"
-        print(f"beast-booter: interrupted ({sig})", file=sys.stderr)
+        print(f"beast-boot: interrupted ({sig})", file=sys.stderr)
         rep.error("cancelled", f"stopped by {sig}" + (f" during step {rep.current_step}" if rep.current_step else ""))
         return 130
     except OSError as e:
         where = f": {e.filename}" if e.filename else ""
         msg = f"{e.strerror or e}{where}"
-        print(f"beast-booter: error: {msg}", file=sys.stderr)
+        print(f"beast-boot: error: {msg}", file=sys.stderr)
         rep.error(STEP_ERROR_CODES.get(rep.current_step or "", "error"), msg)
         return 1
     except Exception as e:  # a bug: keep the traceback, but tell the GUI too

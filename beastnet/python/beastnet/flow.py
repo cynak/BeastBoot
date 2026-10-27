@@ -7,6 +7,7 @@ import re
 from urllib.parse import urlsplit
 
 from . import grubenv, trust
+from .cmdline import netboot
 from .context import Context, Quit, make_request
 from .download import DownloadResult, Plan, human_size
 from .errors import TLS, WIFI_AUTH, BeastNetError, Cancelled
@@ -42,8 +43,13 @@ class Interactive:
 
     # -- top level ------------------------------------------------------------------
     def run(self, result: DownloadResult | None = None, action: str | None = None) -> None:
+        if netboot(self.ctx):
+            self.netboot_loop()
+            return
         if action == "trust-ubuntu":
             self.trust_ubuntu(entry=True)
+        elif action == "disk":
+            self.disk_tools(entry=True)
         if result is not None:
             self.ui.set_step(3)
             self.done_step(result)
@@ -63,18 +69,30 @@ class Interactive:
             self.ui.set_step(3)
             self.done_step(result)
 
+    def netboot_loop(self) -> None:
+        """Started over the network (beastnet.netboot=1, BeastServer): Disk tools only.
+        There is no stick to download to or to keep a boot entry on."""
+        while True:
+            self.disk_tools(entry=True)
+            choice = self.ui.menu("beast-net", "Started over the network: Disk tools only.",
+                                  [Item("Disk tools: recovery and cloning", "disks")] + self.common_items(),
+                                  back=False)
+            if choice and choice != "disks":
+                self.common(choice)
+
     def common(self, action: str) -> None:
         if action == "shell":
             self.ui.shell(self.ctx.system.shell)
         elif action in ("reboot", "poweroff"):
             what = "Rebooting" if action == "reboot" else "Powering off"
             fn = self.ctx.system.reboot if action == "reboot" else self.ctx.system.poweroff
-            self.ui.task(what, f"{what}: writing everything to the stick first...", fn)
+            self.ui.task(what, f"{what}..." if netboot(self.ctx) else
+                         f"{what}: writing everything to the stick first...", fn)
             raise Quit(action)
 
     def common_items(self) -> list[Item]:
         return [Item("Open a shell", "shell", hint="Type 'exit' to come back."),
-                Item("Reboot to the beast-booter menu", "reboot"),
+                Item("Reboot" if netboot(self.ctx) else "Reboot to the beast-boot menu", "reboot"),
                 Item("Power off", "poweroff")]
 
     def more_menu(self) -> None:
@@ -84,11 +102,16 @@ class Interactive:
         items.append(Item(TRUST_TITLE, "trust", hint="Lets this computer start boot loaders and "
                           "kernels signed by Ubuntu (Canonical) with Secure Boot on (two steps, "
                           "confirmed in MokManager)."))
+        items.append(Item("Disk tools: recovery and cloning", "disks",
+                          hint="See disks and RAID sets, check health, clone, image or restore. "
+                               "Every disk stays read-only until you confirm a copy target."))
         choice = self.ui.menu("More", "", items + self.common_items())
         if choice == "network":
             self.netinfo = None
         elif choice == "trust":
             self.trust_ubuntu()
+        elif choice == "disks":
+            self.disk_tools()
         elif choice:
             self.common(choice)
 
@@ -370,7 +393,7 @@ class Interactive:
         if not looks_like_iso(result.local):
             lines.append("Note: this does not look like an ISO image; the menu may not boot it.")
         items = [Item("Boot it now", "boot",
-                      hint="Reboots into the beast-booter menu, which starts this ISO once. "
+                      hint="Reboots into the beast-boot menu, which starts this ISO once. "
                            "It stays on the stick for next time."),
                  Item("Download another ISO", "another")] + self.common_items()
         while True:
@@ -396,6 +419,11 @@ class Interactive:
         self.common("reboot")
 
     # -- Trust Ubuntu's Secure Boot key (build/trust/README.md) ---------------------
+    def disk_tools(self, entry: bool = False) -> None:
+        """Disk tools (docs/DISK_TOOLS.md); ``entry`` as for trust_ubuntu."""
+        from .diskflow import DiskScreens
+        DiskScreens(self).run(entry)
+
     def trust_ubuntu(self, entry: bool = False) -> None:
         """The action's screens. ``entry``: opened by the boot menu entry
         (beastnet.action=trust-ubuntu) instead of from the helper's own menu."""

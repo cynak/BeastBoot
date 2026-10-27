@@ -150,7 +150,7 @@ def test_vm_build_id_mismatch_updates(world, capsys):
     plan = world.freshen()
     assert world.calls == ["update dev.img"]
     err = capsys.readouterr().err
-    assert "installed from build b0, dist/ is build b1" in err and "bin/beast-booter update --image" in err
+    assert "installed from build b0, dist/ is build b1" in err and "bin/beast-boot update --image" in err
     assert "ISOs and config.cfg" in err and any("updated" in n for n in plan.notes)
 
 
@@ -253,7 +253,7 @@ def test_run_update_runs_the_installer_and_refreshes_the_recipe(tmp_path, monkey
         return subprocess.CompletedProcess(cmd, 0, "updated\n", "")
     monkeypatch.setattr(freshness.subprocess, "run", fake_run)
     after = freshness.run_update(img, {})
-    assert seen[0][0].endswith("bin/beast-booter") and seen[0][1:4] == ["update", "--image", str(img)]
+    assert seen[0][0].endswith("bin/beast-boot") and seen[0][1:4] == ["update", "--image", str(img)]
     assert "--yes" in seen[0]
     assert after.action == freshness.CURRENT
     r = freshness.read_recipe(img)
@@ -293,7 +293,7 @@ def test_image_on_an_existing_image_offers_a_refresh(world, monkeypatch, capsys)
 # -- menu-sync -----------------------------------------------------------------
 
 @pytest.mark.parametrize("state, text, fix", [
-    (State(LV, "b0"), "older boot files than dist/", "bin/beast-booter update --image"),
+    (State(LV, "b0"), "older boot files than dist/", "bin/beast-boot update --image"),
     (State(1, "b1"), "must be rebuilt", "--fixtures --debug --force"),
 ])
 def test_menu_sync_refuses_outdated_boot_files(world, monkeypatch, capsys, state, text, fix):

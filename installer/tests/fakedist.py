@@ -78,7 +78,7 @@ def write_manifest(dist: Path, version: str = "0.1.0") -> None:
             files[rel] = {"sha256": hashlib.sha256(data).hexdigest(), "size": len(data),
                           "origin": "test:fakedist"}
     manifest = {
-        "schema": 1, "name": "beast-booter", "version": version, "source_date_epoch": 1760000000,
+        "schema": 1, "name": "beast-boot", "version": version, "source_date_epoch": 1760000000,
         "secure_boot": {"cert_sha256": "0" * 64, "cert_subject": "CN=fake", "sbat": "sbat,1\n"},
         "files": files,
     }

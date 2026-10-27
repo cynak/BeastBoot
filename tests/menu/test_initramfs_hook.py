@@ -55,12 +55,12 @@ def write_exe(path: Path, text: str) -> None:
 @pytest.fixture
 def initramfs(tmp_path):
     root = tmp_path / "root"
-    for d in ("scripts", "proc", "dev", "beast-booter/modules"):
+    for d in ("scripts", "proc", "dev", "beast-boot/modules"):
         (root / d).mkdir(parents=True)
     (root / "scripts" / "casper-helpers").write_text(CASPER_HELPERS)
     (root / "proc" / "filesystems").write_text("nodev\tsysfs\n\text4\n\tvfat\n")
     (root / "dev" / "kmsg").write_text("")
-    (root / "beast-booter" / "modules" / "exfat.ko.zst").write_bytes(b"\x28\xb5\x2f\xfd fake module")
+    (root / "beast-boot" / "modules" / "exfat.ko.zst").write_bytes(b"\x28\xb5\x2f\xfd fake module")
     return root
 
 
@@ -95,8 +95,8 @@ def test_ubuntu_kmod_loads_when_klibc_insmod_cannot(initramfs, tmp_path):
     r = source_hook(initramfs, KLIBC_INSMOD_FAILS, tmp_path)
     check_sourced_cleanly(r)
     assert kmsg(initramfs) == [
-        "beast-booter: exfat support loaded (exfat.ko.zst from the ISO)",
-        "beast-booter: casper may now search exfat partitions for the ISO",
+        "beast-boot: exfat support loaded (exfat.ko.zst from the ISO)",
+        "beast-boot: casper may now search exfat partitions for the ISO",
     ]
     assert accepts(initramfs, "exfat")
     assert all(accepts(initramfs, fs) for fs in ORIGINAL_FS)
@@ -115,7 +115,7 @@ def test_refused_module_changes_nothing(initramfs, tmp_path):
     check_sourced_cleanly(r)
     assert (initramfs / "scripts" / "casper-helpers").read_text() == before
     [line] = kmsg(initramfs)
-    assert line.startswith("beast-booter: could not load exfat.ko.zst: ") and "Key was rejected" in line
+    assert line.startswith("beast-boot: could not load exfat.ko.zst: ") and "Key was rejected" in line
     assert not accepts(initramfs, "exfat")
 
 
@@ -140,7 +140,7 @@ def test_not_casper_loads_but_does_not_create_helpers(initramfs, tmp_path):
     (initramfs / "scripts" / "casper-helpers").unlink()
     r = source_hook(initramfs, loads(initramfs), tmp_path)
     check_sourced_cleanly(r)
-    assert kmsg(initramfs) == ["beast-booter: exfat support loaded (exfat.ko.zst from the ISO)"]
+    assert kmsg(initramfs) == ["beast-boot: exfat support loaded (exfat.ko.zst from the ISO)"]
     assert not (initramfs / "scripts" / "casper-helpers").exists()
 
 
@@ -151,13 +151,13 @@ LOADS_NTFS3 = '#!/bin/sh\nprintf "\\tntfs3\\n" >> "{root}/proc/filesystems"\n'
 
 def ntfs_root(tmp_path: Path, live_boot: bool) -> Path:
     root = tmp_path / "root"
-    for d in ("proc", "dev", "beast-booter/modules"):
+    for d in ("proc", "dev", "beast-boot/modules"):
         (root / d).mkdir(parents=True)
     if live_boot:
         (root / "lib" / "live" / "boot").mkdir(parents=True)
     (root / "proc" / "filesystems").write_text("nodev\tsysfs\n\text4\n")
     (root / "dev" / "kmsg").write_text("")
-    (root / "beast-booter" / "modules" / "ntfs3.ko.zst").write_bytes(b"\x28\xb5\x2f\xfd fake module")
+    (root / "beast-boot" / "modules" / "ntfs3.ko.zst").write_bytes(b"\x28\xb5\x2f\xfd fake module")
     return root
 
 
@@ -186,7 +186,7 @@ def test_ntfs3_gives_live_boot_its_helpers(tmp_path):
     assert stand_in.stat().st_mode & 0o111 and helper.stat().st_mode & 0o111
     assert subprocess.run([str(stand_in)], timeout=10).returncode == 1  # only for live-boot's `type ntfs-3g`
     assert 'exec mount -i -t ntfs3 "$@"' in helper.read_text()
-    assert "beast-booter: live-boot may now search NTFS partitions for the ISO (ntfs3)" in kmsg(root)
+    assert "beast-boot: live-boot may now search NTFS partitions for the ISO (ntfs3)" in kmsg(root)
 
 
 def test_ntfs3_without_live_boot_adds_no_helpers(tmp_path):

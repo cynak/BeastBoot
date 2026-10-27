@@ -266,7 +266,7 @@ def dll():
 @pytest.fixture
 def backend(ps, dll):
     b = WindowsBackend(api=Win32(dll), powershell=ps, sleep=lambda s: None)
-    b.program_paths = [r"C:\Users\me\Downloads\beast-booter\python\python.exe"]
+    b.program_paths = [r"C:\Users\me\Downloads\beast-boot\python\python.exe"]
     return b
 
 
@@ -542,7 +542,7 @@ def test_mounted_stick_is_not_refused(backend, dll):
 
 
 def test_check_safe_running_from_stick(backend):
-    backend.program_paths = [r"E:\beast-booter\python\python.exe"]
+    backend.program_paths = [r"E:\beast-boot\python\python.exe"]
     with pytest.raises(BeastError, match=r"running from \\\\.\\PhysicalDrive2 \(E:\\\)"):
         backend.check_safe(backend.get_disk("2"), allow_fixed=False)
 
@@ -850,7 +850,7 @@ def parse_windows_args(s: str) -> list[str]:
 
 
 WIN_NASTY = [
-    "C:\\Users\\Zoë O'Brien\\Downloads\\beast-booter 0.1\\app\\beast_booter_launch.py",
+    "C:\\Users\\Zoë O'Brien\\Downloads\\beast-boot 0.1\\app\\beast_booter_launch.py",
     "install", "--device", "\\\\.\\PhysicalDrive2",
     "--progress-file", "C:\\Users\\Zoë O'Brien\\AppData\\Local\\Temp\\bb progress.jsonl",
     "trailing\\", "C:\\Program Files\\x\\", 'q"uote', 'say "hi" ', "", " ", "\t", "a\\\\\"b", "\\\\server\\share",
@@ -860,7 +860,7 @@ WIN_NASTY = [
 
 def test_run_elevated_shell_execute(backend, dll, monkeypatch):
     monkeypatch.setattr(win.os, "getcwd", lambda: "C:\\Users\\me")
-    exe = "C:\\Users\\Zoë O'Brien\\Downloads\\beast-booter 0.1\\python\\python.exe"
+    exe = "C:\\Users\\Zoë O'Brien\\Downloads\\beast-boot 0.1\\python\\python.exe"
     dll.waits = [win.WAIT_TIMEOUT, win.WAIT_TIMEOUT, win.WAIT_OBJECT_0]
     dll.exit_code = 0
     p = backend.run_elevated([exe, *WIN_NASTY])

@@ -76,14 +76,14 @@ CLOSED_SOURCE = "Closed-source firmware from linux-firmware"
 
 # Extra advice for some of the CLI's error codes (its own message is always shown first).
 CODE_HINTS = {
-    "reinstall-needed": "This drive was made by an older beast-booter without the network helper. Install "
-                        "beast-booter on it again (this erases it), then add the packs.",
-    "layout-too-new": "This drive was made by a newer beast-booter. Use that version to change its firmware packs.",
-    "layout-unsupported": "This drive's layout has no room for the network helper. Install beast-booter on it again.",
+    "reinstall-needed": "This drive was made by an older beast-boot without the network helper. Install "
+                        "beast-boot on it again (this erases it), then add the packs.",
+    "layout-too-new": "This drive was made by a newer beast-boot. Use that version to change its firmware packs.",
+    "layout-unsupported": "This drive's layout has no room for the network helper. Install beast-boot on it again.",
     "no-space": "The boot partition is full. Remove a pack you don't need, then try again.",
     "busy": "A program is still using the drive (an open file, or a file manager or terminal showing it). "
             "Close it, then try again. Nothing was changed.",
-    "device-vanished": "The drive stopped responding (the drive did this, not beast-booter). Unplug it, plug it "
+    "device-vanished": "The drive stopped responding (the drive did this, not beast-boot). Unplug it, plug it "
                        "back in and try again.",
     "download-failed": "Check the internet connection, then try again. Nothing was installed.",
     "checksum-mismatch": "A downloaded file did not match the catalog, so it was discarded. Nothing was installed.",
@@ -402,7 +402,7 @@ class FwTarget:
 def build_fw_argv(command: str, *, python: str, launcher: str, progress_file: str,
                   target: FwTarget | None = None, packs: tuple[str, ...] = (), out_dir: str | None = None,
                   from_dir: str | None = None, catalog: str | None = None) -> list[str]:
-    """The exact `beast-booter firmware ...` command line (a list, never a shell string)."""
+    """The exact `beast-boot firmware ...` command line (a list, never a shell string)."""
     paths = [("python", python), ("launcher", launcher), ("progress file", progress_file)]
     paths += [(n, p) for n, p in (("download folder", out_dir), ("pack folder", from_dir), ("catalog", catalog))
               if p is not None]
@@ -630,7 +630,7 @@ class FirmwareController:
         "checking" (a drive check is on its way), "stale" (a run changed them since the
         last check), "no-rights" (its boot partition can't be read without administrator
         rights), "unreadable" (it was read, but not its list of packs), "not-read" (no
-        check could tell: not a beast-booter drive as far as it can see, or no way to check),
+        check could tell: not a beast-boot drive as far as it can see, or no way to check),
         "image" (an image file: only a list run reads it)."""
         t = self.target
         if t is None or t.key in self.installed:
@@ -741,7 +741,7 @@ class FirmwareController:
         if not self.available:
             return self.catalog_error or "No firmware packs in this build."
         if self.target is None:
-            return "Choose the beast-booter drive or image first."
+            return "Choose the beast-boot drive or image first."
         return None
 
     def install_blocker(self) -> str | None:
@@ -871,7 +871,7 @@ class FirmwareController:
         else:
             argv = build_fw_argv("list", target=target, **common)
         if not os.path.isfile(main.launcher):
-            raise BeastError(f"{main.launcher} is missing; the beast-booter folder is incomplete")
+            raise BeastError(f"{main.launcher} is missing; the beast-boot folder is incomplete")
         # Downloading never needs rights; writing to (or reading) a drive does.
         elevated = job_stage != "fetch" and target.kind == "device" and not main.backend().is_elevated()
         state.note("running: " + " ".join(_quote(a) for a in argv), "debug")
@@ -894,7 +894,7 @@ class FirmwareController:
         self.phase = FwPhase.RUNNING
 
     def _start(self, stage: str, action: str, target: FwTarget, packs: tuple[FwPack, ...]) -> None:
-        tmp = tempfile.mkdtemp(prefix="beast-booter-fw-", dir=self.main._tmp_root)
+        tmp = tempfile.mkdtemp(prefix="beast-boot-fw-", dir=self.main._tmp_root)
         self.outcome, self.final_log = None, []
         log: list[LogLine] = []
         try:

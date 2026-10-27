@@ -162,8 +162,8 @@ def test_state_folding():
 def test_error_event_state():
     st = ProgressState()
     st.apply(parse_line(line(event="step", step="check-target", pct=5)))
-    st.apply(parse_line(line(event="error", code="not-beast-booter", message="no marker")))
-    assert (st.error_code, st.error_message) == ("not-beast-booter", "no marker")
+    st.apply(parse_line(line(event="error", code="not-beast-boot", message="no marker")))
+    assert (st.error_code, st.error_message) == ("not-beast-boot", "no marker")
     assert not st.wrote_to_target  # check-target writes nothing
     assert st.log[-1].level == "error"
 

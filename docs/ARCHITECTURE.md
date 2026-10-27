@@ -50,11 +50,11 @@ if this document and that file disagree, the file wins and this document is a bu
 UEFI (Secure Boot on or off)
   firmware -> ESP:\EFI\BOOT\BOOTX64.EFI   shim 16.1, Microsoft-signed through UEFI CA 2011 and 2023
                                          (from Debian shim-signed, docs/SECURE_BOOT.md §1)
-           -> ESP:\EFI\BOOT\grubx64.efi   beast-booter GRUB, signed with the beast-booter key
+           -> ESP:\EFI\BOOT\grubx64.efi   beast-boot GRUB, signed with the beast-boot key
                 (first boot with SB on and key not enrolled: shim shows a verification
                  error and starts MokManager (mmx64.efi); the user picks
                  "Enroll key from disk" -> ENROLL_THIS_KEY_IN_MOKMANAGER.cer -> reboot)
-           -> /grub/grub.cfg on the ESP -> beast-booter menu (grub/beast/*.cfg)
+           -> /grub/grub.cfg on the ESP -> beast-boot menu (grub/beast/*.cfg)
            -> selected ISO: kernel verified by shim (SB on), then booted
 
 Legacy BIOS
@@ -62,7 +62,7 @@ Legacy BIOS
            -> /grub/grub.cfg on the ESP (modules from /grub/i386-pc/) -> same menu
 
 beast-net ("Download an ISO from a link", docs/BEASTNET.md), any mode
-  menu -> linux ESP:/beast-net/vmlinuz (Ubuntu's kernel, re-signed with the beast-booter
+  menu -> linux ESP:/beast-net/vmlinuz (Ubuntu's kernel, re-signed with the beast-boot
           key, verified by shim with SB on) + initrd ESP:/beast-net/initrd.img [+ firmware/*.cpio]
        -> download to DATA:/downloads/ -> bb_oneshot=<path> in ESP:/grub/grubenv
        -> reboot -> menu boots <path> once, through the normal recipes
@@ -119,9 +119,9 @@ dist/
   esp/                       copied verbatim into the ESP root
     EFI/BOOT/BOOTX64.EFI     Debian's shim 16.1 (Microsoft-signed, UEFI CA 2011 + 2023)
     EFI/BOOT/mmx64.efi       Debian's MokManager (signed through shim's Debian key)
-    EFI/BOOT/grubx64.efi     beast-booter GRUB x86_64-efi: all modules embedded, SBAT,
+    EFI/BOOT/grubx64.efi     beast-boot GRUB x86_64-efi: all modules embedded, SBAT,
                              memdisk with the menu fonts (see below), signed
-    ENROLL_THIS_KEY_IN_MOKMANAGER.cer   beast-booter signing cert (DER)
+    ENROLL_THIS_KEY_IN_MOKMANAGER.cer   beast-boot signing cert (DER)
     grub/grub.cfg            from repo grub/grub.cfg
     grub/beast/*.cfg         from repo grub/beast/
     grub/beast/version.cfg   generated: set bb_version=...  set bb_build_id=...
@@ -130,7 +130,7 @@ dist/
     grub/fonts/*.pf2         NotoSans-{Regular-16,Regular-20,Bold-20}, NotoSansMono-Regular-16
                              (grub-mkfont from fonts-noto-core/-mono), unicode.pf2 (GRUB)
     grub/i386-pc/*.mod *.lst BIOS GRUB modules
-    beast-net/vmlinuz        Ubuntu's kernel, re-signed with the beast-booter key (code unchanged)
+    beast-net/vmlinuz        Ubuntu's kernel, re-signed with the beast-boot key (code unchanged)
     beast-net/initrd.img     helper initramfs (build/beastnet/, docs/BEASTNET.md §5)
     beast-net/VERSION        "beast-net <bb version> kernel <kver>"
     beast-net/catalog.json   firmware pack catalog (docs/BEASTNET.md §6)
@@ -172,8 +172,8 @@ firmware packs.
 ```json
 {
   "schema": 1,
-  "name": "beast-booter",
-  "version": "0.2.0",
+  "name": "beast-boot",
+  "version": "0.3.0",
   "source_date_epoch": 1760000000,
   "secure_boot": {
     "cert_sha256": "<sha256 of the DER cert>",
@@ -184,7 +184,7 @@ firmware packs.
     "esp/EFI/BOOT/BOOTX64.EFI": {"sha256": "...", "size": 1088816,
        "origin": "deb:shim-signed=1.51+16.1-2:/usr/lib/shim/shimx64.efi.signed"},
     "esp/EFI/BOOT/grubx64.efi": {"sha256": "...", "size": 0,
-       "origin": "built:grub-mkimage from grub-src:grub2=2.14-2ubuntu3+bb1:/x86_64-efi + memdisk (build.efi_memdisk), signed:beast-booter"},
+       "origin": "built:grub-mkimage from grub-src:grub2=2.14-2ubuntu3+bb1:/x86_64-efi + memdisk (build.efi_memdisk), signed:beast-boot"},
     "esp/grub/i386-pc/normal.mod": {"sha256": "...", "size": 0,
        "origin": "grub-src:grub2=2.14-2ubuntu3+bb1:/i386-pc/normal.mod"},
     "esp/grub/beast/main.cfg": {"sha256": "...", "size": 0, "origin": "repo:grub/beast/main.cfg"}
@@ -338,7 +338,7 @@ recipe or as `loopback`:
    (else under `/lib/modules`) is the module. It is the ISO's own, built and
    signed for the ISO's kernel.
 3. The initrd line becomes `initrd <iso initrd>
-   newc:beast-booter/modules/<module file>:<module path>
+   newc:beast-boot/modules/<module file>:<module path>
    newc:conf/conf.d/zz-beastbooter.conf:$bb_cfg/hooks/initramfs-tools.sh`.
    A `loopback` ISO switches to the casper / live-boot recipe for this,
    because its `loopback.cfg` would load the initrd without the add-on.
@@ -357,24 +357,24 @@ still checks the module signature (lockdown under Secure Boot).
 ## 7. Installer CLI
 
 Package `installer/beastbooter`, run as `python3 -m beastbooter`,
-`bin/beast-booter`, or `installer/beast_booter_launch.py` (self-contained
+`bin/beast-boot`, or `installer/beast_booter_launch.py` (self-contained
 entry point of the portable packages; `--gui` as first argument starts the
 Tkinter GUI in `beastbooter/gui/`). Every command has `--help`.
 
 ```
-beast-booter install (--device DEV | --image PATH --size SIZE)
+beast-boot install (--device DEV | --image PATH --size SIZE)
                      [--layout msdos|gpt] [--fs exfat|fat32|ntfs] [--label LABEL]
                      [--serial-console] [--dist DIR|ZIP] [--yes] [--allow-fixed-disk]
                      [--quiet] [--progress-file PATH] [--cancel-file PATH]
-beast-booter update  (--device DEV | --image PATH) [--dist DIR|ZIP] [--yes]
+beast-boot update  (--device DEV | --image PATH) [--dist DIR|ZIP] [--yes]
                      [--allow-fixed-disk] [--quiet] [--progress-file PATH] [--cancel-file PATH]
-beast-booter info    (--device DEV | --image PATH) [--json]
-beast-booter list-devices [--json] [--all] [--check-installed]
-beast-booter firmware catalog [--dist DIR|ZIP] [--catalog FILE] [--json]
-beast-booter firmware fetch   --pack ID [--pack ID ...] --out DIR [--catalog FILE] [--dist DIR|ZIP]
-beast-booter firmware install (--device DEV | --image PATH) --from DIR [--dist DIR|ZIP]
-beast-booter firmware remove  (--device DEV | --image PATH) --pack ID
-beast-booter firmware list    (--device DEV | --image PATH) [--json]
+beast-boot info    (--device DEV | --image PATH) [--json]
+beast-boot list-devices [--json] [--all] [--check-installed]
+beast-boot firmware catalog [--dist DIR|ZIP] [--catalog FILE] [--json]
+beast-boot firmware fetch   --pack ID [--pack ID ...] --out DIR [--catalog FILE] [--dist DIR|ZIP]
+beast-boot firmware install (--device DEV | --image PATH) --from DIR [--dist DIR|ZIP]
+beast-boot firmware remove  (--device DEV | --image PATH) --pack ID
+beast-boot firmware list    (--device DEV | --image PATH) [--json]
 ```
 
 - `DEV` is a whole disk: `/dev/sdX` (Linux), `/dev/diskN` (macOS),
@@ -417,7 +417,7 @@ beast-booter firmware list    (--device DEV | --image PATH) [--json]
 - `info --json` prints:
 
 ```json
-{"layout": "msdos", "layout_version": 2, "version": "0.2.0", "install_id": "...",
+{"layout": "msdos", "layout_version": 2, "version": "0.3.0", "install_id": "...",
  "disk_sectors": 2097152, "bios_core_lba": 1,
  "data": {"index": 1, "start_lba": 2048, "size_lba": 1046528, "fs": "fat32",
           "uuid": "96BC-D565", "label": "BEASTBOOTER"},
@@ -460,7 +460,7 @@ build/                   build.sh, module lists, SBAT template, keygen, verify-d
                          beastnet/ (helper build: packages, modules, initramfs, catalog)
 beastnet/                beast-net helper app: python/beastnet/, rootfs/ (/init), tests/
 keys/                    local signing keys (private keys are git-ignored)
-bin/                     beast-booter (installer), bb-dev (developer helpers)
+bin/                     beast-boot (installer), bb-dev (developer helpers)
 devtools/                bbdev/ (bb-dev), gdb/ (GRUB gdb helpers), tests/
 tests/e2e/               QEMU end-to-end tests and fixture ISO builders
 packaging/portable/      portable packages: build.py, launchers, runtimes.lock,

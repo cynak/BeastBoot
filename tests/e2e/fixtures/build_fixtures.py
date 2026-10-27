@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the fixture ISOs used by the beast-booter e2e tests.
+"""Build the fixture ISOs used by the beast-boot e2e tests.
 
 Each fixture is a tiny ISO 9660 image (xorriso -as mkisofs) that contains just
 the files a boot recipe in docs/ARCHITECTURE.md §6 detects, with dummy
@@ -44,8 +44,8 @@ EFI_PAYLOAD = "@efi-payload"  # placeholder: the unsigned chainload test binary
 SQUASHFS_EXFAT = "@squashfs-exfat"  # placeholder: squashfs with a dummy exfat module
 FIXTURE_KVER = "0.0.0-beast-fixture"
 SQUASHFS_EXFAT_FILES = {
-    f"usr/lib/modules/{FIXTURE_KVER}/kernel/fs/exfat/exfat.ko.zst": b"beast-booter e2e fixture: dummy exfat module\n",
-    f"usr/lib/modules/{FIXTURE_KVER}/kernel/fs/isofs/isofs.ko.zst": b"beast-booter e2e fixture: dummy isofs module\n",
+    f"usr/lib/modules/{FIXTURE_KVER}/kernel/fs/exfat/exfat.ko.zst": b"beast-boot e2e fixture: dummy exfat module\n",
+    f"usr/lib/modules/{FIXTURE_KVER}/kernel/fs/isofs/isofs.ko.zst": b"beast-boot e2e fixture: dummy isofs module\n",
 }
 
 # The chainloaded payload: rescue-mode embedded config, no normal.mod needed.
@@ -65,7 +65,7 @@ halt
 
 
 def dummy(what: str) -> bytes:
-    return (f"beast-booter e2e fixture: dummy {what} (not bootable)\n" * 16).encode()
+    return (f"beast-boot e2e fixture: dummy {what} (not bootable)\n" * 16).encode()
 
 
 # name -> spec. "files" maps ISO paths to bytes (or EFI_PAYLOAD).

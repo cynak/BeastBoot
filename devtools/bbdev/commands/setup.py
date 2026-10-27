@@ -253,7 +253,7 @@ def _flow(s: Setup, args) -> int:
     total = 5 if minimal else 7
     if args.no_venv:
         total -= 1
-    s.say("bb-dev setup: beast-booter development environment (no root needed)")
+    s.say("bb-dev setup: beast-boot development environment (no root needed)")
     if not args.yes:
         if not sys.stdin.isatty():
             raise Failure("not a terminal: pass --yes to download the toolchain into .tools/ and .venv/")
@@ -314,13 +314,13 @@ def _flow(s: Setup, args) -> int:
     n += 1
     st = s.head(n, total, "signing key (keys/)")
     keys = paths.KEYS
-    if all((keys / f).is_file() for f in ("beast-booter.key", "beast-booter.crt", "beast-booter.cer")):
-        st.status, st.detail = SKIP, "keys/beast-booter.{key,crt,cer} present"
+    if all((keys / f).is_file() for f in ("beast-boot.key", "beast-boot.crt", "beast-boot.cer")):
+        st.status, st.detail = SKIP, "keys/beast-boot.{key,crt,cer} present"
     else:
         if s.sh(["make", "keys"], env) != 0:
             st.status = FAILED
             raise Failure("make keys failed")
-        st.status, st.detail = DONE, "created a local key (git-ignored; never share keys/beast-booter.key)"
+        st.status, st.detail = DONE, "created a local key (git-ignored; never share keys/beast-boot.key)"
         s.changed = True
 
     # 5. build

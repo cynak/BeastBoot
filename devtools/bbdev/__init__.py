@@ -1,4 +1,4 @@
-"""bb-dev: development and debugging helpers for beast-booter."""
+"""bb-dev: development and debugging helpers for beast-boot."""
 
 from pathlib import Path as _Path
 

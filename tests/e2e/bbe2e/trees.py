@@ -26,7 +26,7 @@ def main_tree(isos: dict[str, Path]) -> dict:
         "/.Trash-1000/files/trashed.iso": isos["casper"],
         "/._AppleDouble.iso": b"\0" * 4096,
         # Not ISOs.
-        "/README.txt": b"beast-booter e2e test drive\n",
+        "/README.txt": b"beast-boot e2e test drive\n",
         "/not-an-iso.iso.txt": b"x\n",
         # Listed.
         SPACES_ISO: isos["casper"],

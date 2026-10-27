@@ -86,7 +86,7 @@ def test_update_refuses_non_beast_drive(tmp_path, fake_dist, fake_dist_v2, capsy
     subprocess.run(["mdel", "-i", f"{img}@@{off}", f"::/{ESP_MARKER_PATH}"], check=True, env=MTOOLS_ENV)
     before = img.read_bytes()
     assert run_cli("update", "--image", img, "--dist", fake_dist_v2) == 1
-    assert "not a beast-booter drive" in capsys.readouterr().err
+    assert "not a beast-boot drive" in capsys.readouterr().err
     assert img.read_bytes() == before
     assert run_cli("info", "--image", img, "--json") == 1
 
@@ -108,7 +108,7 @@ def test_update_blank_image(tmp_path, fake_dist_v2, capsys):
     img.write_bytes(b"\0" * (1 << 20))
     assert run_cli("update", "--image", img, "--dist", fake_dist_v2) == 1
     err = capsys.readouterr().err
-    assert "not a beast-booter drive" in err and "Traceback" not in err
+    assert "not a beast-boot drive" in err and "Traceback" not in err
 
 
 def test_reconcile_follows_reformatted_partition():
@@ -186,7 +186,7 @@ def test_info_missing_and_garbage(tmp_path, capsys):
     g.write_bytes(b"\xff" * 4096)
     assert run_cli("info", "--image", g, "--json") == 1
     err = capsys.readouterr().err
-    assert err.startswith("beast-booter: error:") and "Traceback" not in err
+    assert err.startswith("beast-boot: error:") and "Traceback" not in err
 
 
 @needs_tools

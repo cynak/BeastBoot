@@ -52,9 +52,9 @@ class MissingFirmware:
         what = f"The {self.module} driver" + (f" ({self.nic})" if self.nic else "")
         if self.pack:
             return (f'{what} needs firmware that is not installed. On another computer, open '
-                    f'the beast-booter app, choose Firmware and install the "{self.pack.title}" '
+                    f'the beast-boot app, choose Firmware and install the "{self.pack.title}" '
                     f"pack onto this stick, then start beast-net again.")
-        return (f"{what} needs firmware that no beast-booter firmware pack provides "
+        return (f"{what} needs firmware that no beast-boot firmware pack provides "
                 f"({', '.join(self.files[:2]) or 'unknown file'}). Use a wired or USB adapter.")
 
 

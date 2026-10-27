@@ -125,7 +125,10 @@ class UI:
     def task(self, title: str, text: str, fn: Callable[[], Any]) -> Any:
         raise NotImplementedError
 
-    def download(self, title: str, lines: list[str], job: Callable[..., Any]) -> Any:
+    def download(self, title: str, lines: list[str], job: Callable[..., Any], *,
+                 what: str = "download") -> Any:
+        """Progress screen for ``job(on_progress, cancel_event)``; ``what`` names
+        the job in the cancel texts ("download" or "copy")."""
         raise NotImplementedError
 
     def document(self, title: str, text: str, items: list[Item], *, kind: str = "") -> Any:

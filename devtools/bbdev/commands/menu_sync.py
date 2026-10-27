@@ -1,7 +1,7 @@
 """bb-dev menu-sync: push grub/ into an image's ESP for the edit -> reboot loop.
 
 Copies the menu files (same selection as build/build.sh) into /grub/ on the
-image's ESP with mtools, at the ESP offset from `beast-booter info --json`.
+image's ESP with mtools, at the ESP offset from `beast-boot info --json`.
 The ESP then mirrors grub/: changed files are rewritten, new ones added, and
 menu files that are no longer in grub/ removed. Never touched: version.cfg,
 device.cfg, grubenv and everything else the build puts under /grub/ from other
@@ -9,7 +9,7 @@ sources (dist/manifest.json: the theme from build/theme, fonts, i386-pc/).
 BB_MENU_DIR overrides the source directory, as for build.sh.
 
 The image no longer matches dist/manifest.json afterwards: `make build` and
-`bb-dev image --force` (or `bin/beast-booter update --image ...`) restore it.
+`bb-dev image --force` (or `bin/beast-boot update --image ...`) restore it.
 
 An image whose boot files are older than dist/ (another build id, or an older
 layout such as the 64 MiB FAT16 ESP of layout 1) is refused with the command
@@ -74,7 +74,7 @@ def sync(info: diskimg.ImageInfo, src: Path) -> SyncResult:
     wanted = menufiles.menu_files(src)  # raises on symlinks / forbidden files
     esp = info.esp()
     if not esp.exists("/" + diskimg.ESP_MARKER):
-        raise Failure(f"{rel(info.path)}: the ESP has no {diskimg.ESP_MARKER}; not a beast-booter drive?")
+        raise Failure(f"{rel(info.path)}: the ESP has no {diskimg.ESP_MARKER}; not a beast-boot drive?")
     manifest = menufiles.load_manifest()
     built = menufiles.manifest_built(manifest) - set(wanted)
     on_esp, esp_dirs = esp_menu_state(esp, built)
@@ -136,7 +136,7 @@ def warn_dist(res: SyncResult) -> None:
     if res.differs_from_dist:
         n = len(res.differs_from_dist)
         warn(CMD, f"the image's menu no longer matches dist/manifest.json ({n} file{'s' if n != 1 else ''}); "
-                  "`make build` + `bb-dev image --force` (or `bin/beast-booter update`) restores a shipped state")
+                  "`make build` + `bb-dev image --force` (or `bin/beast-boot update`) restores a shipped state")
 
 
 def check_fresh(info: diskimg.ImageInfo) -> None:
@@ -147,7 +147,7 @@ def check_fresh(info: diskimg.ImageInfo) -> None:
     if v.action == freshness.UPDATE:
         raise Failure(f"{rel(img)} has older boot files than dist/ ({v.reason}); grub/ edits would be tested "
                       "on an outdated bootloader",
-                      f"refresh it first: `bin/beast-booter update --image {rel(img)} --yes` "
+                      f"refresh it first: `bin/beast-boot update --image {rel(img)} --yes` "
                       f"(`bin/bb-dev vm{opt}` does that too), then menu-sync again")
     if v.action == freshness.REBUILD:
         raise Failure(f"{rel(img)} must be rebuilt ({v.reason}); grub/ edits would be tested on an outdated "

@@ -1,4 +1,4 @@
-"""pytest configuration for the beast-booter end-to-end suite (tests/e2e).
+"""pytest configuration for the beast-boot end-to-end suite (tests/e2e).
 
 Run:  source scripts/dev-env.sh && pytest -q tests/e2e
 See tests/e2e/README.md for markers and environment variables.
@@ -124,11 +124,11 @@ def installer_ok(dist_dir):
 
 @pytest.fixture(scope="session")
 def mok_cert(dist_dir) -> Path:
-    """The beast-booter certificate a user would enroll in MokManager."""
-    for c in (env.KEYS_DIR / "beast-booter.cer", dist_dir / "esp" / "ENROLL_THIS_KEY_IN_MOKMANAGER.cer"):
+    """The beast-boot certificate a user would enroll in MokManager."""
+    for c in (env.KEYS_DIR / "beast-boot.cer", dist_dir / "esp" / "ENROLL_THIS_KEY_IN_MOKMANAGER.cer"):
         if c.exists():
             return c
-    pytest.skip("no beast-booter certificate: keys/beast-booter.cer missing (run `make keys`)")
+    pytest.skip("no beast-boot certificate: keys/beast-boot.cer missing (run `make keys`)")
 
 
 @pytest.fixture(scope="session")

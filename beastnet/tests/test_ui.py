@@ -94,7 +94,7 @@ def test_tui_menu_renders_and_selects():
     ui.set_step(0)
     assert ui.menu("Choose a WiFi network", "3 networks found on wlan0.", nets()) == "cafe"
     first = scr.frames[0]
-    assert "beast-booter" in first and "Secure Boot: on" in first
+    assert "beast-boot" in first and "Secure Boot: on" in first
     assert "1 Network  >  2 Link  >  3 Download  >  4 Done" in first
     assert "Choose a WiFi network" in first and "3 networks found on wlan0." in first
     row = [line for line in first.splitlines() if "HomeNet" in line][0]
@@ -224,7 +224,7 @@ def test_tui_in_a_real_terminal():
         _, status = os.waitpid(pid, 0)
         os.close(fd)
     assert b"RESULT=b" in out
-    assert b"beast-booter" in out and b"HomeNet" in out and b"[||||]" in out
+    assert b"beast-boot" in out and b"HomeNet" in out and b"[||||]" in out
     assert os.waitstatus_to_exitcode(status) == 0
 
 

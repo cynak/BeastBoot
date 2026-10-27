@@ -1,10 +1,10 @@
 @echo off
-rem beast-booter portable (Windows): the command line interface.
+rem beast-boot portable (Windows): the command line interface.
 rem
-rem   beast-booter.cmd --help
-rem   beast-booter.cmd install --device \\.\PhysicalDrive2   (from a terminal
+rem   beast-boot.cmd --help
+rem   beast-boot.cmd install --device \\.\PhysicalDrive2   (from a terminal
 rem                                     opened with "Run as administrator")
-rem   beast-booter.cmd install --image my.img --size 8G     (image files: no admin)
+rem   beast-boot.cmd install --image my.img --size 8G     (image files: no admin)
 rem
 rem Runs only what is in this folder (runtime\, app\, payload\dist); installs nothing.
 rem   -s  ignore per-user Python packages    -E  ignore PYTHON* variables

@@ -118,7 +118,7 @@ args.out.mkdir(parents=True, exist_ok=True)
 # Dark theme: the whole install, then the firmware packs.
 root, c, a, sandisk = session("dark")
 shot(root, "app-drive")
-a.select_drive(drive_id(c, "Kingston"))  # older beast-booter on it: the update is offered
+a.select_drive(drive_id(c, "Kingston"))  # older beast-boot on it: the update is offered
 shot(root, "app-update-available")
 a.select_drive(sandisk)
 settle(root)

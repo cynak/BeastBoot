@@ -3,15 +3,15 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "beast-booter"
-description = "Create and update beast-booter multi-boot USB drives and images"
+name = "beast-boot"
+description = "Create and update beast-boot multi-boot USB drives and images"
 license = "GPL-3.0-or-later"
 requires-python = ">=3.10"
 dependencies = []  # standard library only; NTFS on Linux needs mkfs.ntfs (ntfs-3g)
 dynamic = ["version"]
 
 [project.scripts]
-beast-booter = "beastbooter.cli:main"
+beast-boot = "beastbooter.cli:main"
 
 [tool.setuptools]
 packages = ["beastbooter"]

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# beast-booter: build beast-net, the helper Linux environment that downloads an
+# beast-boot: build beast-net, the helper Linux environment that downloads an
 # ISO from a link (docs/BEASTNET.md). Rootless, idempotent, offline once the
 # caches are warm.
 #

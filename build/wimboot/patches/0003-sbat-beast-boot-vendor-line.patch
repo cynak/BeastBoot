@@ -1,8 +1,8 @@
-Subject: sbat: add a beast-booter vendor line
+Subject: sbat: add a beast-boot vendor line
 
 A modified build keeps the upstream "wimboot" SBAT line and adds its own
 vendor line (SBAT.md, "product.vendor"), so the metadata describes the
-code truthfully. beast-booter ships wimboot unsigned (Windows boots with
+code truthfully. beast-boot ships wimboot unsigned (Windows boots with
 Secure Boot off), so the line is informational.
 
 ---

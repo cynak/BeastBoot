@@ -13,7 +13,7 @@ path does) and skip the file system. Everything after extraction (BCD
 patching, bootmgfw extraction from the WIM, file injection) is unchanged.
 Without such an initrd, wimboot behaves exactly as upstream (iPXE).
 
-beast-booter (build/wimboot/); to be offered upstream.
+beast-boot (build/wimboot/); to be offered upstream.
 
 ---
 --- a/src/efifile.c

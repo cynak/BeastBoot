@@ -164,7 +164,7 @@ def test_boot_chain(real: Path, base: Path) -> None:
     import struct
 
     import efi_inspect as efi
-    cdx = json.loads((real / "sbom/beast-booter.cdx.json").read_text())
+    cdx = json.loads((real / "sbom/beast-boot.cdx.json").read_text())
 
     def walk(cs):
         for c in cs or []:
@@ -190,8 +190,8 @@ def test_boot_chain(real: Path, base: Path) -> None:
         k = next((c for c in comps if c["name"] == "esp/beast-net/vmlinuz"), {})
         props = {p["name"]: p["value"] for p in k.get("properties", [])}
         check("boot-chain: helper kernel marked re-signed, verified by Authenticode digest",
-              "beast-booter:re-signed" in props
-              and props.get("beast-booter:origin-verified", "").startswith("authenticode sha256 matches"),
+              "beast-boot:re-signed" in props
+              and props.get("beast-boot:origin-verified", "").startswith("authenticode sha256 matches"),
               str(props)[:400])
     shim = real / "dist/esp/EFI/BOOT/BOOTX64.EFI"
     cas = [f"Microsoft Corporation UEFI CA 2011={real / 'build/shim/microsoft-uefi-ca-2011.pem'}",
@@ -247,8 +247,8 @@ def test_boot_chain(real: Path, base: Path) -> None:
     ber = base / "grub-plus-ber-signature.efi"
     ber.write_bytes(bytes(two))
     with contextlib.redirect_stdout(io.StringIO()):
-        ok_probs = efi.require(grub, [], f"beast-booter={mok}", None)
-        probs = efi.require(ber, [], f"beast-booter={mok}", None)
+        ok_probs = efi.require(grub, [], f"beast-boot={mok}", None)
+        probs = efi.require(ber, [], f"beast-boot={mok}", None)
     check("boot-chain: --only passes for grubx64.efi", ok_probs == [], str(ok_probs))
     check("boot-chain: --only fails with a second, unparseable signature",
           any("cannot read every signature" in p for p in probs)
@@ -323,14 +323,14 @@ def test_origin(root: Path) -> None:
     g = run(HERE / "gen_sbom.py", root=root)
     check("origin: gen_sbom flags PROVENANCE ERROR", g.returncode == 0 and "PROVENANCE ERROR" in g.stderr
           and rel in g.stderr, g.stderr[-500:])
-    cdx = json.loads((root / "sbom/beast-booter.cdx.json").read_text())
+    cdx = json.loads((root / "sbom/beast-boot.cdx.json").read_text())
 
     def walk(cs):
         for c in cs or []:
             yield c
             yield from walk(c.get("components"))
     comp = next(c for c in walk(cdx["components"]) if c["name"] == rel)
-    ov = {p["name"]: p["value"] for p in comp.get("properties", [])}.get("beast-booter:origin-verified", "")
+    ov = {p["name"]: p["value"] for p in comp.get("properties", [])}.get("beast-boot:origin-verified", "")
     check("origin: SBOM property says MISMATCH", ov.startswith("MISMATCH"), ov)
     v = run(HERE / "validate_sbom.py", root=root)
     val = json.loads((root / "sbom/validation.json").read_text())["checks"]["origin-verified"]
@@ -361,7 +361,7 @@ def test_modules(real: Path) -> None:
     import scan_vulns as sv
     dist = real / "dist"
     manifest = json.loads((dist / "manifest.json").read_text())
-    bom, idx = sv.load_sbom(real / "sbom/beast-booter.cdx.json")
+    bom, idx = sv.load_sbom(real / "sbom/beast-boot.cdx.json")
     mods = sv.grub_modules(real, dist, manifest, idx)
     if not check("modules: moddep.lst of the EFI modules verified", mods.get("efi_deps") is not None,
                  mods.get("efi_closure_source", "")):
@@ -406,7 +406,7 @@ def test_coverage(real: Path) -> None:
     o = gen_sbom.parse_origin("built:x from deb:a=1.0-1, deb:b=2:3.4~5.1; 9 modules of deb:c=7.0-1.1 + depmod")
     check("coverage: origin parser keeps a package followed by ';'",
           [d["name"] for d in o["debs"]] == ["a", "b", "c"], str(o["debs"]))
-    cdx = json.loads((real / "sbom/beast-booter.cdx.json").read_text())
+    cdx = json.loads((real / "sbom/beast-boot.cdx.json").read_text())
 
     def walk(cs, parent=None):
         for c in cs or []:
@@ -600,8 +600,8 @@ def main() -> int:
     ap.add_argument("--keep", action="store_true", help="keep the scratch roots")
     a = ap.parse_args()
     real = Path(a.root).resolve()
-    if not (real / "dist/manifest.json").is_file() or not (real / "sbom/beast-booter.cdx.json").is_file():
-        print("selftest: needs dist/ (make build) and sbom/beast-booter.cdx.json (sbom-vuln.sh sbom)", file=sys.stderr)
+    if not (real / "dist/manifest.json").is_file() or not (real / "sbom/beast-boot.cdx.json").is_file():
+        print("selftest: needs dist/ (make build) and sbom/beast-boot.cdx.json (sbom-vuln.sh sbom)", file=sys.stderr)
         return 2
     base = Path(tempfile.mkdtemp(prefix="bb-sbom-selftest-", dir=os.environ.get("TMPDIR")))
     try:

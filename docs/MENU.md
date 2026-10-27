@@ -36,6 +36,12 @@ Root menu, top to bottom:
      then Ubuntu's key (Canonical's Master CA) to MokList, so Ubuntu-signed
      kernels boot with Secure Boot on. See
      [SECURE_BOOT.md](SECURE_BOOT.md#trust-ubuntus-secure-boot-key-optional).
+   - `Disk tools: recovery and cloning` (only when the helper is on the boot
+     partition): starts the same helper with `beastnet.action=disk`. It
+     shows every disk and RAID or volume set, with every disk read-only until
+     you confirm one copy target, and offers health checks, clones, image
+     files and restores. See [USER_GUIDE.md](USER_GUIDE.md#9-disk-tools) and
+     [DISK_TOOLS.md](DISK_TOOLS.md).
    - `Secure Boot status / help`: whether Secure Boot is on and what that
      means for booting ISOs
    - `Enroll a key (MokManager)` (UEFI only): starts shim's MokManager
@@ -62,7 +68,7 @@ in any letter case. Other files are not shown.
 Never listed:
 
 - anything whose name starts with `.`
-- `beast-booter`, `System Volume Information`, `$RECYCLE.BIN`, `$Extend`
+- `beast-boot`, `System Volume Information`, `$RECYCLE.BIN`, `$Extend`
   (NTFS metadata) and `lost+found` (in any letter case, in any folder). The
   list is
   `DATA_HIDDEN_DIRS` in
@@ -206,7 +212,7 @@ user configuration and after a `bb_autoboot` attempt, just before the menu
 is built:
 
 - dark grey background with a soft red glow (colours:
-  [assets/BRAND.md](assets/BRAND.md)), the logo, the name (`beast-booter`) and
+  [assets/BRAND.md](assets/BRAND.md)), the logo, the name (`beast-boot`) and
   version at the top, and badges for the firmware mode and Secure Boot
   state (`UEFI` + `Secure Boot on` / `off`, or `Legacy BIOS`). A theme file
   cannot show variables, so there is one theme per badge set

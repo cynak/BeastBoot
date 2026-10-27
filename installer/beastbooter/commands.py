@@ -297,7 +297,7 @@ def _boot_area_and_esp(plan: DiskPlan) -> list[tuple[int, int]]:
 
 
 def _check_table_matches(table: PartTable, plan: DiskPlan) -> None:
-    """The on-disk table must be the beast-booter layout we would create for this disk."""
+    """The on-disk table must be the beast-boot layout we would create for this disk."""
     problems = []
     esp = table.entries.get(ESP_PART_INDEX)
     want_esp_type = GPT_TYPE_ESP if plan.layout == "gpt" else "0x%02x" % MBR_TYPE_ESP
@@ -322,18 +322,18 @@ def _check_table_matches(table: PartTable, plan: DiskPlan) -> None:
         if idx not in (DATA_PART_INDEX, ESP_PART_INDEX, BIOS_BOOT_PART_INDEX):
             problems.append(f"unexpected partition {idx}")
     if problems:
-        raise BeastError("the partition layout does not match a beast-booter drive: " + "; ".join(problems))
+        raise BeastError("the partition layout does not match a beast-boot drive: " + "; ".join(problems))
 
 
 def _read_table(t, where: str) -> PartTable:
     try:
         return read_partition_table(t.read, t.size // SECTOR_SIZE)
     except BeastError as e:
-        raise BeastError(f"{where} is not a beast-booter drive: {e}") from None
+        raise BeastError(f"{where} is not a beast-boot drive: {e}") from None
 
 
 def _no_marker(where: str) -> BeastError:
-    return BeastError(f"{where} is not a beast-booter drive (no {ESP_MARKER_PATH} marker on partition 2)")
+    return BeastError(f"{where} is not a beast-boot drive (no {ESP_MARKER_PATH} marker on partition 2)")
 
 
 def _open_esp(t, esp_offset: int, where: str) -> FatVolume:
@@ -362,18 +362,18 @@ def check_layout_version(marker: dict[str, str], where: str) -> int:
                          f"{marker.get('layout_version')!r}", code="layout-unsupported")
     if lv < LAYOUT_VERSION:
         raise BeastError(
-            f"{where} has the beast-booter layout {lv} (a smaller boot partition); this beast-booter "
+            f"{where} has the beast-boot layout {lv} (a smaller boot partition); this beast-boot "
             f"needs layout {LAYOUT_VERSION} (a {ESP_SIZE_MIB} MiB FAT32 boot partition): reinstall needed "
             f"(layout {lv} -> {LAYOUT_VERSION}). install erases the whole drive, so copy your files "
             f"off partition 1 first", code="reinstall-needed")
     if lv > LAYOUT_VERSION:
-        raise BeastError(f"{where} was made by a newer beast-booter (layout {lv}; this one knows layout "
-                         f"{LAYOUT_VERSION}); use a newer beast-booter", code="layout-too-new")
+        raise BeastError(f"{where} was made by a newer beast-boot (layout {lv}; this one knows layout "
+                         f"{LAYOUT_VERSION}); use a newer beast-boot", code="layout-too-new")
     return lv
 
 
 def read_drive_esp(t, where: str) -> tuple[PartTable, DiskPlan, FatVolume, dict[str, str]]:
-    """Open the ESP of a beast-booter drive of the current layout: (table, plan,
+    """Open the ESP of a beast-boot drive of the current layout: (table, plan,
     ESP volume, marker). The layout version is checked before the partition
     sizes, so an old drive gets "reinstall needed", not "does not match"."""
     table = _read_table(t, where)
@@ -581,7 +581,7 @@ def vanished_message(where: str, action: str, phase: str) -> str:
         if phase == "before":
             result += "; nothing was changed"
     return (f"{where} stopped responding {when}: the system now sees it as empty (no medium). This is the drive, "
-            "not beast-booter: some USB sticks do this when they are warm or after long use. Unplug it, plug it "
+            "not beast-boot: some USB sticks do this when they are warm or after long use. Unplug it, plug it "
             f"back in and run {again} again; {result}.")
 
 
@@ -621,7 +621,7 @@ def _watch_device(backend, disk, action: str, rep: Reporter):
 
 def _done_line(rep: Reporter, where: str, cfg: DeviceConfig, dist: Dist) -> None:
     rep.step(
-        f"done: {where} is a beast-booter {dist.version} drive "
+        f"done: {where} is a beast-boot {dist.version} drive "
         f"({cfg.layout}, {cfg.data_fs} data partition UUID {cfg.data_uuid_linux})"
     )
 
@@ -650,7 +650,7 @@ def _verify_install(t, where: str, cfg: DeviceConfig, plan: DiskPlan) -> dict:
 
 
 def install_image(path: str, size_text: str, opts: InstallOptions, rep: Reporter) -> dict:
-    """Create the image file `path` as a beast-booter drive. Returns `info` of it."""
+    """Create the image file `path` as a beast-boot drive. Returns `info` of it."""
     rep.start("install", path)
     with _invalid_argument():
         label = check_data_label(opts.label, opts.fs)
@@ -659,7 +659,7 @@ def install_image(path: str, size_text: str, opts: InstallOptions, rep: Reporter
         plan = make_plan(sectors, opts.layout)
     parent = os.path.dirname(os.path.abspath(path))
     os.makedirs(parent, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix=".beast-booter-", dir=parent) as tmp:
+    with tempfile.TemporaryDirectory(prefix=".beast-boot-", dir=parent) as tmp:
         dist = _verify_dist(opts.dist_dir, tmp, rep, 3)
         writes = boot_writes(plan, dist.boot_img, dist.core_img)
         rep.step(f"Checking the image file {path}", "check-target", 8)
@@ -705,12 +705,12 @@ def install_image(path: str, size_text: str, opts: InstallOptions, rep: Reporter
 
 
 def install_device(device: str, opts: InstallOptions, rep: Reporter) -> dict:
-    """Make the whole disk `device` a beast-booter drive. Returns `info` of it."""
+    """Make the whole disk `device` a beast-boot drive. Returns `info` of it."""
     rep.start("install", device)
     with _invalid_argument():
         label = check_data_label(opts.label, opts.fs)
     backend = get_backend()
-    with tempfile.TemporaryDirectory(prefix="beast-booter-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="beast-boot-") as tmp:
         dist = _verify_dist(opts.dist_dir, tmp, rep, 2)
         rep.step(f"Checking that {device} is safe to erase", "check-target", 5)
         disk = backend.get_disk(device)
@@ -1012,9 +1012,9 @@ def update(image: str | None, device: str | None, dist_dir: str, *, yes: bool,
     assert where is not None
     rep.start("update", where)
     backend = disk = None
-    with tempfile.TemporaryDirectory(prefix="beast-booter-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="beast-boot-") as tmp:
         dist = _verify_dist(dist_dir, tmp, rep, 4)
-        rep.step(f"Reading the beast-booter drive {where}", "check-target", 10)
+        rep.step(f"Reading the beast-boot drive {where}", "check-target", 10)
         if device is not None:
             backend = get_backend()
             disk = backend.get_disk(device)
@@ -1025,7 +1025,7 @@ def update(image: str | None, device: str | None, dist_dir: str, *, yes: bool,
         with _watch_device(backend, disk, "update", rep) as watch:
             d = _update_on(backend, disk, image, where, dist, yes=yes, allow_fixed=allow_fixed, rep=rep,
                            watch=watch)
-    rep.step(f"done: {where} updated to beast-booter {dist.version}")
+    rep.step(f"done: {where} updated to beast-boot {dist.version}")
     return d
 
 
@@ -1142,7 +1142,7 @@ def _read_info(t, where: str) -> dict:
     data = table.entries.get(DATA_PART_INDEX)
     esp = table.entries.get(ESP_PART_INDEX)
     if data is None or esp is None:
-        raise BeastError(f"{where} is not a beast-booter drive (partition 1 or 2 is missing)")
+        raise BeastError(f"{where} is not a beast-boot drive (partition 1 or 2 is missing)")
     vol = _open_esp(t, esp.start * SECTOR_SIZE, where)
     marker = _read_marker(vol, where)
     cfg_text = read_esp_text(vol, DEVICE_CFG_PATH)
@@ -1183,11 +1183,11 @@ def info(image: str | None, device: str | None) -> dict:
 def format_info(d: dict, where: str) -> str:
     data, esp = d["data"], d["esp"]
     return "\n".join([
-        f"beast-booter drive: {where}",
+        f"beast-boot drive: {where}",
         f"  version:     {d['version']}",
         f"  build:       {d.get('build_id') or 'unknown'}",
         f"  install id:  {d['install_id']}",
-        f"  layout:      {d['layout']} (beast-booter layout version {d.get('layout_version')})",
+        f"  layout:      {d['layout']} (beast-boot layout version {d.get('layout_version')})",
         f"  disk:        {d['disk_sectors']} sectors ({human_size(d['disk_sectors'] * SECTOR_SIZE)})",
         f"  BIOS core:   LBA {d['bios_core_lba']}",
         f"  partition {data['index']}: data, LBA {data['start_lba']} + {data['size_lba']} "
@@ -1221,13 +1221,13 @@ def disk_problem(disk) -> str | None:
         msg = str(e)
         return msg.removeprefix("refusing: ")
     if disk.size < MIN_DISK_MIB * MIB:
-        return f"too small ({human_size(disk.size)}; beast-booter needs at least {MIN_DISK_MIB} MiB)"
+        return f"too small ({human_size(disk.size)}; beast-boot needs at least {MIN_DISK_MIB} MiB)"
     return None
 
 
 def list_devices(include_all: bool = False, check_installed: bool = False) -> dict:
     """The `list-devices --json` object (interfaces.py). check_installed: also
-    report which beast-booter each drive has (installed.py; no admin rights
+    report which beast-boot each drive has (installed.py; no admin rights
     needed, may mount a boot partition read-only for a moment)."""
     from . import __version__
     from .installed import assess
@@ -1270,5 +1270,5 @@ def format_devices(d: dict, include_all: bool) -> str:
     lines = ["  ".join(c.ljust(w) for c, w in zip(row[:-1], widths)) + "  " + row[-1] for row in rows]
     if not d["elevated"]:
         lines.append("(writing a drive needs administrator rights: run install as root / Administrator, "
-                     "or use the beast-booter window)")
+                     "or use the beast-boot window)")
     return "\n".join(line.rstrip() for line in lines)

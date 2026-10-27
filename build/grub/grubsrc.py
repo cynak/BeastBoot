@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build GRUB 2 for beast-booter from pinned source: x86_64-efi and i386-pc
+"""Build GRUB 2 for beast-boot from pinned source: x86_64-efi and i386-pc
 platform files (modules, kernel.img, boot images, debug symbols) and the
 matching grub-mkimage.
 
@@ -510,7 +510,7 @@ def prepare(lock: dict, srcs: dict[str, Path], cache: Path, work: Path, logf: Pa
     shutil.copytree(src / "debian/grub-extras/915resolution", extras / "915resolution")
     ours = read_series()
     before = {f["id"]: f["present"] for f in check_fixes(src)["fixes"]}   # Ubuntu's tree alone
-    log(f"applying {len(ours)} beast-booter patch(es) (build/grub/patches/series)")
+    log(f"applying {len(ours)} beast-boot patch(es) (build/grub/patches/series)")
     applied = []
     for p in ours:
         apply_patch(src, p, logf)

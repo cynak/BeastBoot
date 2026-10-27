@@ -1,7 +1,7 @@
-"""beast-booter on-disk layout contract.
+"""beast-boot on-disk layout contract.
 
 This module is the single source of truth for where things live on a
-beast-booter drive. The installer, the build script and the end-to-end tests
+beast-boot drive. The installer, the build script and the end-to-end tests
 all rely on these numbers; docs/ARCHITECTURE.md describes them in prose.
 Changing a value here is a format change: bump LAYOUT_VERSION.
 
@@ -116,7 +116,7 @@ DIST_ESP_DIR = "esp"  # copied verbatim into the ESP root
 REQUIRED_ESP_FILES = (
     "EFI/BOOT/BOOTX64.EFI",  # shim, Microsoft-signed
     "EFI/BOOT/mmx64.efi",  # MokManager
-    "EFI/BOOT/grubx64.efi",  # beast-booter GRUB, signed with the beast-booter key
+    "EFI/BOOT/grubx64.efi",  # beast-boot GRUB, signed with the beast-boot key
     "ENROLL_THIS_KEY_IN_MOKMANAGER.cer",  # DER certificate for MokManager
     "grub/grub.cfg",
     "grub/beast/main.cfg",
@@ -126,8 +126,10 @@ REQUIRED_ESP_FILES = (
 
 # Written by the installer into the ESP at install/update time.
 DEVICE_CFG_PATH = "grub/beast/device.cfg"
-# Marker so tools can recognise a beast-booter ESP. Contains the install id
-# and the layout version.
+# Marker so tools can recognise a beast-boot ESP. Contains the install id
+# and the layout version. On-disk names keep the pre-rename "beast-booter"
+# spelling (marker, user config folder, esp/beast-booter/): 0.1.x/0.2.0 drives
+# use them, and the app must keep reading and updating those drives.
 ESP_MARKER_PATH = "BEAST-BOOTER.ID"
 # GRUB environment block (bb_oneshot hand-off from beast-net, docs/BEASTNET.md
 # section 4). Created by install; update keeps its contents.

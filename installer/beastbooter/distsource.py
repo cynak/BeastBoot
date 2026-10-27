@@ -128,6 +128,6 @@ def find_dist_root(dest: Path, archive: Path) -> Path:
     if len(entries) == 1 and entries[0].is_dir() and (entries[0] / DIST_MANIFEST).is_file():
         return entries[0]
     raise BeastError(
-        f"{archive} does not contain a beast-booter dist directory ({DIST_MANIFEST} not found "
+        f"{archive} does not contain a beast-boot dist directory ({DIST_MANIFEST} not found "
         "at the top level or in a single top-level folder)", code="dist-invalid"
     )

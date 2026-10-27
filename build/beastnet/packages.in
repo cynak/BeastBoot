@@ -26,6 +26,20 @@ ca-certificates=20260816ubuntu0.26.04.1        data
 ncurses-base=6.6+20251231-1                    data
 wireless-regdb=2026.05.30-0ubuntu1~26.04.1      data  # signed regulatory.db for cfg80211 (ISC licence)
 
+# disk tools (docs/DISK_TOOLS.md): RAID/LVM/LUKS assembly, rescue, health, filesystem checks
+mdadm=4.5-5ubuntu1.1                           tool
+lvm2=2.03.31-2ubuntu3                          tool
+dmsetup=2:1.02.205-2ubuntu3                    tool
+cryptsetup-bin=2:2.8.4-1ubuntu4                tool
+gddrescue=1.30-1                               tool  # universe
+smartmontools=7.5-2                            tool
+util-linux=2.41.3-3ubuntu2.2                   tool  # blkid, lsblk (JSON), blockdev, partx, findmnt
+fdisk=2.41.3-3ubuntu2.2                        tool  # sfdisk
+mount=2.41.3-3ubuntu2.2                        tool  # losetup (partition scan, read-only)
+e2fsprogs=1.47.2-3ubuntu4                      tool  # e2fsck -n, dumpe2fs
+xfsprogs=6.18.0-3                              tool  # xfs_repair -n, xfs_db
+btrfs-progs=6.17.1-1build1                     tool  # btrfs check --readonly, show, restore
+
 # dlopen()ed (no DT_NEEDED entry points at them)
 libzstd1=1.5.7+dfsg-3                          lib   # kmod: reading .ko.zst modules
 libgcc-s1=16-20260322-1ubuntu1                 lib   # glibc: pthread_cancel/pthread_exit unwinding

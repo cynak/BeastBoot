@@ -1,4 +1,4 @@
-"""Self-contained entry point for the beast-booter CLI and GUI.
+"""Self-contained entry point for the beast-boot CLI and GUI.
 
     python beast_booter_launch.py <cli args...>     # the CLI (same as python -m beastbooter)
     python beast_booter_launch.py --gui              # the GUI (beastbooter.gui)

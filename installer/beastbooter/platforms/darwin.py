@@ -350,7 +350,7 @@ def _ioctl_geometry(fd: int) -> tuple[int, int] | None:
 # Elevation
 # ---------------------------------------------------------------------------
 
-ELEVATION_PROMPT = "beast-booter needs administrator rights to write to the selected drive."
+ELEVATION_PROMPT = "beast-boot needs administrator rights to write to the selected drive."
 
 
 def applescript_string(s: str) -> str:
@@ -370,7 +370,7 @@ class ElevationFiles:
     private (0700) directory: the command's output, and the markers below."""
 
     def __init__(self, parent: str | None = None):
-        self.dir = tempfile.mkdtemp(prefix="beast-booter-elevated-", dir=parent)
+        self.dir = tempfile.mkdtemp(prefix="beast-boot-elevated-", dir=parent)
         self.output = os.path.join(self.dir, "output.txt")  # stdout + stderr of the command
         self.started = os.path.join(self.dir, "started")  # mkdir'ed by the root shell first thing
         self.cancel = os.path.join(self.dir, "cancel")  # created by cancel(): SIGTERM

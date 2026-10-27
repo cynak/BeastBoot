@@ -1,4 +1,4 @@
-"""A stand-in for the beast-booter CLI that touches nothing (GUI --demo mode and tests).
+"""A stand-in for the beast-boot CLI that touches nothing (GUI --demo mode and tests).
 
 It accepts the same command line the GUI builds for the real CLI
 (controller.build_cli_argv) and writes a realistic sequence of progress events
@@ -52,7 +52,7 @@ INSTALL_DEVICE_STEPS = [
 ]
 UPDATE_STEPS = [
     ("verify-dist", "Checking the boot files against manifest.json", 4),
-    ("check-target", "Reading the beast-booter drive", 10),
+    ("check-target", "Reading the beast-boot drive", 10),
     ("prepare", "Unmounting the drive's volumes", 18),
     ("write-esp", "Replacing the boot partition (BEAST-EFI)", 40),
     ("write-esp", "Replacing the boot partition (BEAST-EFI): 30 of 41 files", 70),
@@ -116,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv[:1] == ["firmware"]:
         return firmware_main(argv[1:])
-    p = argparse.ArgumentParser(prog="fake-beast-booter")
+    p = argparse.ArgumentParser(prog="fake-beast-boot")
     p.add_argument("action", choices=("install", "update"))
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument("--device")
@@ -134,7 +134,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--fake-delay", type=float, default=0.35)
     a = p.parse_args(argv)
     if not a.yes:
-        print("fake-beast-booter: the GUI always passes --yes", file=sys.stderr)
+        print("fake-beast-boot: the GUI always passes --yes", file=sys.stderr)
         return 2
     out = Progress(a.progress_file, a.fake_delay)
     # SIGTERM (and Windows' terminate) -> the same path as Ctrl+C.
@@ -150,7 +150,7 @@ def main(argv: list[str] | None = None) -> int:
         for step, message, pct in steps:
             if a.cancel_file and os.path.exists(a.cancel_file):
                 out.emit(event="error", code="cancelled", message=f"stopped on request, before step {step}")
-                print("beast-booter: stopped on request", file=sys.stderr)
+                print("beast-boot: stopped on request", file=sys.stderr)
                 return 130
             if step == a.fake_crash_at:
                 print(f"Traceback (most recent call last):\n  ...\nRuntimeError: fake crash at {step}", file=sys.stderr)
@@ -160,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
                 time.sleep(a.fake_delay)
                 msg = f"write failed at byte offset 31457280 of {target}: Input/output error (the drive may be faulty)"
                 out.emit(event="error", code="write-failed", message=msg)
-                print(f"beast-booter: error: {msg}", file=sys.stderr)
+                print(f"beast-boot: error: {msg}", file=sys.stderr)
                 return 1
             if a.image and step == "check-target" and a.size and a.size % (1 << 20):
                 out.emit(event="warning", message="size rounded down to whole sectors")
@@ -169,7 +169,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     except KeyboardInterrupt:
         out.emit(event="error", code="interrupted", message="interrupted")
-        print("beast-booter: interrupted", file=sys.stderr)
+        print("beast-boot: interrupted", file=sys.stderr)
         return 130
 
 
@@ -184,7 +184,7 @@ def _fw_state_path(a: argparse.Namespace) -> str:
     import tempfile
 
     return a.fake_state or os.environ.get(ENV_FW_STATE) or os.path.join(
-        tempfile.gettempdir(), f"beast-booter-fake-firmware-{os.getuid() if hasattr(os, 'getuid') else 0}.json")
+        tempfile.gettempdir(), f"beast-boot-fake-firmware-{os.getuid() if hasattr(os, 'getuid') else 0}.json")
 
 
 def _fw_load(path: str) -> dict:
@@ -228,7 +228,7 @@ def _fw_result(installed: list[dict], target: str) -> dict:
 def firmware_main(argv: list[str]) -> int:
     import hashlib
 
-    p = argparse.ArgumentParser(prog="fake-beast-booter firmware")
+    p = argparse.ArgumentParser(prog="fake-beast-boot firmware")
     p.add_argument("command", choices=("catalog", "fetch", "install", "remove", "list"))
     g = p.add_mutually_exclusive_group()
     g.add_argument("--device")
@@ -259,7 +259,7 @@ def firmware_main(argv: list[str]) -> int:
 
     def fail(code: str, message: str) -> int:
         emit(event="error", code=code, message=message)
-        print(f"beast-booter: error: {message}", file=sys.stderr)
+        print(f"beast-boot: error: {message}", file=sys.stderr)
         return 1
 
     target = a.device or a.image
@@ -313,8 +313,8 @@ def firmware_main(argv: list[str]) -> int:
                 if name.endswith(".json"):
                     with open(os.path.join(a.from_dir, name), encoding="utf-8") as f:
                         entries.append(json.load(f))
-            if step("check-target", f"Checking the beast-booter drive {target}", 10):
-                return fail("target-refused", f"{target} is not a beast-booter drive")
+            if step("check-target", f"Checking the beast-boot drive {target}", 10):
+                return fail("target-refused", f"{target} is not a beast-boot drive")
             if step("verify-packs", f"Re-checking {len(entries)} pack(s) against the catalog", 30):
                 return fail("verify-failed", "a file in the pack does not match the catalog")
             ids = {e["id"] for e in entries}

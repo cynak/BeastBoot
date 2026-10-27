@@ -1,7 +1,7 @@
 {
   "comment": "Needs of beastnet/rootfs/init and the beastnet package beyond build/beastnet's defaults; see beastnet/README.md.",
   "binaries": [
-    "sh", "mount", "umount", "mkdir", "cat", "find", "xargs", "sort", "wc", "sleep", "grep", "mv",
+    "sh", "mount", "umount", "mkdir", "cat", "cp", "find", "xargs", "sort", "wc", "sleep", "grep", "mv",
     "setsid", "findfs", "mdev", "dmesg", "ip", "udhcpc", "date", "sync", "reboot", "poweroff",
     "modprobe", "wpa_supplicant", "iw", "python3", "mokutil"
   ],

@@ -1,5 +1,5 @@
 """Smoke: a fresh drive boots to the menu on BIOS, UEFI and UEFI + Secure Boot
-(beast-booter key enrolled in MokList) and reports itself correctly."""
+(beast-boot key enrolled in MokList) and reports itself correctly."""
 
 from __future__ import annotations
 

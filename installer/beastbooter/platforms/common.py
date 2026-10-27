@@ -76,7 +76,7 @@ def check_common(disk: DiskInfo, *, allow_fixed: bool, paths=None, pathmod=os.pa
     mp = running_from(disk.mountpoints, paths, pathmod=pathmod)
     if mp:
         raise BeastError(
-            f"refusing: beast-booter itself is running from {disk.id} ({mp}); "
+            f"refusing: beast-boot itself is running from {disk.id} ({mp}); "
             "start it from another drive to write this one"
         )
     if disk.read_only:

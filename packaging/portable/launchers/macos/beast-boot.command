@@ -1,9 +1,9 @@
 #!/bin/sh
-# beast-booter portable (macOS): the command line interface.
+# beast-boot portable (macOS): the command line interface.
 #
-#   ./beast-booter.command --help
-#   sudo ./beast-booter.command install --device /dev/disk4   (writing a drive needs root)
-#   ./beast-booter.command install --image my.img --size 8G   (image files: no root)
+#   ./beast-boot.command --help
+#   sudo ./beast-boot.command install --device /dev/disk4   (writing a drive needs root)
+#   ./beast-boot.command install --image my.img --size 8G   (image files: no root)
 #
 # Double-clicked in Finder it opens Terminal and shows the help.
 # Uses the runtime, sources and boot files inside BeastBooter.app next to it.
@@ -33,8 +33,8 @@ if [ "$#" -eq 0 ]; then
   "$python" -s -E -B -S "$launch" --help
   echo
   echo "Run commands from Terminal, for example:"
-  echo "  \"$here/beast-booter.command\" install --help"
-  echo "  sudo \"$here/beast-booter.command\" install --device /dev/diskN"
+  echo "  \"$here/beast-boot.command\" install --help"
+  echo "  sudo \"$here/beast-boot.command\" install --device /dev/diskN"
   exit 0
 fi
 exec "$python" -s -E -B -S "$launch" "$@"

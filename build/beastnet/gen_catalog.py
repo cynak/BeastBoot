@@ -51,7 +51,7 @@ from bnlib import BuildError  # noqa: E402
 KERNEL_ORG_REPO = "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git"
 URL_TEMPLATE = KERNEL_ORG_REPO + "/plain/{path}?h={tag}"
 GITLAB_REPO = "https://gitlab.com/kernel-firmware/linux-firmware.git"
-USER_AGENT = "beast-booter-build/1 (+gen_catalog.py)"
+USER_AGENT = "beast-boot-build/1 (+gen_catalog.py)"
 
 # id, title, description, module path globs (relative to kernel/, no .ko suffix)
 PACKS = [

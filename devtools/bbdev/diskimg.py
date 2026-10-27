@@ -102,14 +102,14 @@ class ImageInfo:
 
 
 def image_info(image: Path) -> ImageInfo:
-    """`beast-booter info --image P --json`, parsed."""
+    """`beast-boot info --image P --json`, parsed."""
     image = Path(image)
     if not image.is_file():
         raise Failure(f"image not found: {image}", "build one with `bb-dev image --fixtures --debug`")
     p = run([sys.executable, "-m", "beastbooter", "info", "--image", image, "--json"], check=False,
             timeout=120, text=True)
     if p.returncode != 0:
-        raise Failure(f"{image} is not a beast-booter image: {(p.stderr or p.stdout).strip()[-400:]}")
+        raise Failure(f"{image} is not a beast-boot image: {(p.stderr or p.stdout).strip()[-400:]}")
     d = json.loads(p.stdout)
     return ImageInfo(image, d.get("layout", ""), d.get("version", ""), d["data"].get("fs", ""),
                      int(d["data"]["start_lba"]), int(d["data"]["size_lba"]),

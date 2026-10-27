@@ -2,7 +2,7 @@ SHELL := /bin/bash
 ROOT  := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 ENV   := source $(ROOT)/scripts/dev-env.sh &&
 
-IMAGE  ?= out/beast-booter.img
+IMAGE  ?= out/beast-boot.img
 SIZE   ?= 2G
 LAYOUT ?= msdos
 FS     ?= exfat
@@ -22,7 +22,7 @@ help:
 	@echo ""
 	@echo "make dev        set up a complete dev environment (bin/bb-dev setup)"
 	@echo "make doctor     check the dev environment and explain fixes"
-	@echo "make dev-image  build out/dev/beast-booter-dev.img with test ISOs and debug on"
+	@echo "make dev-image  build out/dev/beast-boot-dev.img with test ISOs and debug on"
 	@echo "make vm         boot the dev image in QEMU (MODE=bios|uefi|sb|sb-enrolled|sb-fresh)"
 	@echo "make vm-sb      boot the dev image with Secure Boot (key enrolled)"
 	@echo "make menu-sync  push edited grub/ files into the dev image (WATCH=1 to keep syncing)"

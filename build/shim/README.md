@@ -25,7 +25,7 @@ chaining to each CA, so it boots on both.
   Debian's shim key (the vendor certificate built into that shim).
 
 shim's built-in key is Debian's, not Canonical's. Our GRUB and the beast-net helper
-kernel are signed with the beast-booter MOK key. Ubuntu-signed kernels need the
+kernel are signed with the beast-boot MOK key. Ubuntu-signed kernels need the
 opt-in "Trust Ubuntu's Secure Boot key" (`build/trust/README.md`).
 
 ## What is checked, and where

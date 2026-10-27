@@ -4,7 +4,7 @@ An image is current when its ESP marker's layout_version is the installer's
 LAYOUT_VERSION and the bb_build_id in its /grub/beast/version.cfg is the
 build_id of dist/manifest.json (menu-sync never rewrites version.cfg). If not:
 
-  same layout, other build id  UPDATE: `bin/beast-booter update --image` swaps
+  same layout, other build id  UPDATE: `bin/beast-boot update --image` swaps
                                the boot code and the ESP and keeps partition 1
                                (the ISOs and /beast-booter/config.cfg)
   older layout (layout 1)      REBUILD: update refuses it (it never moves
@@ -35,7 +35,7 @@ CURRENT, UPDATE, REBUILD, UNKNOWN = "current", "update", "rebuild", "unknown"
 VERSION_CFG = "/grub/beast/version.cfg"
 RECIPE_SUFFIX = ".bbdev.json"
 RECIPE_VERSION = 1
-BEAST_BOOTER = paths.REPO / "bin" / "beast-booter"
+BEAST_BOOTER = paths.REPO / "bin" / "beast-boot"
 BB_DEV = paths.REPO / "bin" / "bb-dev"
 # `bb-dev setup` builds the default image with --fixtures --debug; images from
 # before recipes existed are rebuilt with these options.
@@ -194,7 +194,7 @@ def update_command(image: Path) -> list[str]:
 
 
 def run_update(image: Path, env: dict) -> Verdict:
-    """`bin/beast-booter update --image` (boot code + ESP from dist/, partition 1 kept)."""
+    """`bin/beast-boot update --image` (boot code + ESP from dist/, partition 1 kept)."""
     image = Path(image).absolute()
     ensure_modifiable(image)
     log = image.with_name(image.stem + ".update.log")
@@ -202,7 +202,7 @@ def run_update(image: Path, env: dict) -> Verdict:
     p = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=900, stdin=subprocess.DEVNULL)
     log.write_text("$ " + shlex.join(cmd) + "\n" + p.stdout + p.stderr)
     if p.returncode != 0:
-        raise Failure(f"`bin/beast-booter update` failed ({p.returncode}); log: {rel(log)}\n"
+        raise Failure(f"`bin/beast-boot update` failed ({p.returncode}); log: {rel(log)}\n"
                       + (p.stderr or p.stdout).strip()[-1200:], f"rebuild it: {rebuild_command(image)}")
     after = check(image)
     recipe = read_recipe(image)

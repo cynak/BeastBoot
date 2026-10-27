@@ -2,7 +2,7 @@
 
 How to make a BeastBoot USB drive, fill it with ISOs, boot it (with or
 without Secure Boot), keep it up to date, download ISOs from the boot menu,
-and what to do when something does not boot.
+rescue and clone disks, and what to do when something does not boot.
 
 Contents:
 
@@ -14,8 +14,9 @@ Contents:
 6. [First boot with Secure Boot on](#6-first-boot-with-secure-boot-on)
 7. [Update the boot files](#7-update-the-boot-files)
 8. [Download an ISO from a link](#8-download-an-iso-from-a-link)
-9. [Menu settings](#9-menu-settings)
-10. [Troubleshooting](#10-troubleshooting)
+9. [Disk tools](#9-disk-tools)
+10. [Menu settings](#10-menu-settings)
+11. [Troubleshooting](#11-troubleshooting)
 
 ## 1. What you need
 
@@ -34,7 +35,7 @@ Contents:
    - **Windows:** extract the `.zip`, double-click `BeastBooter.cmd`.
    - **macOS:** double-click the `.zip`, then `BeastBooter`
      (`BeastBooter.app`).
-   - **Linux:** `tar xzf beast-booter-<v>-linux-x86_64.tar.gz`, then
+   - **Linux:** `tar xzf beast-boot-<v>-linux-x86_64.tar.gz`, then
      `./BeastBooter` in the folder.
 
    The app is not code signed, so the first start shows a SmartScreen or
@@ -72,19 +73,19 @@ manifest without writing anything.
 
 ## 3. Make a drive with the command line
 
-The package has a command line program: `beast-booter.cmd` (Windows),
-`./beast-booter.command` (macOS), `./beast-booter` (Linux). From a source
-checkout it is `bin/beast-booter`. Writing a device needs administrator
+The package has a command line program: `beast-boot.cmd` (Windows),
+`./beast-boot.command` (macOS), `./beast-boot` (Linux). From a source
+checkout it is `bin/beast-boot`. Writing a device needs administrator
 rights: `sudo` on Linux and macOS, a terminal started with **Run as
 administrator** on Windows.
 
 ```sh
-./beast-booter list-devices                         # drives you can write to (--all: every disk)
-sudo ./beast-booter install --device /dev/sdX       # Linux: asks you to type the device name
-sudo ./beast-booter.command install --device /dev/disk4    # macOS
-beast-booter.cmd install --device \\.\PhysicalDrive2       # Windows (or --device 2)
-./beast-booter install --image my-drive.img --size 8G      # an image file, no admin rights
-sudo ./beast-booter info --device /dev/sdX           # layout, version, partitions
+./beast-boot list-devices                         # drives you can write to (--all: every disk)
+sudo ./beast-boot install --device /dev/sdX       # Linux: asks you to type the device name
+sudo ./beast-boot.command install --device /dev/disk4    # macOS
+beast-boot.cmd install --device \\.\PhysicalDrive2       # Windows (or --device 2)
+./beast-boot install --image my-drive.img --size 8G      # an image file, no admin rights
+sudo ./beast-boot info --device /dev/sdX           # layout, version, partitions
 ```
 
 `install` options (see `install --help`):
@@ -247,7 +248,7 @@ A newer BeastBoot replaces only the boot partition and boot code; your
 ISOs and other files on partition 1 are never written.
 
 - **App:** choose the drive and click **Update boot files...**.
-- **Command line:** `sudo ./beast-booter update --device /dev/sdX`.
+- **Command line:** `sudo ./beast-boot update --device /dev/sdX`.
 
 **The app tells you when a drive is out of date.** For every BeastBoot
 drive in the list it reads which version the drive has, without asking for
@@ -259,7 +260,7 @@ main button. On Linux the app reads the version by mounting the drive's
 boot partition read-only for a moment (udisks, no password); on Windows and
 macOS it can read it only where the system shows that partition, otherwise
 the card just says *BeastBoot drive*. From the command line:
-`./beast-booter list-devices --check-installed`.
+`./beast-boot list-devices --check-installed`.
 
 Installed firmware packs and a pending one-time download boot are carried
 over (for packs installed before 0.1.2, see
@@ -332,12 +333,12 @@ drive is mounted, it is unmounted first; close any program that still uses
 it. Command line:
 
 ```sh
-./beast-booter firmware catalog                                  # the packs on offer
-./beast-booter firmware fetch --pack intel-wifi --out fw/        # download + verify, no admin rights
+./beast-boot firmware catalog                                  # the packs on offer
+./beast-boot firmware fetch --pack intel-wifi --out fw/        # download + verify, no admin rights
 #   add --for-device /dev/sdX (with sudo) or --for-image P to check the free space first
-sudo ./beast-booter firmware install --device /dev/sdX --from fw/
-sudo ./beast-booter firmware list --device /dev/sdX              # what is installed
-sudo ./beast-booter firmware remove --device /dev/sdX --pack intel-wifi
+sudo ./beast-boot firmware install --device /dev/sdX --from fw/
+sudo ./beast-boot firmware list --device /dev/sdX              # what is installed
+sudo ./beast-boot firmware remove --device /dev/sdX --pack intel-wifi
 ```
 
 **Packs installed before 0.1.2.** 0.1.2 moved the helper to a newer Linux
@@ -353,7 +354,187 @@ helper uses (`pack-mismatch`): update the drive first, then fetch them again.
 
 Details: [BEASTNET.md](BEASTNET.md).
 
-## 9. Menu settings
+## 9. Disk tools
+
+Disk tools (new in 0.3.0) show every disk and RAID set on a computer, read
+the health of the disks, copy a failing disk, and clone or image disks,
+partitions and RAID volumes. Start them from the boot menu: **Tools**, then
+**Disk tools: recovery and cloning**. The entry is shown when the helper is
+on the boot partition, like "Download an ISO from a link". Technical
+contract and tests: [DISK_TOOLS.md](DISK_TOOLS.md).
+
+The helper runs in 1 GiB of RAM.
+
+### What is safe
+
+The screen **What is safe here?** says the same in short.
+
+- When Disk tools start, every disk and partition is set read-only in the
+  kernel, and again after each scan. RAID sets, LVM and encrypted volumes
+  start read-only too; RAID sets and LVM on in-memory copy-on-write overlays,
+  so even a write the kernel makes on its own lands in memory. Nothing starts
+  on its own.
+- Some sets are not started at all, because starting them would write to the
+  disks: LVM groups with RAID, mirror, cache, thin or snapshot volumes, and
+  Intel RST volumes that are rebuilding or use RWH/PPL. Windows dynamic disks
+  are only detected in this version. Image their disks one by one instead.
+- A disk becomes writable only for two reasons: you confirmed it as a copy
+  target, or you opened it for image files (see "Where images go").
+- Working out a RAID layout runs on copy-on-write overlays in memory. The
+  disks are only read.
+- Before anything is written you see a plan screen, then type the last 6
+  characters of the target's serial number (the whole serial if two disks end
+  the same). The disk is checked again (serial, size) right before writing.
+- Refused, with the reason shown: the BeastBoot drive, the source, any disk
+  of the source set, a disk that is in use, a target smaller than the
+  source, and a target with a different logical sector size.
+- Keys and passphrases are not saved on the drive.
+
+### Screens
+
+The first screen says "N disk(s), M RAID or volume set(s). Every disk is
+read-only until you confirm one as a copy target." Then:
+
+| Entry | What it does |
+|---|---|
+| a disk | its model, size, serial, sector sizes and partitions; check its health, clone it, save it as an image, restore an image onto it, or copy or image one partition |
+| the BeastBoot drive | shown greyed out; it is never a target |
+| a RAID or volume set | its members and state, and whether BeastBoot can start it (see below) |
+| Rebuilt RAID: raid1 ... | a layout you worked out; copy or image it |
+| Check the health of every disk | SMART readings of all disks |
+| Restore an image onto a disk | pick an image, then the target |
+| Work out a RAID layout from chosen disks | for sets Linux cannot read |
+| Scan again | look for disks again (e.g. after attaching one) |
+| What is safe here? | the promises above |
+
+A set is labelled by what it is: Linux RAID, Intel RST RAID, Firmware RAID
+(DDF), LVM volume group, Encrypted (LUKS), BitLocker, Btrfs on several disks,
+ZFS pool, Windows dynamic disks, Windows Storage Spaces, Firmware RAID, or
+Unknown set. Each shows one of these lines:
+
+- "BeastBoot can start it read-only." Open it, choose **Start it
+  read-only**, then pick a volume to copy or image. For LUKS and BitLocker
+  you type the passphrase or recovery key; it opens the volume read-only and
+  is not saved.
+- "Linux cannot read its RAID information. BeastBoot can work out the layout
+  from the data itself, without writing to the disks."
+- "BeastBoot cannot read it as a whole: image each disk on its own."
+- "Needs the ZFS pack: add it with the BeastBoot app on your computer, then
+  start Disk tools again." The ZFS pack is not shipped yet.
+
+Hardware RAID controllers (MegaRAID/PERC, Smart Array, Adaptec, LSI): their
+drivers are included and each array shows up as one ordinary disk. This is
+not tested on real controllers yet.
+
+### Health readings
+
+**Check its health** (or **Check the health of every disk**) reads SMART.
+The answer is OK, WARN or FAIL, with the numbers behind it.
+
+- WARN: any reallocated, pending or uncorrectable sector, media errors on
+  NVMe, errors in the drive's error or self-test log, wear of 90 percent or
+  more, or a temperature of 70 C or more.
+- FAIL: SMART says the drive is failing, 100 or more reallocated or pending
+  sectors, wear of 100 percent, or an NVMe critical warning (other than
+  temperature) or low spare.
+- No SMART data (many hardware RAID virtual disks, some USB bridges) shows
+  as unknown.
+
+One reading cannot show that a count is growing. Read it twice, a few
+minutes apart. A WARN or FAIL disk with data you need: copy it first.
+
+### Copy a disk, a partition or a RAID volume
+
+1. Pick the source, then **Copy it to another disk (clone)** or **Save it as
+   an image file**. A RAID volume offers "To another disk (clone)" and "To an
+   image file (on the BeastBoot drive or another disk)". For an image you then
+   choose where it goes (see "Where images go" below).
+2. For a clone, pick the target. Everything on it is overwritten.
+3. The plan screen shows From, To, Size, what is erased, where the progress
+   file is, and the commands. **Continue** or **Back**.
+4. For a clone or restore, type the last 6 characters of the target's serial.
+   A wrong entry is refused and you can try again.
+5. The copy runs with ddrescue and shows progress, speed and unreadable
+   areas. Afterwards it is checked (SHA-256) and the result is shown.
+
+Images are raw copies. Restoring writes the image back onto a disk at least
+as large.
+
+**How a copy resumes.** ddrescue keeps a progress file (mapfile) on the
+BeastBoot drive, never on the source or the target. If the copy stops, or the
+power goes, start the same copy again: it continues where it stopped. If
+some areas could not be read, the result says how much, and running the same
+copy again retries only those areas. If the drive has no writable place for
+the progress file, the copy does not start.
+
+### Where images go
+
+Image files go to the BeastBoot drive (its data partition, folder `/images`)
+when that is exFAT or NTFS; image files are not written to FAT32 or the boot
+partition. Or choose another disk: the menu lists disks with an exFAT, NTFS,
+ext4 or XFS filesystem. You type the last 6 characters of its serial, and
+its filesystem is opened read-write only for image files: files already on
+it stay and new image files are added. When you leave Disk tools it is
+synced, unmounted and set read-only again. A disk holding the source, a
+disk of the source set or a disk in use is not offered.
+
+To restore, choose **Restore an image onto a disk**, pick the place, then
+the image (files ending in `.img` in `/images`, or type a path), then the
+target.
+
+### Work out a RAID layout
+
+Use this when Linux cannot read a RAID set: AMD RAID, Windows Storage
+Spaces, or a set whose RAID information is lost or wiped.
+
+1. Open the set and choose **Work out its RAID layout (read-only)**, or on
+   the first screen choose **Work out a RAID layout from chosen disks**
+   and tick every disk of the set (at least two, then Done).
+2. BeastBoot reads samples from each disk and lists possible layouts, best
+   first: level, layout, chunk size and disk order. A missing disk is
+   written as "missing"; a set with one member absent can still be worked
+   out.
+3. **Try the best layouts and keep the one that reads** builds them on
+   overlays and checks whether a filesystem reads. Or pick one layout.
+4. The result shows the size and a check score. If a filesystem reads, it is
+   probably right; "No filesystem reads on it: this layout is probably
+   wrong." Choose **Copy or image it**, or go back to the layouts.
+
+The rebuilt volume stays read-only; changes go to memory only. Nothing is
+written to the disks. It shows on the first screen as "Rebuilt RAID".
+
+If no layout fits, check that every disk of the set is attached, or use the
+**Manual RAID builder** if you know the settings: level, chunk size (KiB),
+disk order (comma-separated, "missing" for an absent disk), data offset (KiB)
+and, for raid5 and raid6, the layout (default left-symmetric).
+
+A copy of one member disk is not the RAID set. If you open one disk of a set,
+the menu says so and the copy is of that disk alone.
+
+### "May be an AMD RAID member"
+
+BeastBoot cannot read AMD's RAID information exactly, so it marks disks that
+look like members of an AMD RAID set with this name (shown in a warning
+colour). Treat it as a hint, not as proof. Open it and use **Work out its
+RAID layout**. On a board with the SATA controller in RAID mode, Linux
+still sees each disk, so the members can be imaged and the set rebuilt by
+BeastBoot's reconstruction. NVMe drives in AMD RAID mode may not be visible
+to Linux at all; this is not verified on hardware.
+
+### Tested and not tested
+
+Tested in QEMU (37 end-to-end tests): Linux RAID 0, 1, 5, 6, 10, also
+degraded, and linear, also with write-intent bitmaps (one of them stale); Intel RST RAID5; DDF RAID1; LVM, also two groups with
+the same name, and a group with a RAID1 volume (refused); LUKS2; Btrfs RAID1; GPT with NTFS and ext4; wiped RAID0 and
+RAID5 rebuilt from the data, also with one member missing. Source disks were
+hashed before and after and did not change; clone, image and restore
+round trips were byte-identical; the refusals above were checked.
+
+Not tested yet: real Intel RST/VMD hardware, real AMD RAID arrays, ZFS,
+hardware RAID controllers, BitLocker, Windows dynamic disks, and real failing
+disks.
+
+## 10. Menu settings
 
 Create `beast-booter/config.cfg` on the BEASTBOOTER partition; plain `set`
 lines:
@@ -372,7 +553,7 @@ The file is GRUB script: a typo shows up as a GRUB error at boot. All
 settings, including your own theme (`bb_theme`) and debug output:
 [MENU.md](MENU.md).
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 ### Messages in the menu
 

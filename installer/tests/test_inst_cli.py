@@ -35,7 +35,7 @@ def test_parse_size_invalid(text):
 def test_expected_errors_have_no_traceback(tmp_path):
     p = cli("install", "--image", tmp_path / "x.img", "--size", "10M", "--yes", "--dist", tmp_path)
     assert p.returncode == 1
-    assert p.stderr.startswith("beast-booter: error:") and "Traceback" not in p.stderr
+    assert p.stderr.startswith("beast-boot: error:") and "Traceback" not in p.stderr
     assert len(p.stderr.strip().splitlines()) == 1
 
 
@@ -55,7 +55,7 @@ def test_usage_errors(tmp_path):
 
 def test_version_and_help():
     p = cli("--version")
-    assert p.returncode == 0 and p.stdout.startswith("beast-booter ")
+    assert p.returncode == 0 and p.stdout.startswith("beast-boot ")
     p = cli("install", "--help")
     assert p.returncode == 0 and "--allow-fixed-disk" in p.stdout and "--serial-console" in p.stdout
 
@@ -78,6 +78,6 @@ def test_device_missing_is_clean_error(capsys):
 
 @needs_tools
 def test_bin_wrapper(tmp_path, fake_dist):
-    wrapper = HERE.parents[1] / "bin" / "beast-booter"
+    wrapper = HERE.parents[1] / "bin" / "beast-boot"
     p = subprocess.run(["sh", str(wrapper), "--version"], capture_output=True, text=True)
-    assert p.returncode == 0 and "beast-booter" in p.stdout
+    assert p.returncode == 0 and "beast-boot" in p.stdout

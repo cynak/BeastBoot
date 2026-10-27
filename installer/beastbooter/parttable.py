@@ -1,6 +1,6 @@
 """Write MBR ("msdos") and GPT partition tables in pure Python.
 
-This replaces `sfdisk` for creating a beast-booter drive, so the installer
+This replaces `sfdisk` for creating a beast-boot drive, so the installer
 works the same on Linux, Windows and macOS. The geometry comes from
 plan.make_plan(); types, names and flags come from layout.py.
 

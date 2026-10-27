@@ -12,17 +12,17 @@ runs on your machine with `make release`.
 
 | File | What it is |
 |---|---|
-| `beast-booter-<v>-linux-x86_64.tar.gz` | portable package for Linux (docs/PORTABLE.md) |
-| `beast-booter-<v>-windows-x86_64.zip` | portable package for Windows |
-| `beast-booter-<v>-macos-x86_64.zip` | portable package for Intel Macs |
-| `beast-booter-<v>-macos-arm64.zip` | portable package for Apple silicon Macs |
-| `beast-booter-<v>-dist.zip` | the signed boot files (`dist/` with `manifest.json`); `beast-booter install --dist <zip>` |
-| `beast-booter-<v>-sbom.cdx.json` | SBOM, CycloneDX 1.6: everything shipped (drive files, beast-net kernel and initrd packages, portable runtimes) |
-| `beast-booter-<v>-sbom.spdx.json` | the same SBOM in SPDX 2.3 |
-| `beast-booter-<v>-vulnerabilities.json` | vulnerability and boot-chain scan, OpenVEX applied |
-| `beast-booter-<v>-VULNERABILITIES.md` | the same, for people |
-| `beast-booter-<v>-ENROLL_THIS_KEY_IN_MOKMANAGER.cer` | the release Secure Boot certificate (DER) |
-| `beast-booter-<v>-CERTIFICATE.txt` | its subject, validity and SHA-1 (as MokManager shows it) / SHA-256 fingerprints |
+| `beast-boot-<v>-linux-x86_64.tar.gz` | portable package for Linux (docs/PORTABLE.md) |
+| `beast-boot-<v>-windows-x86_64.zip` | portable package for Windows |
+| `beast-boot-<v>-macos-x86_64.zip` | portable package for Intel Macs |
+| `beast-boot-<v>-macos-arm64.zip` | portable package for Apple silicon Macs |
+| `beast-boot-<v>-dist.zip` | the signed boot files (`dist/` with `manifest.json`); `beast-boot install --dist <zip>` |
+| `beast-boot-<v>-sbom.cdx.json` | SBOM, CycloneDX 1.6: everything shipped (drive files, beast-net kernel and initrd packages, portable runtimes) |
+| `beast-boot-<v>-sbom.spdx.json` | the same SBOM in SPDX 2.3 |
+| `beast-boot-<v>-vulnerabilities.json` | vulnerability and boot-chain scan, OpenVEX applied |
+| `beast-boot-<v>-VULNERABILITIES.md` | the same, for people |
+| `beast-boot-<v>-ENROLL_THIS_KEY_IN_MOKMANAGER.cer` | the release Secure Boot certificate (DER) |
+| `beast-boot-<v>-CERTIFICATE.txt` | its subject, validity and SHA-1 (as MokManager shows it) / SHA-256 fingerprints |
 | `SHA256SUMS` | SHA-256 of every file above |
 
 Every file also gets a GitHub build-provenance attestation. The release notes
@@ -68,7 +68,7 @@ Environment variables (all optional):
 
 | Variable | Meaning |
 |---|---|
-| `BB_KEY_DIR` | directory with `beast-booter.key`, `.crt`, `.cer` |
+| `BB_KEY_DIR` | directory with `beast-boot.key`, `.crt`, `.cer` |
 | `BB_RELEASE_TAG` | the tag being released |
 | `BB_RELEASE_CERT_SHA256` | refuse any certificate but this one |
 | `BB_RELEASE_GATE` | `enforce`, `warn` or `off` (default: `enforce` with `--official`, else `warn`) |
@@ -102,25 +102,25 @@ Changing the key forces everyone to enroll again, so create it once, carefully:
 
    ```sh
    BB_KEY_DIR=/media/usb/bb-release-key \
-   BB_KEY_CN="beast-booter Secure Boot release key" \
+   BB_KEY_CN="beast-boot Secure Boot release key" \
    build/keygen.sh
    ```
 
    (RSA-2048, `extendedKeyUsage=codeSigning`, 10 years; firmware and shim do not
    check the dates.)
-2. Keep `beast-booter.key` offline and backed up (for example two encrypted USB
+2. Keep `beast-boot.key` offline and backed up (for example two encrypted USB
    sticks in different places). **Never commit it** and never put it anywhere
    but the two places below.
 3. In GitHub: *Settings → Secrets and variables → Actions → New repository secret*:
-   - `BB_SB_KEY_PEM` = the contents of `beast-booter.key`
-   - `BB_SB_CERT_PEM` = the contents of `beast-booter.crt`
+   - `BB_SB_KEY_PEM` = the contents of `beast-boot.key`
+   - `BB_SB_CERT_PEM` = the contents of `beast-boot.crt`
 
-   or with the GitHub CLI: `gh secret set BB_SB_KEY_PEM < beast-booter.key` and
-   `gh secret set BB_SB_CERT_PEM < beast-booter.crt`.
+   or with the GitHub CLI: `gh secret set BB_SB_KEY_PEM < beast-boot.key` and
+   `gh secret set BB_SB_CERT_PEM < beast-boot.crt`.
 4. Recommended: pin the certificate. Set the repository *variable*
-   `BB_RELEASE_CERT_SHA256` to `sha256sum beast-booter.cer` (the DER file), so a
+   `BB_RELEASE_CERT_SHA256` to `sha256sum beast-boot.cer` (the DER file), so a
    wrong or swapped secret fails the build instead of shipping a new key.
-5. Publish the SHA-1 and SHA-256 fingerprints (`openssl x509 -in beast-booter.crt
+5. Publish the SHA-1 and SHA-256 fingerprints (`openssl x509 -in beast-boot.crt
    -noout -fingerprint -sha1 -fingerprint -sha256`) in docs/SECURE_BOOT.md.
 
 The workflow writes the key to a fresh 0700 directory (umask 077), derives the
@@ -136,7 +136,7 @@ certificate must be replaced and users told to delete the old MOK
 3. Tag and push:
 
    ```sh
-   git tag -a v0.2.0 -m "beast-booter 0.2.0"
+   git tag -a v0.2.0 -m "beast-boot 0.2.0"
    git push origin v0.2.0
    ```
 
@@ -199,15 +199,15 @@ In the folder with the downloaded files:
 
 ```sh
 sha256sum -c SHA256SUMS --ignore-missing     # macOS: shasum -a 256 -c SHA256SUMS --ignore-missing
-gh attestation verify beast-booter-<v>-linux-x86_64.tar.gz -R cynak/BeastBoot
+gh attestation verify beast-boot-<v>-linux-x86_64.tar.gz -R cynak/BeastBoot
 ```
 
-On Windows: `Get-FileHash .\beast-booter-<v>-windows-x86_64.zip -Algorithm SHA256`
+On Windows: `Get-FileHash .\beast-boot-<v>-windows-x86_64.zip -Algorithm SHA256`
 and compare with the line in `SHA256SUMS`. The attestation proves the file was
 built by this repository's release workflow from the tagged commit.
 
 Before enrolling the certificate, compare its fingerprint with
-`beast-booter-<v>-CERTIFICATE.txt`, the release notes and docs/SECURE_BOOT.md
+`beast-boot-<v>-CERTIFICATE.txt`, the release notes and docs/SECURE_BOOT.md
 (section 3, "Check the key before you enroll it"): MokManager's **View key**
 must show the same SHA-1 fingerprint. Every release since the key was created
 has the same certificate; a different one means the drive or download is not an

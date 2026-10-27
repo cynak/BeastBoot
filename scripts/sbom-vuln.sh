@@ -3,7 +3,7 @@
 #
 #   sbom-vuln.sh all   [scan options]   everything below, in order (default)
 #   sbom-vuln.sh tools                  pinned syft/grype/osv-scanner + schemas -> .tools/
-#   sbom-vuln.sh sbom                   sbom/beast-booter.{cdx,spdx}.json + sbom/validation.json
+#   sbom-vuln.sh sbom                   sbom/beast-boot.{cdx,spdx}.json + sbom/validation.json
 #   sbom-vuln.sh scan  [scan options]   sbom/vulnerabilities.json, VULNERABILITIES.md, vex.proposed.openvex.json
 #
 # scan options: --offline --refresh --no-ubuntu-tracker --fail-on critical|high --vex FILE

@@ -29,6 +29,28 @@ libpython3.14-stdlib  usr/lib/python3.14/**
 ncurses-base          usr/share/terminfo/**
 wireless-regdb        lib/firmware/regulatory.db lib/firmware/regulatory.db.p7s
 
+# --- disk tools (docs/DISK_TOOLS.md) -----------------------------------------------
+# No udev rules, no systemd units, no cron/init scripts, no daemons (smartd,
+# mdmon stays: IMSM/DDF need it), no mkfs/repair/resize tools: sources are
+# read-only. /etc/lvm/lvm.conf comes from beastnet/rootfs (udev off, read-only scans).
+mdadm                 usr/sbin/mdadm usr/sbin/mdmon
+lvm2                  usr/sbin/lvm usr/sbin/pv* usr/sbin/vg* usr/sbin/lv*
+dmsetup               usr/sbin/dmsetup
+cryptsetup-bin        usr/sbin/cryptsetup
+gddrescue             usr/bin/ddrescue usr/bin/ddrescuelog
+smartmontools         usr/sbin/smartctl usr/share/smartmontools/drivedb.h
+util-linux            usr/sbin/blkid usr/sbin/blockdev usr/bin/lsblk usr/bin/partx usr/bin/findmnt
+fdisk                 usr/sbin/sfdisk
+mount                 usr/sbin/losetup
+e2fsprogs             usr/sbin/e2fsck usr/sbin/fsck.ext2 usr/sbin/fsck.ext3 usr/sbin/fsck.ext4 usr/sbin/dumpe2fs
+xfsprogs              usr/sbin/xfs_repair usr/sbin/xfs_db usr/sbin/xfs_info
+btrfs-progs           usr/bin/btrfs usr/bin/btrfs-find-root
+exclude usr/sbin/pvmove usr/sbin/pvcreate usr/sbin/pvremove usr/sbin/pvresize usr/sbin/pvchange
+exclude usr/sbin/vgcreate usr/sbin/vgremove usr/sbin/vgextend usr/sbin/vgreduce usr/sbin/vgrename usr/sbin/vgmerge usr/sbin/vgsplit
+exclude usr/sbin/vgexport usr/sbin/vgimport usr/sbin/vgimportclone usr/sbin/vgconvert usr/sbin/vgcfgrestore
+exclude usr/sbin/lvcreate usr/sbin/lvremove usr/sbin/lvextend usr/sbin/lvreduce usr/sbin/lvresize usr/sbin/lvrename
+exclude usr/sbin/lvconvert usr/sbin/lvmpolld usr/sbin/lvmdump usr/sbin/lvmsadc usr/sbin/lvmsar
+
 # dlopen()ed, so not found through DT_NEEDED:
 libzstd1              usr/lib/x86_64-linux-gnu/libzstd.so.1*
 libgcc-s1             usr/lib/x86_64-linux-gnu/libgcc_s.so.1

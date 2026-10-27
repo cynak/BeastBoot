@@ -71,7 +71,7 @@ class TUI(UI):
                 bg = -1
             except curses.error:
                 bg = curses.COLOR_BLACK
-            # beast-booter's grey and red (docs/assets/BRAND.md) in the console's 8 colours:
+            # beast-boot's grey and red (docs/assets/BRAND.md) in the console's 8 colours:
             # white on red for the title bar and the selection, red accents, light grey text.
             pairs = [(curses.COLOR_WHITE, curses.COLOR_RED), (curses.COLOR_RED, bg),
                      (curses.COLOR_GREEN, bg), (curses.COLOR_YELLOW, bg), (curses.COLOR_RED, bg),
@@ -157,7 +157,7 @@ class TUI(UI):
             return None
         a = self.a
         self._put(0, 0, " " * w, a["header"])
-        self._put(0, 1, "beast-booter", a["header"])
+        self._put(0, 1, "beast-boot", a["header"])
         self._put(0, 14, f"| {self.subtitle}"[: max(0, w - 16 - len(self.brand_right))],
                   a["header"])  # bright white on red: readable on the console
         if self.brand_right:
@@ -408,15 +408,16 @@ class TUI(UI):
             i += 1
         return w.result()
 
-    def download(self, title: str, lines: list[str], job: Callable[..., Any]) -> Any:
+    def download(self, title: str, lines: list[str], job: Callable[..., Any], *,
+                 what: str = "download") -> Any:
         state: dict[str, Progress | None] = {"p": None}
         cancel = threading.Event()
         w = Worker(lambda: job(lambda p: state.__setitem__("p", p), cancel))
         confirm = False
         while not w.done():
-            area = self._frame(title, "Esc cancel (the partial download is kept for resuming)")
+            area = self._frame(title, f"Esc cancel (the partial {what} is kept for resuming)")
             if area is not None:
-                self._draw_progress(area, lines, state["p"], confirm, cancel.is_set())
+                self._draw_progress(area, lines, state["p"], confirm, cancel.is_set(), what)
             self.scr.refresh()
             k = self._key(200)
             if cancel.is_set():
@@ -431,7 +432,7 @@ class TUI(UI):
         return w.result()
 
     def _draw_progress(self, area, lines: list[str], p: Progress | None, confirm: bool,
-                       cancelling: bool) -> None:
+                       cancelling: bool, what: str = "download") -> None:
         y0, x0, ah, aw = area
         for i, line in enumerate(lines[: max(0, ah - 6)]):
             self._put(y0 + i, x0, line if len(line) <= aw else line[: aw - 3] + "...")
@@ -459,6 +460,8 @@ class TUI(UI):
                           f"{human_time(p.eta)} left")
                 if p.resumed_from:
                     note = f"Resumed at {human_size(p.resumed_from)}."
+                elif p.note:
+                    note = p.note
             if p.phase == "retry":
                 note = f"Connection problem, resuming: {p.note}"
         self._put(y + 2, x0, status)
@@ -467,7 +470,8 @@ class TUI(UI):
         if cancelling:
             self._put(y + 5, x0, "Cancelling...", self.a["warn"])
         elif confirm:
-            self._put(y + 5, x0, "Cancel the download? The partial file is kept.  y = yes, n = no",
+            kept = "The partial file is kept." if what == "download" else "It can be resumed later."
+            self._put(y + 5, x0, f"Cancel the {what}? {kept}  y = yes, n = no",
                       self.a["warn"])
 
     def shell(self, fn: Callable[[], Any]) -> Any:

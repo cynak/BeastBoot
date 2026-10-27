@@ -1,4 +1,4 @@
-# beast-booter patches, applied in this order after Ubuntu's debian/patches/series
+# beast-boot patches, applied in this order after Ubuntu's debian/patches/series
 # (patch -p1 -F0). Each patch starts with a DEP-3 header: CVE, upstream commit, why.
 0001-term-serial-reject-caller-supplied-port-addresses-under-lockdown.patch
 0002-efi-sb-fix-boot-failure-when-shim-validation-is-disabled.patch

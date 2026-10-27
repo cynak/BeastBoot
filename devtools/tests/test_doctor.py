@@ -300,9 +300,9 @@ def test_venv(fake):
 def _keys(fake, mode=0o600):
     k = fake.repo / "keys"
     k.mkdir(exist_ok=True)
-    for n in ("beast-booter.key", "beast-booter.crt", "beast-booter.cer"):
+    for n in ("beast-boot.key", "beast-boot.crt", "beast-boot.cer"):
         (k / n).write_text("x")
-    (k / "beast-booter.key").chmod(mode)
+    (k / "beast-boot.key").chmod(mode)
 
 
 def test_keys(fake):

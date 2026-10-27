@@ -1,4 +1,4 @@
-"""The beast-booter window (Tkinter/ttk).
+"""The beast-boot window (Tkinter/ttk).
 
 It shows the Controller's state and forwards the user's actions to it; it
 makes no decisions of its own (those live in controller.py and firmware.py).
@@ -53,10 +53,10 @@ from .widgets import DOT, Dialog, PickCard, ScrollArea, StepHeader, WrapLabel, b
     set_text, text_box
 
 POLL_MS = 100
-APP_NAME = "beast-booter"
+APP_NAME = "beast-boot"
 STEPS = ["Drive", "Options", "Install"]
 TAGLINE = "One USB drive. Many ISOs. Secure Boot intact."
-# The line on a drive card that says which beast-booter it has (installed.Freshness):
+# The line on a drive card that says which beast-boot it has (installed.Freshness):
 # state -> (badge style, icon). Unknown versions get the muted style and no icon.
 FRESHNESS_BADGES = {
     OUTDATED: ("AccentBadge", "info"), OTHER_BUILD: ("AccentBadge", "info"), CURRENT: ("OkBadge", "ok"),
@@ -257,7 +257,7 @@ class DriveList(ttk.Frame):
                 why = ttk.Label(c, text=f"Not usable: {row.problem}", style="Warn.Pick.TLabel")
                 why.grid(row=1, column=2, sticky="e", padx=(px(10), 0))
                 widgets.append(why)
-            elif row.freshness is not None:  # it has beast-booter: which, and is it up to date?
+            elif row.freshness is not None:  # it has beast-boot: which, and is it up to date?
                 # Where "Not usable" goes on other cards, so that every card keeps the same height
                 style, kind = FRESHNESS_BADGES.get(row.freshness.state, ("MutedBadge", None))
                 badge = ttk.Label(c, text=" " + row.freshness.summary, style=f"{style}.Pick.TLabel",
@@ -891,8 +891,8 @@ class App:
     def ask_image_path(self, current: str = "", parent=None) -> str:
         initial_dir = os.path.dirname(current) if current else os.path.expanduser("~")
         return filedialog.asksaveasfilename(
-            parent=parent or self.root, title="Save the beast-booter image as",
-            initialdir=initial_dir, initialfile=os.path.basename(current) or "beast-booter.img",
+            parent=parent or self.root, title="Save the beast-boot image as",
+            initialdir=initial_dir, initialfile=os.path.basename(current) or "beast-boot.img",
             defaultextension=".img", filetypes=[("Disk images", "*.img"), ("All files", "*")],
         ) or ""
 
@@ -936,7 +936,7 @@ class App:
     def on_close(self) -> None:
         running = self.c.phase is Phase.RUNNING
         if self.fw.phase is FwPhase.RUNNING and not running:
-            if not messagebox.askyesno("Close the window?", "beast-booter is still working on the firmware packs. "
+            if not messagebox.askyesno("Close the window?", "beast-boot is still working on the firmware packs. "
                                        "Close the window anyway?", icon="warning", default="no", parent=self.root):
                 return
             self.fw.shutdown()
@@ -956,7 +956,7 @@ class App:
                 return
             if not messagebox.askyesno(
                 "Stop the installer and quit?",
-                "beast-booter is still working.\n\n" + self.c.cancel_warning()
+                "beast-boot is still working.\n\n" + self.c.cancel_warning()
                 + "\n\nThe window closes when the installer has stopped.",
                 icon="warning", default="no", parent=self.root,
             ):
@@ -1232,7 +1232,7 @@ class App:
         if spec.kind == "image":
             title = "Creating the image file"
         else:
-            title = "Updating the boot files" if spec.action == "update" else "Installing beast-booter"
+            title = "Updating the boot files" if spec.action == "update" else "Installing beast-boot"
         self.status_title.configure(text=title)
         self.status_target.configure(text=spec.target_text)
         if not st.started:
@@ -1400,7 +1400,7 @@ class App:
         for ok in (True, False):
             o = Outcome(ok, spec, "Self-test result", "Sample message.", code=None if ok else "selftest",
                         exit_code=0 if ok else 1, target_state="" if ok else "Sample target state.",
-                        output_tail=() if ok else ("beast-booter: error: sample",))
+                        output_tail=() if ok else ("beast-boot: error: sample",))
             self.render_outcome(o)
             root.update()
         req = ConfirmRequest(spec, True, "Erase this drive?", "Self-test drive (29.8 GiB, USB, /dev/sdx)",
@@ -1416,7 +1416,7 @@ class App:
         self.section.set("install")
         self.render()
         root.update()
-        info = (f"beast-booter GUI self-test ok: Tk {root.tk.call('info', 'patchlevel')}, "
+        info = (f"beast-boot GUI self-test ok: Tk {root.tk.call('info', 'patchlevel')}, "
                 f"windowing {self.ws}, theme {self.theme.name}, "
                 f"scaling {float(root.tk.call('tk', 'scaling')):.2f}, "
                 f"window {root.winfo_width()}x{root.winfo_height()}, "
@@ -1437,7 +1437,7 @@ def run(args) -> int:
     try:
         root = tk.Tk(className=APP_NAME)
     except tk.TclError as e:
-        print(f"beast-booter: error: cannot open a window: {e}", file=sys.stderr)
+        print(f"beast-boot: error: cannot open a window: {e}", file=sys.stderr)
         return 1
     if args.scale:
         root.tk.call("tk", "scaling", args.scale * 96 / 72)

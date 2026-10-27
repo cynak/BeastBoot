@@ -251,7 +251,7 @@ def build_sb_stub(out: Path, payload: Path) -> dict[str, Path]:
     key, crt, cer = out / "throwaway.key", out / "throwaway.crt", out / "throwaway.cer"
     if not (key.exists() and crt.exists() and cer.exists()):
         env.run(["openssl", "req", "-new", "-x509", "-newkey", "rsa:2048", "-nodes", "-sha256", "-days", "3650",
-                 "-subj", "/CN=beast-booter e2e self-test (throwaway, not for real use)/",
+                 "-subj", "/CN=beast-boot e2e self-test (throwaway, not for real use)/",
                  "-keyout", str(key), "-out", str(crt)])
         env.run(["openssl", "x509", "-in", str(crt), "-outform", "DER", "-out", str(cer)])
     sbat = out / "sbat.csv"

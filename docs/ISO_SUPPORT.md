@@ -210,11 +210,11 @@ key. So, on an exFAT data partition, the menu:
 Nothing on the drive or in the ISO changes. The kernel checks the module's
 signature as usual: with Secure Boot on it is accepted because it is the ISO's
 own. You can see it worked in the live system with
-`sudo dmesg | grep beast-booter`:
+`sudo dmesg | grep beast-boot`:
 
 ```
-beast-booter: exfat support loaded (exfat.ko.zst from the ISO)
-beast-booter: casper may now search exfat partitions for the ISO
+beast-boot: exfat support loaded (exfat.ko.zst from the ISO)
+beast-boot: casper may now search exfat partitions for the ISO
 ```
 
 With `bb_debug=1` the menu prints `BEAST: fsmod exfat <module>` when it uses

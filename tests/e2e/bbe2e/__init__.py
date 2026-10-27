@@ -1,4 +1,4 @@
-"""beast-booter end-to-end test harness.
+"""beast-boot end-to-end test harness.
 
 Modules:
   env      paths, tool discovery, KVM detection, timeouts

@@ -234,7 +234,7 @@ class Win32:
         code = self.last_error() if code is None else code
         hint = ""
         if code == ERROR_ACCESS_DENIED:
-            hint = " (run beast-booter as administrator; Windows also refuses writes into mounted volumes)"
+            hint = " (run beast-boot as administrator; Windows also refuses writes into mounted volumes)"
         elif code == ERROR_SHARING_VIOLATION:
             hint = " (close the programs using the drive)"
         return BeastError(f"{what}: {_error_text(code)} (Windows error {code}){hint}")

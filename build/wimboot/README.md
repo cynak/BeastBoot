@@ -1,7 +1,7 @@
 # wimboot (Windows PE loader)
 
 [iPXE's wimboot](https://ipxe.org/wimboot) (GPL-2.0-or-later) boots a
-Windows PE `boot.wim` (Windows Setup, WinRE, WinPE) from RAM. beast-booter
+Windows PE `boot.wim` (Windows Setup, WinRE, WinPE) from RAM. beast-boot
 builds it from the pinned release source and ships one file,
 `esp/beast-booter/wimboot`, with the Windows PE start-up files from
 `build/winpe/` next to it (`esp/beast-booter/winpe/`).

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate beast-booter's Software Bill of Materials.
+"""Generate beast-boot's Software Bill of Materials.
 
     python3 -I scripts/gen_sbom.py [--root DIR]
 
@@ -7,7 +7,7 @@ Inputs (read-only): dist/manifest.json + dist/ files (docs/ARCHITECTURE.md
 section 4), the host dpkg database, .tools/debs/*.deb, /usr/share/doc/*/copyright,
 installer/beastbooter/*.py.
 
-Outputs: sbom/beast-booter.cdx.json (CycloneDX 1.6) and sbom/beast-booter.spdx.json
+Outputs: sbom/beast-boot.cdx.json (CycloneDX 1.6) and sbom/beast-boot.spdx.json
 (SPDX 2.3). Output is deterministic for the same inputs: timestamps come from the
 manifest's source_date_epoch and identifiers are derived from content hashes.
 
@@ -51,9 +51,9 @@ sys.path.insert(0, str(HERE))
 import debinfo as deb          # noqa: E402
 import efi_inspect as efi      # noqa: E402
 
-TOOL_NAME = "beast-booter sbom-vuln gen_sbom.py"
+TOOL_NAME = "beast-boot sbom-vuln gen_sbom.py"
 TOOL_VERSION = "1"
-P = "beast-booter:"            # property namespace
+P = "beast-boot:"            # property namespace
 SHIPPED_ROLES = ("shipped", "portable")   # CycloneDX scope "required": on the drive / in the release packages
 
 # Packages the build, the installer and the tests use (not shipped). The SBOM records
@@ -95,7 +95,7 @@ SOURCE_FAMILY = {"grub2": "grub2", "grub2-unsigned": "grub2", "grub2-signed": "g
                  "shim": "shim", "shim-signed": "shim", "shim-helpers-amd64-signed": "shim"}
 VENDOR_NAME = {"ubuntu": "Ubuntu", "debian": "Debian"}
 # A file whose signature build.sh replaced: "built:deb:<pkg>=<ver>:<path> with its signatures
-# removed (sbattach --remove), signed:beast-booter" (the beast-net helper kernel).
+# removed (sbattach --remove), signed:beast-boot" (the beast-net helper kernel).
 RESIGNED_MARK = "with its signatures removed"
 
 
@@ -181,7 +181,7 @@ def resigned_origin(path: Path, p: deb.DebPkg, member: str | None) -> str:
         return f"MISMATCH: not a PE image ({e})"
     if a != b:
         return f"MISMATCH: Authenticode digest differs from {where}"
-    return f"authenticode sha256 matches {where} (signature replaced by the beast-booter key)"
+    return f"authenticode sha256 matches {where} (signature replaced by the beast-boot key)"
 
 
 def parse_origin(origin: str) -> dict:
@@ -196,7 +196,7 @@ def parse_origin(origin: str) -> dict:
                   for m in ORIGIN_BEASTMOUNT.finditer(origin)]
     return {"kind": {"deb": "copied"}.get(kind, kind), "debs": debs, "grub": grub, "wimboot": wimboot,
             "beastmount": beastmount,
-            "repo": ORIGIN_REPO.findall(origin), "signed_by_bb": "signed:beast-booter" in origin,
+            "repo": ORIGIN_REPO.findall(origin), "signed_by_bb": "signed:beast-boot" in origin,
             "raw": origin}
 
 
@@ -388,16 +388,16 @@ def add_portable_runtimes(m: Model, root: Path, lock_path: Path, version: str, c
     archives (checked against the lock's SHA-256) are read."""
     lock = json.loads(lock_path.read_text())
     rel_lock = lock_path.relative_to(root).as_posix() if lock_path.is_relative_to(root) else str(lock_path)
-    pref = f"beast-booter-portable@{version}"
-    m.add({"ref": pref, "kind": "portable", "role": "portable", "name": "beast-booter-portable", "version": version,
-           "purl": f"pkg:generic/beast-booter-portable@{version}",
+    pref = f"beast-boot-portable@{version}"
+    m.add({"ref": pref, "kind": "portable", "role": "portable", "name": "beast-boot-portable", "version": version,
+           "purl": f"pkg:generic/beast-boot-portable@{version}",
            "license": "GPL-3.0-or-later", "license_source": "README.md + LICENSE",
            "description": "no-install portable packages (packaging/portable, release assets "
-                          "beast-booter-<version>-<target>.zip/.tar.gz): the installer, dist/ and a bundled "
+                          "beast-boot-<version>-<target>.zip/.tar.gz): the installer, dist/ and a bundled "
                           "Python runtime per target",
            "props": {"role": "portable", "runtimes-lock": rel_lock, "targets": " ".join(sorted(lock["targets"]))}})
-    m.dep(pref, f"beast-booter@{version}", "CONTAINS")
-    m.dep(pref, f"beast-booter-installer@{version}", "CONTAINS")
+    m.dep(pref, f"beast-boot@{version}", "CONTAINS")
+    m.dep(pref, f"beast-boot-installer@{version}", "CONTAINS")
     py = lock["python"]
     cref = f"runtime:cpython@{py}"
     m.add({"ref": cref, "kind": "runtime-lib", "role": "portable", "name": "python", "version": py,
@@ -426,7 +426,7 @@ def add_portable_runtimes(m: Model, root: Path, lock_path: Path, version: str, c
                "vcs": lock.get("project_url"), "license": "NOASSERTION",
                "license_source": "per bundled component (python/LICENSE.txt and the licenses of each library)",
                "description": f"relocatable CPython {py} for {target} ({spec['asset']}), bundled in "
-                              f"beast-booter-<version>-{target}",
+                              f"beast-boot-<version>-{target}",
                "props": {"role": "portable", "target": target, "asset": spec["asset"], "contents-inspected": inspected,
                          "bundled-sqlite-source-id": info["sqlite_source_id"],
                          "bundled-libraries": " ".join(f"{k}@{v}" for k, v in sorted(info["libs"].items())),
@@ -510,7 +510,7 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
     kernel_distro = beastnet_kernel_distros(root)
     m = Model()
     version = manifest["version"]
-    root_ref = f"beast-booter@{version}"
+    root_ref = f"beast-boot@{version}"
     sb = manifest.get("secure_boot", {})
 
     # ---- dist/ files: verify against the manifest ------------------------------------
@@ -566,10 +566,10 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
         pkg_roles[sbat_src.group(1)] = "build"
 
     # ---- root -------------------------------------------------------------------------
-    m.add({"ref": root_ref, "kind": "root", "name": "beast-booter", "version": version,
-           "purl": f"pkg:generic/beast-booter@{version}",
-           "description": "beast-booter boot files (dist/): copied to the ESP and boot area of a "
-                          "beast-booter drive by the installer",
+    m.add({"ref": root_ref, "kind": "root", "name": "beast-boot", "version": version,
+           "purl": f"pkg:generic/beast-boot@{version}",
+           "description": "beast-boot boot files (dist/): copied to the ESP and boot area of a "
+                          "beast-boot drive by the installer",
            "license": "GPL-3.0-or-later", "license_source": "README.md (License) + LICENSE (GPLv3 text)",
            "props": {"build-id": manifest.get("build_id"), "source-date-epoch": manifest.get("source_date_epoch"),
                      "manifest-sha256": hashlib.sha256(manifest_raw).hexdigest(),
@@ -633,7 +633,7 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
                "license_source": "upstream project (also stated in README.md)",
                "description": (f"{u['title']} {ver} upstream source, as packaged by "
                                f"{VENDOR_NAME.get(p.vendor, p.vendor)}") if p is not None else
-                              f"{u['title']} {ver} upstream source, built by beast-booter ({of})",
+                              f"{u['title']} {ver} upstream source, built by beast-boot ({of})",
                "props": {"role": "shipped", "upstream-of": []}})
         m.items[ref]["props"]["upstream-of"].append(of or p.name)
         return ref
@@ -699,11 +699,11 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
         defect_fixes = [f for f in fixes if f["present"] and f.get("type") == "defect"]
         m.add({"ref": grub_ref, "kind": "source-build", "role": "shipped", "name": "grub2",
                "version": grub["version"], "purl": grub_purl(grub["version"], grub_distro),
-               "supplier": "beast-booter maintainers", "homepage": UPSTREAMS["grub2"]["website"],
+               "supplier": "beast-boot maintainers", "homepage": UPSTREAMS["grub2"]["website"],
                "license": "GPL-3.0-or-later", "license_source": "GNU GRUB (debian/copyright of the grub2 source package)",
-               "description": (f"GNU GRUB {up_ver} built by beast-booter (build/grub/grubsrc.py) from Ubuntu's grub2 "
+               "description": (f"GNU GRUB {up_ver} built by beast-boot (build/grub/grubsrc.py) from Ubuntu's grub2 "
                                f"{src_ver} source package with its {info.get('ubuntu_patches', '?')} Ubuntu patches "
-                               f"plus {len(patches)} beast-booter patch(es); x86_64-efi (grubx64.efi) and i386-pc"),
+                               f"plus {len(patches)} beast-boot patch(es); x86_64-efi (grubx64.efi) and i386-pc"),
                "pedigree": {"patches": pedigree_patches,
                             "notes": (f"Ubuntu grub2 {src_ver} (debian/patches/series, applied unchanged) + "
                                       "build/grub/patches/series. Each fix is proven present by reverse-applying "
@@ -722,7 +722,7 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
                                      "security-fixes.json)",
                          "toolchain": "; ".join(f"{k}: {info['toolchain'][k]}" for k in ("gcc", "ld", "bison")
                                                 if k in info.get("toolchain", {})) or None,
-                         "beast-booter-patches": [f"{p_['name']} sha256:{p_['sha256']}" for p_ in patches],
+                         "beast-boot-patches": [f"{p_['name']} sha256:{p_['sha256']}" for p_ in patches],
                          "security-fixes": [f"{f['id']}: {'present' if f['present'] else 'MISSING'} "
                                             f"({', '.join(evidence_label(e) for e in f['evidence'])}; {f['where']})"
                                             for f in fixes],
@@ -766,10 +766,10 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
         wpatches = winfo.get("patches", [])
         m.add({"ref": wim_ref, "kind": "source-build", "role": "shipped", "name": "wimboot",
                "version": wim["version"], "purl": f"pkg:github/ipxe/wimboot@{quote(tag, safe='')}",
-               "supplier": "beast-booter maintainers", "homepage": UPSTREAMS["wimboot"]["website"],
+               "supplier": "beast-boot maintainers", "homepage": UPSTREAMS["wimboot"]["website"],
                "license": "GPL-2.0-or-later", "license_source": "wimboot LICENSE.txt and source headers",
-               "description": (f"iPXE wimboot {wup_ver} built by beast-booter (build/wimboot/wimbootsrc.py) from "
-                               f"the {tag} source archive plus {len(wpatches)} beast-booter patch(es); x86_64 "
+               "description": (f"iPXE wimboot {wup_ver} built by beast-boot (build/wimboot/wimbootsrc.py) from "
+                               f"the {tag} source archive plus {len(wpatches)} beast-boot patch(es); x86_64 "
                                "hybrid image (BIOS via GRUB linux16, UEFI via GRUB linux), unsigned"),
                "pedigree": {"patches": [{"type": "unofficial",
                                          "diff": {"url": f"build/wimboot/patches/{p_['name']}"}}
@@ -785,7 +785,7 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
                          "built-by": "build/wimboot/wimbootsrc.py (inputs: build/wimboot/source.lock.json, patches/)",
                          "toolchain": "; ".join(f"{k}: {winfo['toolchain'][k]}" for k in ("gcc", "ld")
                                                 if k in winfo.get("toolchain", {})) or None,
-                         "beast-booter-patches": [f"{p_['name']} sha256:{p_['sha256']}" for p_ in wpatches],
+                         "beast-boot-patches": [f"{p_['name']} sha256:{p_['sha256']}" for p_ in wpatches],
                          "sbat": (winfo.get("sbat") or "").strip().replace("\n", " ") or None,
                          "secure-boot": "not signed: the menu boots Windows only with Secure Boot off",
                          "vulnerability-tracking": (f"CPE on upstream:ipxe-wimboot@{wup_ver} (NVD vendor ipxe, "
@@ -806,10 +806,10 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
             m.notes.append(bm["note"])
         btc = binfo.get("toolchain", {})
         m.add({"ref": bm_ref, "kind": "source-build", "role": "shipped", "name": "beastmount",
-               "version": bm["version"], "purl": f"pkg:generic/beast-booter/beastmount@{bm['version']}",
-               "supplier": "beast-booter maintainers", "license": "GPL-3.0-or-later",
+               "version": bm["version"], "purl": f"pkg:generic/beast-boot/beastmount@{bm['version']}",
+               "supplier": "beast-boot maintainers", "license": "GPL-3.0-or-later",
                "license_source": "build/winpe/beastmount.c (SPDX-License-Identifier)",
-               "description": ("beast-booter's Windows PE helper (build/winpe/beastmount.c): attaches the ISO "
+               "description": ("beast-boot's Windows PE helper (build/winpe/beastmount.c): attaches the ISO "
                                "read-only with the VirtDisk API so Windows Setup can start from it; x86_64 "
                                "console program built with MinGW-w64, unsigned"),
                "props": {"role": "shipped", "source": "build/winpe/beastmount.c",
@@ -871,10 +871,10 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
     imp = installer_imports(root)
     if not imp["stdlib_only"]:
         warn(f"installer imports non-stdlib modules: {imp['non_stdlib']}")
-    inst_ref = f"beast-booter-installer@{version}"
-    m.add({"ref": inst_ref, "kind": "installer", "role": "install", "name": "beast-booter-installer",
+    inst_ref = f"beast-boot-installer@{version}"
+    m.add({"ref": inst_ref, "kind": "installer", "role": "install", "name": "beast-boot-installer",
            "version": version, "license": "GPL-3.0-or-later", "license_source": "README.md + LICENSE",
-           "description": "installer CLI (installer/beastbooter, bin/beast-booter): writes dist/ to a "
+           "description": "installer CLI (installer/beastbooter, bin/beast-boot): writes dist/ to a "
                           "drive; runs on the user's machine and is not copied to the drive",
            "props": {"role": "install", "python-stdlib-only": str(imp["stdlib_only"]).lower(),
                      "python-imports": " ".join(imp["modules"]),
@@ -993,7 +993,7 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
                 v = resigned_origin(dist / rel, pkgs[o["debs"][0]["name"]], o["debs"][0]["path"])
                 item["props"]["origin-verified"] = v
                 item["props"]["re-signed"] = ("the package's signature was removed and the file signed with the "
-                                              "beast-booter key; the code (Authenticode digest) is unchanged")
+                                              "beast-boot key; the code (Authenticode digest) is unchanged")
                 if v.startswith("MISMATCH"):
                     m.notes.append(f"{rel}: {v}")
                     m.provenance_errors.append(f"{rel}: {v}")
@@ -1191,19 +1191,19 @@ def to_cyclonedx(m: Model, ctx: dict, distro: str, osr: dict) -> dict:
     def by_rel(rel: str) -> list[str]:
         return [a for a, lst in m.deps.items() for b, r in lst if r == rel]
     inst = [i["ref"] for i in m.items.values() if i["kind"] == "installer"]
-    formulation = [{"bom-ref": "formula:beast-booter", "workflows": [
+    formulation = [{"bom-ref": "formula:beast-boot", "workflows": [
         workflow("make-build", "make build (build/build.sh)", "build",
                  by_rel("BUILD_TOOL_OF") + by_rel("BUILD_DEPENDENCY_OF") +
                  [i["ref"] for i in m.items.values() if i.get("props", {}).get("also-build-tool")],
                  "Builds dist/ from Ubuntu packages, Debian's shim packages and repo files; signs grubx64.efi "
-                 "and the beast-net helper kernel with the beast-booter key."),
-        workflow("install", "beast-booter install / update (installer)", "deploy",
+                 "and the beast-net helper kernel with the beast-boot key."),
+        workflow("install", "beast-boot install / update (installer)", "deploy",
                  inst + by_rel("RUNTIME_DEPENDENCY_OF"),
                  "Partitions and formats a drive and copies dist/ onto it."),
         workflow("make-e2e", "make e2e (tests/e2e)", "test", by_rel("TEST_TOOL_OF"),
                  "Boots test images in rootless QEMU (SeaBIOS, OVMF, OVMF + Secure Boot)."),
     ]}]
-    serial = uuid.uuid5(uuid.NAMESPACE_URL, "beast-booter-sbom:" + root["props"]["manifest-sha256"] + ":" +
+    serial = uuid.uuid5(uuid.NAMESPACE_URL, "beast-boot-sbom:" + root["props"]["manifest-sha256"] + ":" +
                         hashlib.sha256(json.dumps(top, sort_keys=True).encode()).hexdigest())
     meta_props = {"distro": distro, "build-host-os": osr.get("PRETTY_NAME"),
                   "build-host-os-codename": osr.get("VERSION_CODENAME"),
@@ -1217,9 +1217,9 @@ def to_cyclonedx(m: Model, ctx: dict, distro: str, osr: dict) -> dict:
         "metadata": {
             "timestamp": ts,
             "lifecycles": [{"phase": "build"}],
-            "tools": {"components": [{"type": "application", "group": "beast-booter", "name": TOOL_NAME,
+            "tools": {"components": [{"type": "application", "group": "beast-boot", "name": TOOL_NAME,
                                       "version": TOOL_VERSION}]},
-            "authors": [{"name": "beast-booter maintainers"}],
+            "authors": [{"name": "beast-boot maintainers"}],
             "component": comp(root),
             "properties": props(meta_props),
         },
@@ -1277,7 +1277,7 @@ def to_spdx(m: Model, ctx: dict, distro: str, cdx: dict) -> dict:
         if i.get("supplier"):
             supplier = f"Organization: {i['supplier']}" + (f" ({i['supplier_email']})" if i.get("supplier_email") else "")
         elif i["kind"] in ("root", "installer", "portable"):
-            supplier = "Organization: beast-booter maintainers"
+            supplier = "Organization: beast-boot maintainers"
         p = {"SPDXID": sid, "name": i["name"], "versionInfo": i.get("version") or "NOASSERTION",
              "supplier": supplier, "downloadLocation": i.get("distribution") or "NOASSERTION",
              "filesAnalyzed": False,
@@ -1331,12 +1331,12 @@ def to_spdx(m: Model, ctx: dict, distro: str, cdx: dict) -> dict:
                for k, v in sorted(ctx["license_refs"].items())]
     doc = {
         "spdxVersion": "SPDX-2.3", "dataLicense": "CC0-1.0", "SPDXID": "SPDXRef-DOCUMENT",
-        "name": f"beast-booter-{man['version']}",
-        "documentNamespace": (f"https://beast-booter.invalid/spdx/beast-booter-{man['version']}-"
+        "name": f"beast-boot-{man['version']}",
+        "documentNamespace": (f"https://beast-boot.invalid/spdx/beast-boot-{man['version']}-"
                               f"{man.get('build_id', 'nobuildid')}-{cdx['serialNumber'].rsplit(':', 1)[1]}"),
         "creationInfo": {"created": ts, "creators": [f"Tool: {TOOL_NAME.replace(' ', '-')}-{TOOL_VERSION}",
-                                                     "Organization: beast-booter maintainers"],
-                         "comment": f"Same inventory as beast-booter.cdx.json ({cdx['serialNumber']}). "
+                                                     "Organization: beast-boot maintainers"],
+                         "comment": f"Same inventory as beast-boot.cdx.json ({cdx['serialNumber']}). "
                                     f"Distro: {distro}. Signing certificates are listed as CycloneDX "
                                     "cryptographic-asset components; here they appear in file comments."},
         "packages": packages, "files": files_out, "relationships": rels,
@@ -1371,14 +1371,14 @@ def main() -> int:
     cdx = to_cyclonedx(model, ctx, distro, osr)
     spdx = to_spdx(model, ctx, distro, cdx)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "beast-booter.cdx.json").write_text(json.dumps(cdx, indent=2, sort_keys=False) + "\n")
-    (out / "beast-booter.spdx.json").write_text(json.dumps(spdx, indent=2, sort_keys=False) + "\n")
+    (out / "beast-boot.cdx.json").write_text(json.dumps(cdx, indent=2, sort_keys=False) + "\n")
+    (out / "beast-boot.spdx.json").write_text(json.dumps(spdx, indent=2, sort_keys=False) + "\n")
 
     kinds: dict[str, int] = {}
     for i in model.items.values():
         key = f"{i['kind']}/{i.get('role', '-')}"
         kinds[key] = kinds.get(key, 0) + 1
-    print(f"gen_sbom: wrote {out / 'beast-booter.cdx.json'} and {out / 'beast-booter.spdx.json'}")
+    print(f"gen_sbom: wrote {out / 'beast-boot.cdx.json'} and {out / 'beast-boot.spdx.json'}")
     print("gen_sbom: components: " + ", ".join(f"{k}={v}" for k, v in sorted(kinds.items())))
     print(f"gen_sbom: installer stdlib-only: {ctx['installer']['stdlib_only']} "
           f"({ctx['installer']['files']} files; non-stdlib: {ctx['installer']['non_stdlib'] or 'none'})")
@@ -1388,7 +1388,7 @@ def main() -> int:
         print(f"gen_sbom: PROVENANCE ERROR: {e}", file=sys.stderr)
     if model.provenance_errors:
         print(f"gen_sbom: {len(model.provenance_errors)} shipped file(s) are not byte-identical to the package "
-              "file their manifest origin names; recorded as MISMATCH in beast-booter:origin-verified "
+              "file their manifest origin names; recorded as MISMATCH in beast-boot:origin-verified "
               "(validate_sbom.py fails, scan_vulns.py reports BB-ORIGIN-MISMATCH)", file=sys.stderr)
     return 0
 

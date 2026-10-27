@@ -59,7 +59,7 @@ jobs:
         run: |
           version=$(tr -d '\r\n' < ../VERSION)
           echo "VERSION=$version" >> "$GITHUB_ENV"
-          archive="beast-booter-$version-$TARGET.$EXT"
+          archive="beast-boot-$version-$TARGET.$EXT"
           grep -F "  $archive" SHA256SUMS > one.sum
           if command -v sha256sum > /dev/null; then sha256sum -c one.sum; else shasum -a 256 -c one.sum; fi
 
@@ -69,8 +69,8 @@ jobs:
         run: |
           dest="$RUNNER_TEMP/bb portable test"
           mkdir -p "$dest"
-          tar xzf "dl/beast-booter-$VERSION-$TARGET.tar.gz" -C "$dest"
-          pkg="$dest/beast-booter-$VERSION-$TARGET"
+          tar xzf "dl/beast-boot-$VERSION-$TARGET.tar.gz" -C "$dest"
+          pkg="$dest/beast-boot-$VERSION-$TARGET"
           {
             echo "PKG=$pkg"
             echo "PY=$pkg/runtime/bin/python3"
@@ -82,8 +82,8 @@ jobs:
         run: |
           dest="$RUNNER_TEMP/bb portable test"
           mkdir -p "$dest"
-          ditto -x -k "dl/beast-booter-$VERSION-$TARGET.zip" "$dest"
-          pkg="$dest/beast-booter-$VERSION-$TARGET"
+          ditto -x -k "dl/beast-boot-$VERSION-$TARGET.zip" "$dest"
+          pkg="$dest/beast-boot-$VERSION-$TARGET"
           res="$pkg/BeastBooter.app/Contents/Resources"
           {
             echo "PKG=$pkg"
@@ -93,7 +93,7 @@ jobs:
           # Symlinks and exec bits must survive unpacking; the plist must be valid.
           test -L "$res/runtime/bin/python3"
           test -x "$pkg/BeastBooter.app/Contents/MacOS/BeastBooter"
-          test -x "$pkg/beast-booter.command"
+          test -x "$pkg/beast-boot.command"
           plutil -lint "$pkg/BeastBooter.app/Contents/Info.plist"
           file "$res/runtime/bin/python3.13"
 
@@ -102,9 +102,9 @@ jobs:
         shell: pwsh
         run: |
           $dest = Join-Path $env:RUNNER_TEMP 'bb portable test'
-          Expand-Archive -LiteralPath "dl\beast-booter-$env:VERSION-$env:TARGET.zip" -DestinationPath $dest
+          Expand-Archive -LiteralPath "dl\beast-boot-$env:VERSION-$env:TARGET.zip" -DestinationPath $dest
           # Forward slashes work for bash, Python and PowerShell alike.
-          $pkg = (Join-Path $dest "beast-booter-$env:VERSION-$env:TARGET") -replace '\\', '/'
+          $pkg = (Join-Path $dest "beast-boot-$env:VERSION-$env:TARGET") -replace '\\', '/'
           Add-Content -Path $env:GITHUB_ENV -Value "PKG=$pkg"
           Add-Content -Path $env:GITHUB_ENV -Value "PY=$pkg/runtime/python.exe"
           Add-Content -Path $env:GITHUB_ENV -Value "APP=$pkg/app"
@@ -235,7 +235,7 @@ jobs:
             }
             $dev = "\\.\PhysicalDrive$($disk.Number)"
             Write-Host "throwaway virtual disk: $dev ($($disk.Size) bytes, $($disk.FriendlyName))"
-            $cli = Join-Path $env:PKG 'beast-booter.cmd'
+            $cli = Join-Path $env:PKG 'beast-boot.cmd'
             $progress = Join-Path $env:RUNNER_TEMP 'progress.jsonl'
             & $cli list-devices --json --all
             & $cli install --device $dev --allow-fixed-disk --yes --progress-file $progress
@@ -260,7 +260,7 @@ jobs:
           trap 'hdiutil detach "$dev" -force || true' EXIT
           echo "throwaway RAM disk: $dev"
           diskutil info "$dev" | grep -E 'Media Name|Disk Size|Protocol|Virtual' || true
-          cli="$PKG/beast-booter.command"
+          cli="$PKG/beast-boot.command"
           "$cli" list-devices --json --all
           sudo "$cli" install --device "$dev" --allow-fixed-disk --yes --progress-file "$RUNNER_TEMP/progress.jsonl"
           cat "$RUNNER_TEMP/progress.jsonl"

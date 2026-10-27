@@ -67,7 +67,7 @@ cmac
 aesni-intel
 libarc4
 
-# --- USB storage (the beast-booter drive itself) ------------------------------
+# --- USB storage (the beast-boot drive itself) ------------------------------
 drivers/usb/storage/**                   # usb-storage, uas, ums-*
 xhci-pci-renesas
 
@@ -94,3 +94,65 @@ fs/ntfs3/**
 fs/isofs/**
 fs/nls/**                                # vfat iocharset=iso8859-1/utf8, exfat utf8, ...
 fs/fat/msdos
+
+# --- internal storage and RAID (Disk tools, docs/DISK_TOOLS.md) -----------------
+# Built in (no entry needed): md-mod, dm-mod, loop, libata, ata_piix, ata_generic,
+# sd_mod, sr_mod, sg, scsi_mod, virtio_blk/scsi, ext4 (+jbd2), sha256/512, cbc, xts, aes,
+# ecb, ctr, gcm, cts, libaes. The modules below load by PCI modalias at coldplug
+# (nvme, ahci, vmd, HBAs, sata_*); the md/dm/crypto/filesystem ones are loaded on
+# demand (modprobe by the Python code or by the kernel's request_module).
+drivers/nvme/host/nvme-core              # NVMe (+ nvme-auth/nvme-keyring by dependency)
+drivers/nvme/host/nvme
+drivers/ata/ahci                         # SATA AHCI (+ libahci)
+drivers/ata/ahci_platform
+drivers/ata/sata_*                       # older SATA/RAID-mode chipsets (nv, sil, sil24, via, promise, mv, ...)
+drivers/ata/pata_*                       # legacy IDE/PATA chips (cheap, old machines)
+drivers/pci/controller/vmd               # Intel VMD / RST NVMe behind VMD
+drivers/scsi/megaraid/megaraid_sas       # MegaRAID / PERC
+drivers/scsi/megaraid/megaraid_mbox
+drivers/scsi/mpt3sas/mpt3sas             # LSI/Broadcom SAS HBAs and IR RAID
+drivers/scsi/mpi3mr/mpi3mr
+drivers/scsi/hpsa                        # HPE Smart Array
+drivers/scsi/smartpqi/smartpqi           # Microchip/Adaptec SmartRAID
+drivers/scsi/aacraid/aacraid             # Adaptec RAID
+drivers/scsi/3w-9xxx                     # 3ware
+drivers/scsi/3w-sas
+drivers/scsi/arcmsr/arcmsr               # Areca
+drivers/scsi/hv_storvsc                  # Hyper-V
+drivers/scsi/vmw_pvscsi                  # VMware
+drivers/scsi/ses                         # enclosure LEDs/slots (read-only info)
+drivers/scsi/st
+# md RAID levels (md-mod is built in) and device-mapper targets (dm-mod is built in)
+drivers/md/raid0
+drivers/md/raid1
+drivers/md/raid10
+drivers/md/raid456                       # RAID 4/5/6 (+ async_tx/xor/raid6 by dependency)
+drivers/md/linear
+drivers/md/dm-raid
+drivers/md/dm-crypt
+drivers/md/dm-snapshot
+drivers/md/dm-mirror
+drivers/md/dm-thin-pool
+drivers/md/dm-cache
+drivers/md/dm-integrity
+drivers/md/dm-verity
+drivers/md/dm-zero
+drivers/md/dm-delay                      # tests (slow reads)
+drivers/md/dm-flakey                     # tests (read errors)
+# crypto that dm-crypt/LUKS/BitLocker request by name (aes, xts, cbc, sha256/512 are built in)
+essiv
+adiantum
+lrw
+serpent_generic
+twofish_generic
+wp512
+rmd160
+algif_skcipher                           # cryptsetup's kernel crypto API probes
+algif_hash
+algif_aead
+# filesystems (ext4 is built in; vfat/fat built in, exfat/ntfs3/isofs above)
+fs/btrfs/btrfs
+fs/xfs/xfs
+fs/hfsplus/hfsplus
+fs/hfs/hfs
+fs/udf/udf

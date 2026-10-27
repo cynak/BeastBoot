@@ -55,6 +55,29 @@ optional keys beyond the contract: `"on_error"` (`stay` (default), `reboot`,
 `poweroff`, `shell`) and `"overwrite"`. Extra error codes: `script` (bad
 plan), `exists` (destination exists), `internal` (a bug).
 
+### Network boot (no stick)
+
+BeastServer boots the same `vmlinuz` (Canonical-signed, unmodified) and
+`initrd.img` over HTTP for its "Disk cloning" / "System recovery" menu entries,
+with `beastnet.netboot=1 beastnet.action=disk` (and `beastnet.server=<url>`,
+shown only) instead of `beastnet.data=` / `beastnet.esp=`. Then:
+
+- `/init` mounts RAM filesystems (tmpfs, 64 MiB and 1 MiB) at `/mnt/data` and
+  `/mnt/esp` and copies files the boot loader added under `/netboot`
+  (`initrd ... newc:netboot/plan.json:<url>`) onto the data one, so
+  `beastnet.script=/plan.json` works as on the stick.
+- The app shows only Disk tools (no network, link or download screens; "Reboot"
+  instead of "Reboot to the beast-boot menu").
+- No disk is the stick, so nothing is refused for being it. Image files cannot go to
+  "the BeastBoot drive": the screens do not offer it, and a script `image` /
+  `restore` step without `"on"` is refused (`disk-refused`); open another disk with
+  `use_disk`.
+- ddrescue mapfiles: next to an image file when it is on a disk, else in RAM
+  (`/mnt/data/disk-tools`; the stick refuses that). The plan screen then says
+  that a stopped copy resumes only until the computer restarts. Every other safety
+  rule (read-only guard, typed serial, refusals) is unchanged.
+- Logs stay in `/run/beastnet` (RAM), as on the stick.
+
 ## Testing
 
 ```sh

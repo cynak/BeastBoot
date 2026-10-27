@@ -13,7 +13,7 @@ import re
 
 from .msg import Failure
 
-HEADER = "# beast-booter user configuration (docs/MENU.md), written by bb-dev"
+HEADER = "# beast-boot user configuration (docs/MENU.md), written by bb-dev"
 
 # key -> (kind, help)
 KNOWN = {

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Find vulnerabilities and boot-chain risks in what beast-booter ships.
+"""Find vulnerabilities and boot-chain risks in what beast-boot ships.
 
     python3 -I scripts/scan_vulns.py [--offline] [--fail-on critical|high]
 
-Reads sbom/beast-booter.cdx.json (run gen_sbom.py first), dist/ and the OpenVEX files
+Reads sbom/beast-boot.cdx.json (run gen_sbom.py first), dist/ and the OpenVEX files
 (sbom/vex.openvex.json, hand-maintained, plus every sbom/vex.*.openvex.json, generated from
 evidence, e.g. vex.kernel.openvex.json; never vex.proposed.openvex.json).
 Writes sbom/vulnerabilities.json, sbom/VULNERABILITIES.md and sbom/vex.proposed.openvex.json.
@@ -18,7 +18,7 @@ Steps
   5. evidence for triage: CVEs recorded as fixed in the shipped package's changelog,
      Ubuntu CVE tracker status, GRUB module named by the advisory vs. modules embedded
      in grubx64.efi. Evidence becomes *proposed* VEX statements, never applied silently.
-  6. boot-chain checks: SBAT revocation, Authenticode signers / CA expiry, beast-booter
+  6. boot-chain checks: SBAT revocation, Authenticode signers / CA expiry, beast-boot
      certificate, dbx, manifest integrity and provenance.
 External data is cached in .tools/cache/sbom-vuln; see references/data-sources.md.
 """
@@ -45,10 +45,10 @@ sys.path.insert(0, str(HERE))
 import debinfo as deb          # noqa: E402
 import efi_inspect as efi      # noqa: E402
 
-P = "beast-booter:"
+P = "beast-boot:"
 SEV_RANK = {"critical": 5, "high": 4, "medium": 3, "low": 2, "negligible": 1, "unknown": 0}
 SEV_ORDER = ["critical", "high", "medium", "low", "negligible", "unknown"]
-UA = "beast-booter-sbom-vuln/1"
+UA = "beast-boot-sbom-vuln/1"
 SBAT_URL = "https://raw.githubusercontent.com/rhboot/shim/main/SbatLevel_Variable.txt"
 SBAT_COMMITS = "https://api.github.com/repos/rhboot/shim/commits?path=SbatLevel_Variable.txt&per_page=1"
 DBX_JSON_URL = ("https://raw.githubusercontent.com/microsoft/secureboot_objects/main/"
@@ -310,7 +310,7 @@ def osv_source_view(idx: dict, work: Path) -> tuple[Path, dict]:
             seen[key] = []
         seen[key].append(c["ref"])
     doc = {"bomFormat": "CycloneDX", "specVersion": "1.6", "version": 1, "components": comps}
-    path = work / "beast-booter-sources.cdx.json"
+    path = work / "beast-boot-sources.cdx.json"
     path.write_text(json.dumps(doc))
     return path, seen
 
@@ -670,10 +670,10 @@ def grub_module_hint(f: dict, ev: list[dict], modules: dict) -> list[dict]:
     return out
 
 
-# Modules beast-booter cannot drop whatever the dependency graph says.
+# Modules beast-boot cannot drop whatever the dependency graph says.
 ESSENTIAL_MODULES = {
     "normal": "normal is GRUB's normal mode (script parser, menu, config loading) - without it there is no "
-              "beast-booter menu, only the rescue shell",
+              "beast-boot menu, only the rescue shell",
 }
 
 
@@ -826,16 +826,16 @@ def removability_text(w: dict) -> str:
         return (f"`{mod}` is needed: the shipped menu scripts call its command(s) "
                 f"{', '.join('`' + c + '`' for c in w['menu_uses'])}")
     return (f"`{mod}` is requested directly in build/modules-efi.lst, nothing else in the image depends on "
-            "it and the shipped .cfg files call none of its commands: if beast-booter does not need it, "
+            "it and the shipped .cfg files call none of its commands: if beast-boot does not need it, "
             "propose removing it (owner: build), then `make build`, `make e2e` and re-scan")
 
 
 def context_severity(f: dict) -> tuple[str | None, str | None]:
-    """beast-booter-specific: GRUB's config and the ESP are on a user-writable FAT partition, so
+    """beast-boot-specific: GRUB's config and the ESP are on a user-writable FAT partition, so
     'an attacker who controls grub.cfg / the boot media' is a given for a USB boot drive."""
     t = (f.get("description") or "") + " " + (f.get("title") or "")
     if re.search(r"secure ?boot|lockdown", t, re.I) and re.search(r"bypass|unsigned|circumvent", t, re.I):
-        return "high", ("raised to high for beast-booter: a Secure Boot / lockdown bypass, and beast-booter's "
+        return "high", ("raised to high for beast-boot: a Secure Boot / lockdown bypass, and beast-boot's "
                         "grub.cfg and modules live on a FAT ESP that anyone holding the drive can modify")
     return None, None
 
@@ -1038,7 +1038,7 @@ def check_boot_chain(root: Path, dist: Path, manifest: dict, fetch: Fetcher, idx
                        "No shim signed by a Microsoft UEFI CA 2023 was found on this host (/usr/lib/shim, .tools/root, "
                        ".tools/debian) and the configured Ubuntu archive offers only: " + signers["apt_policy_shim_signed"]),
                     "R-CA2011", "boot-chain:signers")
-    # ---- beast-booter certificate ------------------------------------------------------
+    # ---- beast-boot certificate ------------------------------------------------------
     cer = next((r for r in manifest["files"] if r.endswith(".cer")), None)
     bbcert = None
     if cer:
@@ -1075,7 +1075,7 @@ def check_boot_chain(root: Path, dist: Path, manifest: dict, fetch: Fetcher, idx
         bbcert["problems"] = problems
         if problems:
             sev = "critical" if any(x.startswith(("expired", "grubx64", "differs", "no extended")) for x in problems) else "medium"
-            finding("BB-CERT-PROBLEM", sev, comp_of(cer), "beast-booter signing certificate: " + "; ".join(problems),
+            finding("BB-CERT-PROBLEM", sev, comp_of(cer), "beast-boot signing certificate: " + "; ".join(problems),
                     json.dumps({k: bbcert[k] for k in ("subject", "key", "not_after")}), "R-CERT", "boot-chain:cert")
 
     # ---- dbx ---------------------------------------------------------------------------
@@ -1193,7 +1193,7 @@ def check_boot_chain(root: Path, dist: Path, manifest: dict, fetch: Fetcher, idx
                     "shipped file was altered)")})
     prov["fallback_loader"] = [r for r in manifest["files"] if r.lower().endswith("fbx64.efi")]
     if prov["sha256_mismatch"]:
-        finding("BB-MANIFEST-MISMATCH", "critical", {"bom-ref": "beast-booter", "name": "dist/manifest.json"},
+        finding("BB-MANIFEST-MISMATCH", "critical", {"bom-ref": "beast-boot", "name": "dist/manifest.json"},
                 "dist/ files differ from manifest.json", ", ".join(prov["sha256_mismatch"][:10]),
                 "R-MANIFEST", "boot-chain:manifest")
     if prov["origin_mismatch"]:
@@ -1208,7 +1208,7 @@ def check_boot_chain(root: Path, dist: Path, manifest: dict, fetch: Fetcher, idx
                 "; ".join(f"{x['file']}: {x['result']}" for x in prov["origin_unverified"][:10]),
                 "R-ORIGIN-REBUILD", "boot-chain:provenance")
     if not prov["sbom_matches_manifest"]:
-        finding("BB-SBOM-STALE", "high", {"bom-ref": "beast-booter", "name": "sbom/beast-booter.cdx.json"},
+        finding("BB-SBOM-STALE", "high", {"bom-ref": "beast-boot", "name": "sbom/beast-boot.cdx.json"},
                 "the SBOM describes a different dist/manifest.json than the one on disk",
                 f"SBOM manifest-sha256 {sbom_manifest_sha}, dist/manifest.json {manifest_sha}: the package "
                 "findings below are for the old build", "R-SBOM-STALE", "boot-chain:manifest")
@@ -1322,7 +1322,7 @@ def remediation(f: dict, idx: dict, codename: str, archive: dict) -> tuple[str, 
     desc = (f.get("description") or "") + " " + (f.get("title") or "")
     m = re.search(r"\b(grub2?-[a-z0-9-]+)\b(?: utility| tool| program)", desc)
     if m:
-        return ("R-VEX-NOTPRESENT", f"The advisory is about `{m.group(1)}`, a userland tool beast-booter does not ship "
+        return ("R-VEX-NOTPRESENT", f"The advisory is about `{m.group(1)}`, a userland tool beast-boot does not ship "
                 "(no such file in the SBOM). Record OpenVEX not_affected with justification component_not_present "
                 "(proposed in sbom/vex.proposed.openvex.json).")
     hints = f.get("grub_modules") or []
@@ -1344,7 +1344,7 @@ def remediation(f: dict, idx: dict, codename: str, archive: dict) -> tuple[str, 
     ubs = f" Ubuntu {codename}: " + ", ".join(f"{k} {v}" for k, v in ub.items()) + "." if ub else ""
     if f.get("severity_context") and (FAMILY.get(src) == "grub2" or c["name"].endswith("grub2")):
         return ("R-SB-BYPASS", f"No fixed GRUB package yet and no evidence the fix is in the shipped build.{ubs} This is a "
-                "Secure Boot / lockdown bypass that needs control of GRUB's configuration - on a beast-booter drive grub.cfg, "
+                "Secure Boot / lockdown bypass that needs control of GRUB's configuration - on a beast-boot drive grub.cfg, "
                 "grub/beast/*.cfg and /grub/ are on a FAT ESP anyone holding the drive can modify, so treat it as reachable. "
                 "Actions: (1) add the upstream fix to the GRUB source build (build/grub/patches + "
                 "build/grub/security-fixes.json, see R-SBAT for the SBAT generation), `make build`, `make e2e`, re-scan; (2) document the gap in SECURITY.md / "
@@ -1368,7 +1368,7 @@ def remediation(f: dict, idx: dict, codename: str, archive: dict) -> tuple[str, 
                     "build/grub/security-fixes.json), then `make build`, `make e2e` and re-scan"]
             if drop:
                 opts.append(f"({len(opts) + 1}) propose dropping {', '.join(drop)} from build/modules-efi.lst "
-                            "(owner: build) if beast-booter does not need it")
+                            "(owner: build) if beast-boot does not need it")
             opts.append(f"({len(opts) + 1}) record OpenVEX under_investigation (or affected with an "
                         "action_statement) meanwhile")
             return ("R-GRUB-EMBEDDED", f"No fixed GRUB package yet.{ubs} The advisory names module(s) {', '.join(emb)}, "
@@ -1386,7 +1386,7 @@ def remediation(f: dict, idx: dict, codename: str, archive: dict) -> tuple[str, 
                 f"generation), `make build` and re-scan. Record OpenVEX under_investigation meanwhile.{track}")
     if FAMILY.get(src) == "shim":
         return ("R-SHIM-TRACK", f"No fixed shim-signed package yet.{ubs} shim must stay the Microsoft-signed Ubuntu "
-                "binary (beast-booter cannot rebuild it). Track shim-signed updates; when one is published, update the "
+                "binary (beast-boot cannot rebuild it). Track shim-signed updates; when one is published, update the "
                 "host package, `make build`, `make e2e` (including the Secure Boot run) and re-scan. Assess impact "
                 f"(e.g. a local DoS needing physical access) and record OpenVEX under_investigation or affected.{track}")
     return ("R-TRACK", f"No fixed package yet for {pkgname}.{ubs} Track the distribution update; rebuild and re-scan when "
@@ -1418,7 +1418,7 @@ def vex_proposals(findings: list[dict], ts: str, product: str, modules: dict) ->
             st.append({"vulnerability": {"name": f["id"], "aliases": f["aliases"]}, "products": prod,
                        "status": "not_affected", "justification": "component_not_present", "timestamp": ts,
                        "impact_statement": "PROPOSED by scan_vulns.py - verify before use. The affected userland "
-                                           "utility is not part of beast-booter (not in the SBOM)."})
+                                           "utility is not part of beast-boot (not in the SBOM)."})
         elif f["remediation_key"] == "R-GRUB-NOT-EMBEDDED" and "efi" in (f["component"]["name"] + (f["component"]["purl"] or "")) \
                 and not modules.get("x86_64_efi_modules_shipped"):
             mods = sorted({x for h in f.get("grub_modules", []) for x in h["modules"]})
@@ -1426,13 +1426,13 @@ def vex_proposals(findings: list[dict], ts: str, product: str, modules: dict) ->
                        "status": "not_affected", "justification": "vulnerable_code_not_present",
                        "timestamp": ts,
                        "impact_statement": f"PROPOSED by scan_vulns.py - verify before use. Affected module(s) "
-                                           f"{', '.join(mods)} are not in beast-booter's grubx64.efi ({modules.get('efi_closure_source')}), "
-                                           "and beast-booter ships no x86_64-efi modules on the drive (GRUB lockdown would "
+                                           f"{', '.join(mods)} are not in beast-boot's grubx64.efi ({modules.get('efi_closure_source')}), "
+                                           "and beast-boot ships no x86_64-efi modules on the drive (GRUB lockdown would "
                                            "refuse to load them under Secure Boot anyway). The BIOS path is a separate "
                                            "product component (grub-pc-bin) and is not covered by this statement."})
     return {"@context": "https://openvex.dev/ns/v0.2.0",
-            "@id": f"https://beast-booter.invalid/vex/proposed-{hashlib.sha256(json.dumps(st, sort_keys=True).encode()).hexdigest()[:16]}",
-            "author": "beast-booter sbom-vuln scan_vulns.py (proposals; not authoritative)",
+            "@id": f"https://beast-boot.invalid/vex/proposed-{hashlib.sha256(json.dumps(st, sort_keys=True).encode()).hexdigest()[:16]}",
+            "author": "beast-boot sbom-vuln scan_vulns.py (proposals; not authoritative)",
             "timestamp": ts, "version": 1, "statements": st}
 
 
@@ -1444,10 +1444,10 @@ def write_markdown(path: Path, rep: dict) -> None:
     L = []
     a = L.append
     s = rep["summary"]
-    a("# beast-booter vulnerability report")
+    a("# beast-boot vulnerability report")
     a("")
     a(f"Generated {rep['generated']} by `scripts/scan_vulns.py` from "
-      f"`{rep['sbom']['path']}` (serial `{rep['sbom']['serialNumber']}`, beast-booter {rep['sbom']['version']}, "
+      f"`{rep['sbom']['path']}` (serial `{rep['sbom']['serialNumber']}`, beast-boot {rep['sbom']['version']}, "
       f"build `{rep['sbom']['build_id']}`). Machine-readable: `sbom/vulnerabilities.json`.")
     a("")
     g = rep["scanners"]["grype"]
@@ -1460,14 +1460,14 @@ def write_markdown(path: Path, rep: dict) -> None:
                                                   "statements": rep["vex"]["meta"].get("statements", 0)}]
     a("- **VEX**: " + ", ".join(f"`{f['path']}` - {f.get('statements', 0)} statement(s)" for f in vfiles)
       + (f", **{len(rep['vex']['errors'])} problem(s)**: " + "; ".join(rep["vex"]["errors"]) if rep["vex"]["errors"] else ""))
-    a("- **Boot-chain checks**: SBAT, Authenticode signers, beast-booter certificate, dbx, manifest/provenance "
+    a("- **Boot-chain checks**: SBAT, Authenticode signers, beast-boot certificate, dbx, manifest/provenance "
       "(sources and dates below).")
     a("")
     a("## Summary")
     a("")
     a("| Open findings | Critical | High | Medium | Low | Negligible | Unknown | Total |")
     a("|---|---:|---:|---:|---:|---:|---:|---:|")
-    for k, label in (("boot_chain", "Boot chain (beast-booter checks)"), ("shipped", "Shipped packages (on the drive)"),
+    for k, label in (("boot_chain", "Boot chain (beast-boot checks)"), ("shipped", "Shipped packages (on the drive)"),
                      ("build", "Build / install / test tooling")):
         row = s["open"][k]
         a(f"| {label} | " + " | ".join(str(row.get(x, 0)) for x in SEV_ORDER) + f" | {sum(row.values())} |")
@@ -1546,7 +1546,7 @@ def write_markdown(path: Path, rep: dict) -> None:
             for k, v in arch.items() if v.get("published")) + ".")
         a("")
     c = bc.get("beast_booter_cert")
-    a("### beast-booter signing certificate")
+    a("### beast-boot signing certificate")
     a("")
     if c:
         a(f"`{c['file']}`: `{c['subject']}`, {c['key']}, {c['signature_algorithm']}, valid {c['not_before'][:10]} to "
@@ -1712,20 +1712,20 @@ def write_markdown(path: Path, rep: dict) -> None:
 
 REMEDIATION_TEXT = {
     "R-SBAT": "GRUB's SBAT generation is below shim's published revocation level, so machines that have applied that "
-              "level refuse grubx64.efi under Secure Boot. beast-booter builds GRUB from source (build/grub/): find "
+              "level refuse grubx64.efi under Secure Boot. beast-boot builds GRUB from source (build/grub/): find "
               "which fixes the new level stands for (shim's SbatLevel_Variable.txt), add each missing upstream commit "
               "to build/grub/patches/ (or move build/grub/source.lock.json to an Ubuntu grub2 source that has them), "
               "record each fix with its upstream commit in build/grub/security-fixes.json and raise the `grub` claim "
               "there - the GRUB build proves every listed fix present (reverse-applying the upstream commit) and "
               "refuses a claim it cannot prove. Then `make build`, `make e2e`, regenerate the SBOM and re-scan. Never "
               "edit the `grub,N` line by hand: SBAT must truthfully describe the code. Bump `grub.beastbooter` "
-              "(build/sbat-beastbooter.csv) only for beast-booter's own GRUB bugs.",
-    "R-CA2011": "Ship a shim that is also signed by the Microsoft UEFI CA 2023. beast-booter ships Debian's shim "
+              "(build/sbat-beastbooter.csv) only for beast-boot's own GRUB bugs.",
+    "R-CA2011": "Ship a shim that is also signed by the Microsoft UEFI CA 2023. beast-boot ships Debian's shim "
                 "(build/shim/debian-shim.lock), signed through both CAs over one Authenticode digest; build/build.sh "
                 "refuses a shim without both signatures. If this finding appears, the lock or BB_SHIM_DIR points at "
                 "another shim: pin a dual-signed shim-signed + the matching shim-helpers-amd64-signed, rebuild "
                 "(`make build`) and run the e2e Secure Boot tests (test_e2e_secureboot.py boots a 2023-only db).",
-    "R-CERT": "Regenerate the beast-booter key with `make keys` (RSA >= 2048, codeSigning EKU, long validity), rebuild "
+    "R-CERT": "Regenerate the beast-boot key with `make keys` (RSA >= 2048, codeSigning EKU, long validity), rebuild "
               "(`make build`) and tell users to enroll the new ENROLL_THIS_KEY_IN_MOKMANAGER.cer.",
     "R-DBX": "Never ship a binary that is in dbx. Replace it with a non-revoked build of the same component (newer "
              "shim-signed / GRUB package), rebuild, and verify with this scan.",
@@ -1736,7 +1736,7 @@ REMEDIATION_TEXT = {
                 "dist/ was altered after the build, the build copied a modified host file, or the origin names the wrong "
                 "package - and then every CVE match for that file is wrong too. Do not release. Check the host package "
                 "(`dpkg --verify <pkg>`) or re-fetch .tools/debs (`make tools`), rebuild with `make build`, regenerate "
-                "the SBOM and re-run validation and the scan until BB-ORIGIN-MISMATCH is gone. If beast-booter patches "
+                "the SBOM and re-run validation and the scan until BB-ORIGIN-MISMATCH is gone. If beast-boot patches "
                 "the file on purpose, the build must record it as `built:` with its inputs, not as `deb:`.",
     "R-ORIGIN-REBUILD": "The stated source of a shipped file cannot be checked today: a repo:/key: file differs from the "
                         "working tree (edited after the build) or the named package version is no longer installed / in "
@@ -1761,10 +1761,10 @@ REMEDIATION_TEXT = {
                         "commit; build/grub/grubsrc.py proves it present by reverse-applying that commit to the patched "
                         "source and fails otherwise). The scanner matches by version only. Review the proposed `fixed` "
                         "statement in sbom/vex.proposed.openvex.json and copy it into sbom/vex.openvex.json.",
-    "R-VEX-NOTPRESENT": "The advisory concerns a userland utility that beast-booter does not ship. Record OpenVEX "
+    "R-VEX-NOTPRESENT": "The advisory concerns a userland utility that beast-boot does not ship. Record OpenVEX "
                         "not_affected / component_not_present (proposal provided).",
     "R-GRUB-NOT-EMBEDDED": "The affected GRUB module is not in grubx64.efi (requested modules plus their moddep.lst "
-                           "dependencies) and beast-booter ships no x86_64-efi modules, so the UEFI path does not contain "
+                           "dependencies) and beast-boot ships no x86_64-efi modules, so the UEFI path does not contain "
                            "the code; the BIOS path can load it from /grub/i386-pc. Record not_affected / "
                            "vulnerable_code_not_present for the EFI package (proposal provided) and add the upstream "
                            "fix to the GRUB source build (build/grub/patches) for the BIOS path.",
@@ -1824,9 +1824,9 @@ def main() -> int:
     a = ap.parse_args()
     root = Path(a.root).resolve()
     sbom_dir = root / "sbom"
-    cdx_path = sbom_dir / "beast-booter.cdx.json"
+    cdx_path = sbom_dir / "beast-boot.cdx.json"
     if not cdx_path.exists():
-        log("sbom/beast-booter.cdx.json missing - run gen_sbom.py first")
+        log("sbom/beast-boot.cdx.json missing - run gen_sbom.py first")
         return 2
     bom, idx = load_sbom(cdx_path)
     dist = root / "dist"
@@ -1929,7 +1929,7 @@ def main() -> int:
         "components_affected": len({f["component"]["bom-ref"] for f in findings}),
     }
     findings.sort(key=lambda f: (f["scope"] != "shipped", -SEV_RANK[f["severity"]], f["id"], f["component"]["name"]))
-    proposals = vex_proposals(findings, ts, bom["metadata"]["component"].get("purl") or "beast-booter", modules)
+    proposals = vex_proposals(findings, ts, bom["metadata"]["component"].get("purl") or "beast-boot", modules)
     summary["proposals"] = len(proposals["statements"])
     top = []
     for b in sorted(bc_findings, key=lambda x: -SEV_RANK[x["severity"]]):

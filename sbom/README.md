@@ -19,7 +19,7 @@ Everything else in this directory is generated and git-ignored (see
 ## Why the reports are not committed
 
 An SBOM describes one build: it lists every file of one `dist/` with its
-SHA-256, and is tied to it by `beast-booter:manifest-sha256` (the SHA-256 of
+SHA-256, and is tied to it by `beast-boot:manifest-sha256` (the SHA-256 of
 `dist/manifest.json`). A vulnerability report is a snapshot of the scanners'
 databases on one day. Committed copies would describe a build nobody has and
 go stale silently. So each release publishes its own, made from the same
@@ -40,8 +40,8 @@ rootless and writes only to `sbom/` and `.tools/`. Output:
 
 | File | What it is |
 |---|---|
-| `beast-booter.cdx.json` | CycloneDX 1.6 SBOM: shipped packages, upstream projects, every `dist/` file (SHA-256, origin), signer certificates, build tooling |
-| `beast-booter.spdx.json` | the same inventory in SPDX 2.3 |
+| `beast-boot.cdx.json` | CycloneDX 1.6 SBOM: shipped packages, upstream projects, every `dist/` file (SHA-256, origin), signer certificates, build tooling |
+| `beast-boot.spdx.json` | the same inventory in SPDX 2.3 |
 | `validation.json` | schema and structural checks, per-file provenance |
 | `vulnerabilities.json` | every finding: id, severity, component, scanners, VEX status, fix |
 | `VULNERABILITIES.md` | the report for people: counts, boot-chain results, remediations |
@@ -58,8 +58,8 @@ are in the project's skill,
 
 Each release publishes, built from the release's own `dist/`:
 
-- `beast-booter-<v>-sbom.cdx.json`, `beast-booter-<v>-sbom.spdx.json`
-- `beast-booter-<v>-vulnerabilities.json`, `beast-booter-<v>-VULNERABILITIES.md`
+- `beast-boot-<v>-sbom.cdx.json`, `beast-boot-<v>-sbom.spdx.json`
+- `beast-boot-<v>-vulnerabilities.json`, `beast-boot-<v>-VULNERABILITIES.md`
 
 They are listed in `SHA256SUMS` and covered by the release's provenance
 attestations ([SECURITY.md](../SECURITY.md#verifying-a-release),

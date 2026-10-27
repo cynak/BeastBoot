@@ -2,7 +2,7 @@
 with chosen db / MokList / MokListX contents, and signed kernel images.
 
 Everything is pre-seeded with virt-fw-vars in a per-VM copy of the variable
-store, the same way the other Secure Boot tests pre-enroll the beast-booter
+store, the same way the other Secure Boot tests pre-enroll the beast-boot
 certificate (what MokManager would store after the user confirmed it).
 
 - "2023-only" store: a generated test PK, Microsoft KEK 2023 and only the
@@ -140,10 +140,10 @@ def make_test_ca(d: Path) -> dict[str, Path]:
     leaf_key, leaf_csr, leaf_crt, leaf_der = d / "leaf.key", d / "leaf.csr", d / "leaf.crt", d / "leaf.der"
     ext = d / "leaf.ext"
     env.run(["openssl", "req", "-new", "-x509", "-newkey", "rsa:2048", "-nodes", "-sha256", "-days", "3650",
-             "-subj", "/CN=beast-booter e2e test CA (throwaway)/", "-keyout", ca_key, "-out", ca_crt,
+             "-subj", "/CN=beast-boot e2e test CA (throwaway)/", "-keyout", ca_key, "-out", ca_crt,
              "-addext", "basicConstraints=critical,CA:TRUE", "-addext", "keyUsage=critical,keyCertSign,cRLSign"])
     env.run(["openssl", "req", "-new", "-newkey", "rsa:2048", "-nodes", "-sha256",
-             "-subj", "/CN=beast-booter e2e test signer (throwaway)/", "-keyout", leaf_key, "-out", leaf_csr])
+             "-subj", "/CN=beast-boot e2e test signer (throwaway)/", "-keyout", leaf_key, "-out", leaf_csr])
     ext.write_text("basicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=codeSigning\n")
     env.run(["openssl", "x509", "-req", "-sha256", "-days", "3650", "-in", leaf_csr, "-CA", ca_crt,
              "-CAkey", ca_key, "-set_serial", "0x5eed", "-extfile", ext, "-out", leaf_crt])

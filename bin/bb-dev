@@ -1,4 +1,4 @@
 #!/usr/bin/env sh
-# Development and debugging helpers for beast-booter. Run `bin/bb-dev --help`.
+# Development and debugging helpers for beast-boot. Run `bin/bb-dev --help`.
 here="$(cd "$(dirname "$0")/.." && pwd)"
 PYTHONPATH="$here/devtools:$here/installer${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m bbdev "$@"

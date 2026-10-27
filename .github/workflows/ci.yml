@@ -119,12 +119,12 @@ jobs:
         run: |
           # A signing key that exists only in this run: these packages are for
           # testing. Release builds sign with the project key (docs/SECURE_BOOT.md).
-          BB_KEY_CN="beast-booter CI throwaway key (run $GITHUB_RUN_ID)" build/keygen.sh
-          docker build -t beast-booter-build -f build/Containerfile .
+          BB_KEY_CN="beast-boot CI throwaway key (run $GITHUB_RUN_ID)" build/keygen.sh
+          docker build -t beast-boot-build -f build/Containerfile .
           mkdir -p out/container
           docker run --rm -v "$PWD/keys:/src/keys:ro" -v "$PWD/out/container:/out" \
             -e BB_DIST_DIR=/out/dist -e SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" \
-            beast-booter-build
+            beast-boot-build
           # The container runs as root: hand its output to the runner user before moving it.
           sudo chown -R "$(id -u):$(id -g)" out/container
           mv out/container/dist dist

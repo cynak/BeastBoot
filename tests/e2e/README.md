@@ -19,7 +19,7 @@ pytest -q tests/e2e -m "not slow"   # no QEMU boots: unit tests and static image
 
 Tests that need something missing skip with the reason: `dist/` (from
 `make build`), the installer (`python3 -m beastbooter`), the BeastBoot
-certificate (`keys/beast-booter.cer`, or the one in dist/), Secure Boot firmware
+certificate (`keys/beast-boot.cer`, or the one in dist/), Secure Boot firmware
 and `virt-fw-vars`, or a usable `udisksctl`.
 
 **exFAT and NTFS tests** fill the data partition through a loop device that
@@ -101,7 +101,7 @@ They cover "Download an ISO from a link" (docs/BEASTNET.md) end to end, about
   the next entry, **Trust Ubuntu's Secure Boot key**, gives the same command line
   plus `beastnet.action=trust-ubuntu` (absent under BIOS).
 - **Helper boot** on BIOS, UEFI and UEFI + Secure Boot (MOK enrolled): Ubuntu's
-  kernel, re-signed with the beast-booter key, starts through our GRUB (shim verifies it) and prints
+  kernel, re-signed with the beast-boot key, starts through our GRUB (shim verifies it) and prints
   `BEASTNET: ready kernel=<kver> sb=<0|1>`.
 - **Download and one-shot** in script mode (`bb_beastnet_script` in config.cfg
   -> `beastnet.script=`): DHCP on a virtio NIC, HTTP download from a server on
@@ -165,3 +165,32 @@ The quick check without a VM is `make net-sources`
   set with `--set-json`). They skip when virt-fw-vars lacks those options.
 - `-chardev stdio,signal=off -serial chardev:ser0`, `-qmp unix:...`, `-no-reboot`.
   A watchdog kills QEMU after a hard timeout.
+
+## Disk tools tests (0.3.0, docs/DISK_TOOLS.md)
+
+`test_e2e_disks.py` boots the beast-net helper with disk-image fixtures attached
+(NVMe `-device nvme,serial=` and AHCI `ide-hd,serial=`), runs a script-mode
+`"action": "disk"` plan and reads the `BEASTNET:` event lines. Every flow runs
+under the **immutability gate**: all source images are hashed before and after
+(and checked against the fixture cache); one changed byte fails the test.
+
+```sh
+python tests/e2e/fixtures/disks.py needs      # what is missing on this host
+python tests/e2e/fixtures/disks.py build      # about 3 minutes; cached by recipe hash
+python tests/e2e/fixtures/disks.py list       # sets, disks, stacks (manifest.json is the oracle)
+pytest -q tests/e2e/test_e2e_disks.py         # needs KVM, the fixtures and a built helper
+```
+
+Building needs `docker run --privileged` (loop devices): an `ubuntu:26.04` image with
+pinned mdadm, lvm2, cryptsetup, btrfs-progs, e2fsprogs, xfsprogs, ntfs-3g
+(`fixtures/Dockerfile.disks`). Images are sparse, cached in
+`.tools/cache/disk-fixtures/<recipe-hash>/` (override: `BB_DISK_FIXTURE_CACHE`);
+the manifest holds each stack's parameters, member order and the SHA-256 of every file
+written inside. Sets: md RAID 0/1/linear, 5/10, 6 + degraded RAID5/RAID1, IMSM, DDF,
+LVM (two VGs plus a same-named VG on another disk), LUKS2 (passphrase in the manifest), btrfs RAID1,
+GPT with NTFS and ext4, and "wiped" arrays (superblocks zeroed, shuffled member order, one member missing).
+ZFS is not built (needs the zfs kernel module on the Docker host).
+
+Tests that need a Disk tools feature the helper does not ship yet (`beastnet/disks/*.py`
+in the initramfs, `mdadm`, `lvm`, `cryptsetup`) skip with the missing names. Use
+`BB_E2E_DIST=<dist with the new helper>` to run them against another build.

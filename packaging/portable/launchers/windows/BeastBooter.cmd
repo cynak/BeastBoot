@@ -1,5 +1,5 @@
 @echo off
-rem beast-booter portable (Windows): start the GUI. Double-click this file.
+rem beast-boot portable (Windows): start the GUI. Double-click this file.
 rem
 rem Runs only what is in this folder: the bundled Python (runtime\), the
 rem installer sources (app\) and the verified boot files (payload\dist).

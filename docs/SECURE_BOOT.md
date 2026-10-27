@@ -209,12 +209,12 @@ If you would rather trust a key you made yourself:
 
 ```sh
 make keys      # build/keygen.sh: RSA-2048, self-signed, codeSigning, ~10 years
-make build     # signs dist/esp/EFI/BOOT/grubx64.efi and dist/esp/beast-net/vmlinuz with keys/beast-booter.key
-beast-booter update --device /dev/sdX    # or install, see the README
+make build     # signs dist/esp/EFI/BOOT/grubx64.efi and dist/esp/beast-net/vmlinuz with keys/beast-boot.key
+beast-boot update --device /dev/sdX    # or install, see the README
 ```
 
-- `make keys` writes `keys/beast-booter.key` (private, mode 0600, git-ignored),
-  `keys/beast-booter.crt` (PEM) and `keys/beast-booter.cer` (DER, copied to the
+- `make keys` writes `keys/beast-boot.key` (private, mode 0600, git-ignored),
+  `keys/beast-boot.crt` (PEM) and `keys/beast-boot.cer` (DER, copied to the
   drive). It prints the fingerprints. It refuses to overwrite an existing key
   unless you run `build/keygen.sh --force`. `BB_KEY_CN` sets the certificate
   name, `BB_KEY_DIR` the directory (`make build` reads `BB_KEY_DIR` too).
@@ -385,7 +385,7 @@ grub,6,Free Software Foundation,grub,2.14,https://www.gnu.org/software/grub/
 grub.ubuntu,2,Ubuntu,grub2,2.14-2ubuntu3,https://www.ubuntu.com/
 grub.ubuntu26,1,Ubuntu,grub2,2.14-2ubuntu3,https://www.ubuntu.com/
 grub.peimage,2,Canonical,grub2,2.14-2ubuntu3,https://salsa.debian.org/grub-team/grub/-/blob/master/debian/patches/secure-boot/efi-use-peimage-shim.patch
-grub.beastbooter,1,beast-booter,grub2,2.14-2ubuntu3+bb1,https://github.com/cynak/BeastBoot
+grub.beastbooter,1,beast-boot,grub2,2.14-2ubuntu3+bb1,https://github.com/cynak/BeastBoot
 ```
 
 - **`grub,6`** is the generation that shim's revocation level `2025112400`

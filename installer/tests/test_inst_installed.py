@@ -594,7 +594,7 @@ def test_windows_not_ours(roots):
     assert probe.probe_windows(None, win_disk({**DATA_VOL, "label": "KINGSTON"})) is None
     assert probe.probe_windows(None, win_disk()) is None
     assert probe.probe_windows(None, disk_info(r"\\.\PhysicalDrive3")) is None
-    # a BEAST-EFI volume we can read that has no marker: not a beast-booter drive
+    # a BEAST-EFI volume we can read that has no marker: not a beast-boot drive
     assert probe.probe_windows(None, win_disk(DATA_VOL, {**ESP_VOL, "letter": "F"})) is None
     assert seen == ["F:\\"]
 

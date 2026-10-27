@@ -42,6 +42,6 @@ def get_backend(platform: str | None = None):
 
         return WindowsBackend()
     raise BeastError(
-        f"writing drives is not supported on this platform ({plat!r}); beast-booter supports "
+        f"writing drives is not supported on this platform ({plat!r}); beast-boot supports "
         "Linux, Windows and macOS (image files work everywhere: use --image)"
     )

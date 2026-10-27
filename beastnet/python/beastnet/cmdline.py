@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 # beastnet.action=: open one of the helper's actions directly (the boot menu's tool entries).
-ACTIONS = ("trust-ubuntu",)  # "Trust Ubuntu's Secure Boot key" (build/trust/README.md)
+ACTIONS = ("trust-ubuntu", "disk")  # Trust Ubuntu's key (build/trust/README.md); Disk tools
 
 
 def split_cmdline(text: str) -> list[tuple[str, str | None]]:
@@ -57,6 +57,10 @@ class BootParams:
     script: str | None = None  # path on the data partition
     ui: str | None = None  # "plain" forces the line-based interface (extension)
     action: str | None = None  # one of ACTIONS; anything else is ignored (kept in raw)
+    # beastnet.netboot=1: started over the network (BeastServer), not from a stick: no data
+    # partition and no ESP; /init mounts small RAM filesystems in their place.
+    netboot: bool = False
+    server: str | None = None  # beastnet.server=http://host:port (the BeastServer, for display)
     consoles: list[str] = field(default_factory=list)  # console= values, in order
     raw: dict[str, str] = field(default_factory=dict)  # every beastnet.* parameter
 
@@ -101,7 +105,17 @@ def parse_cmdline(text: str) -> BootParams:
             p.ui = value or None
         elif key == "action":
             p.action = value if value in ACTIONS else None
+        elif key == "netboot":
+            p.netboot = _truthy(value)
+        elif key == "server":
+            p.server = value or None
     return p
+
+
+def netboot(ctx: object) -> bool:
+    """True when this run has no BeastBoot stick (``beastnet.netboot=1``): the data
+    partition and the ESP are RAM filesystems, so nothing written there survives."""
+    return bool(getattr(getattr(ctx, "params", None), "netboot", False))
 
 
 def read_cmdline(path: str) -> BootParams:

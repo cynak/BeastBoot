@@ -63,7 +63,7 @@ class LineUI(UI):
         steps = "  ".join(f"[{s}]" if i == self.step else s for i, s in enumerate(self.steps))
         self._p()
         self._p("=" * self.width)
-        self._p(f"beast-booter / beast-net    {steps or self.subtitle}")
+        self._p(f"beast-boot / beast-net    {steps or self.subtitle}")
         self._p(f"{mark}{title}")
         self._p("-" * self.width)
 
@@ -112,11 +112,13 @@ class LineUI(UI):
         self._p(f"... {text}")
         return Worker(fn).result()
 
-    def download(self, title: str, lines: list[str], job: Callable[..., Any]) -> Any:
+    def download(self, title: str, lines: list[str], job: Callable[..., Any], *,
+                 what: str = "download") -> Any:
         self._header(title)
         for line in lines:
             self._p(line)
-        self._p("(Ctrl-C cancels; the partial file is kept for resuming.)")
+        kept = "file" if what == "download" else what
+        self._p(f"(Ctrl-C cancels; the partial {kept} is kept for resuming.)")
         state: dict[str, Progress | None] = {"p": None}
         cancel = threading.Event()
         w = Worker(lambda: job(lambda p: state.__setitem__("p", p), cancel))

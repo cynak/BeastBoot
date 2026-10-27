@@ -10,7 +10,7 @@ still running on the old image keeps its file). The options are saved next to
 the image as <name>.bbdev.json (its recipe), so `bb-dev vm` can rebuild it the
 same way when the installer's layout changes.
 
-On an existing image without --force, it offers a refresh instead: `beast-booter
+On an existing image without --force, it offers a refresh instead: `beast-boot
 update` (boot files only, data partition kept) when just the build differs, a
 rebuild when the layout is older, nothing when it is current.
 """
@@ -40,7 +40,7 @@ FAT32_MAX_FILE = (4 << 30) - 1
 
 def register(sub) -> None:
     p = sub.add_parser("image", help="build a dev drive image from dist/",
-                       description="Build a beast-booter drive image from dist/ with the installer, "
+                       description="Build a beast-boot drive image from dist/ with the installer, "
                                    "optionally filled with ISOs and a /beast-booter/config.cfg.")
     p.add_argument("--out", type=Path, metavar="PATH", help=f"image file (default: {rel(paths.DEFAULT_IMAGE)})")
     p.add_argument("--size", default="4G", help="image size: 1G (minimum), 8G or bytes (default: 4G; sparse)")
@@ -245,7 +245,7 @@ def _run(args) -> int:
         "debug": bool(args.debug), "dryrun": bool(args.dryrun), "autoboot": autoboot,
         "serial_console": bool(args.serial_console),
     }, build_id=freshness.dist_build_id(), layout_version=info.raw.get("layout_version"))
-    print(f"image   {rel(out)}  {human_size(size)} (sparse), {info.layout}, beast-booter {info.version}")
+    print(f"image   {rel(out)}  {human_size(size)} (sparse), {info.layout}, beast-boot {info.version}")
     print(f"data    partition 1: LBA {info.data_start_lba} = byte offset {info.data_offset}, "
           f"{human_size(info.data_size)}, {fs}")
     print(f"esp     partition 2: LBA {info.esp_start_lba} = byte offset {info.esp_offset}, {human_size(info.esp_size)}")
@@ -287,10 +287,10 @@ def offer_refresh(args, out: Path, env: dict) -> int | None:
         raise Failure(f"{rel(out)} already exists ({v.reason})", "add --force to replace it")
     if v.action == freshness.UPDATE:
         if not (args.yes or confirm(f"bb-dev image: {rel(out)} exists, {v.reason}. Refresh its boot files "
-                                    "with `beast-booter update` (its data partition is kept)?")):
+                                    "with `beast-boot update` (its data partition is kept)?")):
             raise Failure(f"{rel(out)} already exists ({v.reason})",
                           "--yes refreshes its boot files, --force rebuilds it (`bb-dev vm` refreshes it too)")
-        note(CMD, f"refreshing {rel(out)}: bin/beast-booter update --image {rel(out)} --yes "
+        note(CMD, f"refreshing {rel(out)}: bin/beast-boot update --image {rel(out)} --yes "
                   "(data partition kept; the options given here are not applied)")
         after = freshness.run_update(out, env)
         print(f"image   {rel(out)} updated: {after.reason}")

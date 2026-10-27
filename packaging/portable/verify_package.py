@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check a beast-booter portable package against its PACKAGE-MANIFEST.json.
+"""Check a beast-boot portable package against its PACKAGE-MANIFEST.json.
 
     python3 verify-package.py              # the package folder this script is in
     python3 verify-package.py FOLDER       # an unpacked package
@@ -364,21 +364,21 @@ def check_layout(src, manifest, errors):
             errors.append(f"{res}VERSION says {found!r}, the manifest says {manifest.get('version')!r}")
 
     if os_name == "linux":
-        for sh in ("BeastBooter", "beast-booter"):
+        for sh in ("BeastBooter", "beast-boot"):
             if not text(sh, crlf=False).startswith("#!/bin/sh\n"):
                 errors.append(f"{sh}: must start with #!/bin/sh")
-        if "[Desktop Entry]" not in text("beast-booter.desktop", crlf=False):
-            errors.append("beast-booter.desktop: no [Desktop Entry] group")
+        if "[Desktop Entry]" not in text("beast-boot.desktop", crlf=False):
+            errors.append("beast-boot.desktop: no [Desktop Entry] group")
         need_file("runtime/bin/python3", executable=True)
         if not glob_one("runtime/lib/python3.", "/tkinter/__init__.py"):
             errors.append("runtime: tkinter is missing (the GUI needs it)")
     elif os_name == "windows":
         gui = text("BeastBooter.cmd", crlf=True)
-        cli = text("beast-booter.cmd", crlf=True)
+        cli = text("beast-boot.cmd", crlf=True)
         if "runtime\\pythonw.exe" not in gui or "start " not in gui:
             errors.append("BeastBooter.cmd: must start runtime\\pythonw.exe with start (no console window)")
         if "runtime\\python.exe" not in cli:
-            errors.append("beast-booter.cmd: must run runtime\\python.exe")
+            errors.append("beast-boot.cmd: must run runtime\\python.exe")
         if b"\n" in src.read("README.txt").replace(b"\r\n", b""):
             errors.append("README.txt: Windows package README must have CRLF line endings")
         for p in ("runtime/python.exe", "runtime/pythonw.exe", "runtime/Lib/tkinter/__init__.py"):
@@ -390,8 +390,8 @@ def check_layout(src, manifest, errors):
         app = "BeastBooter.app/Contents"
         if not text(f"{app}/MacOS/BeastBooter", crlf=False).startswith("#!/bin/sh\n"):
             errors.append(f"{app}/MacOS/BeastBooter: must start with #!/bin/sh")
-        if not text("beast-booter.command", crlf=False).startswith("#!/bin/sh\n"):
-            errors.append("beast-booter.command: must start with #!/bin/sh")
+        if not text("beast-boot.command", crlf=False).startswith("#!/bin/sh\n"):
+            errors.append("beast-boot.command: must start with #!/bin/sh")
         if need_file(f"{app}/Info.plist"):
             try:
                 info = plistlib.loads(src.read(f"{app}/Info.plist"))

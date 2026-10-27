@@ -158,7 +158,7 @@ def test_invalid_value_leaves_the_file_alone(fat_image, capsys):
 
 def test_unknown_keys_warn(fat_image, capsys):
     assert cli.main(["debug-config", "--image", str(fat_image.path), "--set", "gfxmode=1024x768"]) == 0
-    assert "not a beast-booter setting" in capsys.readouterr().err
+    assert "not a beast-boot setting" in capsys.readouterr().err
 
 
 def test_missing_image(tmp_path, capsys, monkeypatch):

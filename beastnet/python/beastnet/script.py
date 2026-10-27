@@ -19,13 +19,16 @@ of a download (no network)::
 
 ``step`` is next (the one request the two-step rule allows now) or delete.
 The password sits in plain text on the stick: use this for tests only.
+
+Disk tools run as ``{"action": "disk", "steps": [...], "then": "poweroff"}``
+(docs/DISK_TOOLS.md section 6; steps checked by disks.session.parse_steps).
 """
 
 from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from . import grubenv, trust
 from .checksums import normalize_sha256
@@ -47,9 +50,10 @@ class ScriptPlan:
     request: DownloadRequest | None  # None for an action plan
     then: str = "stay"
     on_error: str = "stay"
-    action: str | None = None  # "trust-ubuntu"
+    action: str | None = None  # "trust-ubuntu" | "disk"
     password: str = ""
     step: str = "next"
+    steps: list = field(default_factory=list)  # "disk": the Disk tools steps
 
 
 def _bad(text: str) -> BeastNetError:
@@ -107,8 +111,13 @@ def _then(data: dict) -> tuple[str, str]:
 
 
 def _parse_action(data: dict) -> ScriptPlan:
+    if data["action"] == "disk":
+        from .disks.session import parse_steps
+        steps = parse_steps(data.get("steps"))
+        then, on_error = _then(data)
+        return ScriptPlan({}, None, then, on_error, action="disk", steps=steps)
     if data["action"] != "trust-ubuntu":
-        raise _bad('action must be "trust-ubuntu"')
+        raise _bad('action must be "trust-ubuntu" or "disk"')
     step = data.get("step", "next")
     if step not in TRUST_STEPS:
         raise _bad(f"step must be one of {', '.join(TRUST_STEPS)}")
@@ -154,6 +163,10 @@ def run_script(ctx: Context, script_path: str) -> tuple[str, DownloadResult | No
         on_error = plan.on_error
         if plan.action == "trust-ubuntu":
             _run_trust(ctx, plan)
+            return _finish(ctx, plan.then), None
+        if plan.action == "disk":
+            from .disks.session import run_plan
+            run_plan(ctx, plan.steps)
             return _finish(ctx, plan.then), None
         assert plan.request is not None
         if ctx.net is not None:

@@ -63,7 +63,7 @@ def mkfs_data_cmd(fs: str, path: str, label: str, *, start_lba: int | None) -> l
     boot sector. On a partition device node mkfs.ntfs detects it.
     """
     if fs != "ntfs":
-        raise BeastError(f"{fs} is written by beast-booter itself, not by an external mkfs")
+        raise BeastError(f"{fs} is written by beast-boot itself, not by an external mkfs")
     cmd = [NTFS_TOOL, "-q", "-Q", "-L", label]
     if start_lba is not None:
         cmd += ["-F", "-p", str(start_lba), "-H", "255", "-S", "63"]

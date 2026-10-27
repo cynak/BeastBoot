@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build, test, scan and check every release file of beast-booter (docs/RELEASING.md).
+# Build, test, scan and check every release file of beast-boot (docs/RELEASING.md).
 # The single entry point for CI and `make release`.
 #
 #   scripts/release/build_release.sh [--out DIR] [--official] [--skip-e2e] [--offline]
@@ -13,7 +13,7 @@
 #   --offline     no downloads: cached runtimes, beast-net packages and vulnerability data only
 #
 # Environment:
-#   BB_KEY_DIR                  signing key directory (beast-booter.key/.crt/.cer; default keys/)
+#   BB_KEY_DIR                  signing key directory (beast-boot.key/.crt/.cer; default keys/)
 #   BB_RELEASE_TAG              the tag being released (default: CI tag variables, else a v* tag on HEAD)
 #   BB_RELEASE_CERT_SHA256      optional pin: the release certificate's SHA-256 (refuse any other key)
 #   BB_RELEASE_GATE             enforce | warn | off (default: enforce with --official, else warn)
@@ -98,7 +98,7 @@ echo "    version $VERSION, tag ${TAG:-(none: not a tagged commit)}, official: $
 # ---------------------------------------------------------------------------
 step "Signing key"
 KEY_DIR="${BB_KEY_DIR:-$ROOT/keys}"
-CER="$KEY_DIR/beast-booter.cer"
+CER="$KEY_DIR/beast-boot.cer"
 [ -f "$CER" ] || die "no signing certificate at $CER (official: write the release key there; local: make keys)"
 if [ "$OFFICIAL" = 1 ]; then
   [ -n "${BB_KEY_DIR:-}" ] || die "--official needs BB_KEY_DIR pointing at the release key (never the dev key in keys/)"
@@ -169,14 +169,14 @@ run 10-portable scripts/build_portable.sh "${port_args[@]}"
 
 # ---------------------------------------------------------------------------
 step "Release files"
-P="beast-booter-$VERSION"
+P="beast-boot-$VERSION"
 for t in linux-x86_64.tar.gz windows-x86_64.zip macos-x86_64.zip macos-arm64.zip; do
   [ -f "$META/portable/$P-$t" ] || die "build_portable.sh did not produce $P-$t"
   mv "$META/portable/$P-$t" "$OUT/$P-$t"
 done
 "${TOOL[@]}" dist-zip --dist dist --out "$OUT/$P-dist.zip" --prefix "$P-dist"
-cp sbom/beast-booter.cdx.json "$OUT/$P-sbom.cdx.json"
-cp sbom/beast-booter.spdx.json "$OUT/$P-sbom.spdx.json"
+cp sbom/beast-boot.cdx.json "$OUT/$P-sbom.cdx.json"
+cp sbom/beast-boot.spdx.json "$OUT/$P-sbom.spdx.json"
 cp sbom/vulnerabilities.json "$OUT/$P-vulnerabilities.json"
 cp sbom/VULNERABILITIES.md "$OUT/$P-VULNERABILITIES.md"
 DIST_CER="dist/esp/ENROLL_THIS_KEY_IN_MOKMANAGER.cer"

@@ -1,4 +1,4 @@
-# Python tools for beast-booter development, installed into .venv by
+# Python tools for beast-boot development, installed into .venv by
 #   bin/bb-dev setup        (python3 -m venv .venv && .venv/bin/pip install --require-hashes -r requirements-dev.txt)
 #
 # The installer and bb-dev themselves need only the Python standard library;

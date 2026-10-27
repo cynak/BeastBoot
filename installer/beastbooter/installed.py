@@ -1,12 +1,12 @@
-"""Which beast-booter a drive already has, and whether this app should update it.
+"""Which beast-boot a drive already has, and whether this app should update it.
 
 The installed version is on the drive's boot partition (BEAST-EFI):
-  BEAST-BOOTER.ID           marker: "beast-booter", install_id=, layout_version=, version=
+  BEAST-BOOTER.ID           marker: "beast-boot", install_id=, layout_version=, version=
   grub/beast/version.cfg    set bb_version="0.1.0" / set bb_build_id="82bc2b6c9502" (from the build)
 
 Reading it needs no administrator rights when the platform can show that
 partition as a folder (platforms/installed_probe.py: an existing mount, a
-temporary read-only udisks mount on Linux, ...); `beast-booter info` reads it
+temporary read-only udisks mount on Linux, ...); `beast-boot info` reads it
 from the raw device instead. This module only parses and compares; it never
 touches a drive.
 """
@@ -32,12 +32,12 @@ OUTDATED = "outdated"        # the drive has an older version: Update boot files
 OTHER_BUILD = "other-build"  # same version number, different build (development builds)
 NEWER = "newer"              # the drive is newer than this app: don't downgrade
 REINSTALL = "reinstall"      # older drive layout: update refuses, a reinstall is needed
-UNKNOWN = "unknown"          # a beast-booter drive whose version could not be read
+UNKNOWN = "unknown"          # a beast-boot drive whose version could not be read
 
 
 @dataclass(frozen=True)
 class InstalledBoot:
-    """What the drive's boot partition says about the installed beast-booter."""
+    """What the drive's boot partition says about the installed beast-boot."""
 
     version: str            # "" when neither version.cfg nor the marker has one
     build_id: str = ""      # bb_build_id from version.cfg, "" if unknown
@@ -55,7 +55,7 @@ class InstalledBoot:
 @dataclass(frozen=True)
 class ProbeResult:
     """What PlatformBackend.probe_installed found on a drive that looks like a
-    beast-booter drive. installed None: it does, but the version could not be
+    beast-boot drive. installed None: it does, but the version could not be
     read (no administrator rights, partition not reachable)."""
 
     installed: InstalledBoot | None
@@ -127,7 +127,7 @@ def firmware_from_dir(root: str | Path) -> dict | None:
 def read_from_dir(root: str | Path, how: str = "") -> InstalledBoot | None:
     """Read a mounted boot partition (the folder that holds BEAST-BOOTER.ID):
     version, build and installed firmware packs. None if it is not a
-    beast-booter boot partition or cannot be read."""
+    beast-boot boot partition or cannot be read."""
     root = Path(root)
 
     def text(rel: str, limit: int = 64 * 1024) -> str | None:
@@ -174,7 +174,7 @@ class Freshness:
     state: str                       # CURRENT, OUTDATED, OTHER_BUILD, NEWER, REINSTALL, UNKNOWN
     installed: InstalledBoot | None  # None for UNKNOWN
     app_version: str
-    summary: str                     # short, for a drive row: "beast-booter 0.1.0 · update available (0.2.0)"
+    summary: str                     # short, for a drive row: "beast-boot 0.1.0 · update available (0.2.0)"
     advice: str                      # a sentence for the hint under the list ("" when nothing to do)
 
     @property
@@ -183,44 +183,44 @@ class Freshness:
 
 
 def assess(installed: InstalledBoot | None, app_version: str, app_build_id: str = "") -> Freshness:
-    """Compare what a beast-booter drive has with what this app would install.
+    """Compare what a beast-boot drive has with what this app would install.
 
-    `installed` None means: the drive looks like a beast-booter drive but its
+    `installed` None means: the drive looks like a beast-boot drive but its
     version could not be read (UNKNOWN). Callers that know a drive is not a
-    beast-booter drive should not call this at all."""
+    beast-boot drive should not call this at all."""
     if installed is None:
-        return Freshness(UNKNOWN, None, app_version, "beast-booter drive",
+        return Freshness(UNKNOWN, None, app_version, "beast-boot drive",
                          "Its boot files' version can't be read without administrator rights; "
                          f"Update boot files makes sure it has {app_version}.")
     have = installed.version or "unknown version"
     # The same rules as `update` (commands.check_layout_version): only drives of
     # this layout can be updated, so never offer an update the CLI would refuse.
     if installed.layout_version is None:
-        return Freshness(REINSTALL, installed, app_version, f"beast-booter {have} · unknown layout",
-                         "This drive's boot partition has a layout this beast-booter doesn't know, so it "
+        return Freshness(REINSTALL, installed, app_version, f"beast-boot {have} · unknown layout",
+                         "This drive's boot partition has a layout this beast-boot doesn't know, so it "
                          "can't be updated in place: copy your files off it, then install again.")
     if installed.layout_version > LAYOUT_VERSION:
-        return Freshness(NEWER, installed, app_version, f"beast-booter {have} · newer than this app",
-                         f"This drive was made by a newer beast-booter (layout {installed.layout_version}); "
+        return Freshness(NEWER, installed, app_version, f"beast-boot {have} · newer than this app",
+                         f"This drive was made by a newer beast-boot (layout {installed.layout_version}); "
                          "use that version to update it.")
     if installed.layout_version < LAYOUT_VERSION:
-        return Freshness(REINSTALL, installed, app_version, f"beast-booter {have} · needs a reinstall",
+        return Freshness(REINSTALL, installed, app_version, f"beast-boot {have} · needs a reinstall",
                          f"This drive uses an older layout that {app_version} can't update in place: "
                          "copy your files off it, then install again.")
     if not installed.version:
-        return Freshness(OUTDATED, installed, app_version, f"beast-booter (unknown version) · update available ({app_version})",
-                         f"Click Update boot files to put beast-booter {app_version} on it; your files stay.")
+        return Freshness(OUTDATED, installed, app_version, f"beast-boot (unknown version) · update available ({app_version})",
+                         f"Click Update boot files to put beast-boot {app_version} on it; your files stay.")
     c = compare_versions(installed.version, app_version)
     if c < 0:
-        return Freshness(OUTDATED, installed, app_version, f"beast-booter {have} · update available ({app_version})",
-                         f"This drive has beast-booter {have}. Click Update boot files to update it to "
+        return Freshness(OUTDATED, installed, app_version, f"beast-boot {have} · update available ({app_version})",
+                         f"This drive has beast-boot {have}. Click Update boot files to update it to "
                          f"{app_version}; your files on it are not touched.")
     if c > 0:
-        return Freshness(NEWER, installed, app_version, f"beast-booter {have} · newer than this app",
-                         f"This drive has beast-booter {have}, newer than this app ({app_version}). "
+        return Freshness(NEWER, installed, app_version, f"beast-boot {have} · newer than this app",
+                         f"This drive has beast-boot {have}, newer than this app ({app_version}). "
                          "Use the newer app; updating would downgrade it.")
     if installed.build_id and app_build_id and installed.build_id != app_build_id:
-        return Freshness(OTHER_BUILD, installed, app_version, f"beast-booter {have} · different build",
+        return Freshness(OTHER_BUILD, installed, app_version, f"beast-boot {have} · different build",
                          f"Same version, different build ({installed.build_id} on the drive, {app_build_id} here). "
                          "Update boot files if you want this build.")
-    return Freshness(CURRENT, installed, app_version, f"beast-booter {have} · up to date", "")
+    return Freshness(CURRENT, installed, app_version, f"beast-boot {have} · up to date", "")

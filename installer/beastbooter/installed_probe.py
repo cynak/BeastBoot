@@ -1,12 +1,12 @@
-"""Read the beast-booter version on a drive WITHOUT administrator rights.
+"""Read the beast-boot version on a drive WITHOUT administrator rights.
 
 The backends' probe_installed() (interfaces.py) call these. Each returns
-  None                       the drive does not look like a beast-booter drive
+  None                       the drive does not look like a beast-boot drive
   ProbeResult(installed)     it does, and installed.read_from_dir() read the version
   ProbeResult(None, note)    it does, but the version could not be read (note says why)
 and never raises. Anything mounted for the probe is unmounted again.
 
-All three first make a cheap check that partition 2 is a beast-booter boot
+All three first make a cheap check that partition 2 is a beast-boot boot
 partition (label / partition name BEAST-EFI) and touch nothing otherwise.
   Linux    udev database (/run/udev/data/b<major>:<minor>), else /dev/disk/by-*
            links; read in place if mounted, else a temporary read-only udisks
@@ -67,7 +67,7 @@ def _last_line(text: str) -> str:
 
 def _read_root(root: str, how: str) -> ProbeResult | None:
     """Read a folder that should be the boot partition. None if it holds no
-    beast-booter marker; ProbeResult(None, note) if its files can't be read."""
+    beast-boot marker; ProbeResult(None, note) if its files can't be read."""
     installed = read_from_dir(root, how)
     if installed is not None:
         return ProbeResult(installed)
@@ -132,7 +132,7 @@ def _udev_properties(devnum: str) -> dict[str, str] | None:
 
 
 def _linux_looks_ours(node: str, devnum: str) -> tuple[bool, str]:
-    """(is a beast-booter boot partition, filesystem type or "") without opening the device."""
+    """(is a beast-boot boot partition, filesystem type or "") without opening the device."""
     props = _udev_properties(devnum)
     if props is not None:
         ours = _is_esp_name(props.get("ID_FS_LABEL"), props.get("ID_PART_ENTRY_NAME"))

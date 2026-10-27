@@ -16,7 +16,7 @@ State per image lives in out/vm/<image stem>/:
 
 Before booting, the image is checked against dist/ and the installer
 (--refresh auto, the default): an image from another build gets
-`bin/beast-booter update --image` (data partition kept), an image of an older
+`bin/beast-boot update --image` (data partition kept), an image of an older
 layout is rebuilt from its recipe after a question (--yes). --snapshot never
 changes the image; a dist/ older than grub/ or build/ is only reported unless
 --build runs `make build` first.
@@ -63,10 +63,10 @@ modes:
                enrolled by hand in MokManager stays enrolled across runs
   sb-fresh     Secure Boot with brand-new Microsoft-keys vars on every run
                (never enrolled: shim refuses GRUB and offers MokManager)
-  sb-enrolled  Secure Boot with keys/beast-booter.cer pre-enrolled in MokList
+  sb-enrolled  Secure Boot with keys/beast-boot.cer pre-enrolled in MokList
                (virt-fw-vars --add-mok), rebuilt on every run
 
-freshness (--refresh auto): an image from another dist/ build gets `bin/beast-booter
+freshness (--refresh auto): an image from another dist/ build gets `bin/beast-boot
 update --image` (keeps ISOs and config.cfg); an image of an older layout is
 rebuilt from out/dev/<name>.bbdev.json after a question (--yes skips it);
 --snapshot only warns. --refresh always updates even a current image (drops
@@ -87,7 +87,7 @@ examples:
 def register(sub) -> None:
     p = sub.add_parser(
         "vm", help="boot an image in QEMU (BIOS / UEFI / Secure Boot)",
-        description="Boot a beast-booter image in QEMU with the same flags as the e2e tests.",
+        description="Boot a beast-boot image in QEMU with the same flags as the e2e tests.",
         epilog=MODE_HELP, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--image", type=Path, metavar="PATH", help=f"drive image (default: {rel(paths.DEFAULT_IMAGE)})")
     p.add_argument("--mode", choices=MODES, default="uefi", help="firmware (default: uefi)")
@@ -267,10 +267,10 @@ def build_plan(args, host: Host, *, vnc_display: int | None = None) -> Plan:
 # ---------------------------------------------------------------------------
 
 def enroll_cert() -> Path:
-    for c in (paths.KEYS / "beast-booter.cer", paths.DIST / "esp" / "ENROLL_THIS_KEY_IN_MOKMANAGER.cer"):
+    for c in (paths.KEYS / "beast-boot.cer", paths.DIST / "esp" / "ENROLL_THIS_KEY_IN_MOKMANAGER.cer"):
         if c.is_file():
             return c
-    raise Failure("no beast-booter certificate to enroll (keys/beast-booter.cer)", "run `make keys && make build`")
+    raise Failure("no beast-boot certificate to enroll (keys/beast-boot.cer)", "run `make keys && make build`")
 
 
 def enrolled_template(host: Host, cert: Path, env: dict) -> Path:
@@ -422,7 +422,7 @@ def freshen(args, plan: Plan, env: dict) -> None:
         warn(CMD, f"{rel(img)} has outdated boot files ({v.reason}); --refresh never: booting it as it is")
         return
     if v.action == freshness.UPDATE:
-        note(CMD, f"{rel(img)}: {v.reason}; refreshing its boot files: bin/beast-booter update --image "
+        note(CMD, f"{rel(img)}: {v.reason}; refreshing its boot files: bin/beast-boot update --image "
                   f"{rel(img)} --yes (ISOs and config.cfg on the data partition are kept)")
         after = freshness.run_update(img, env)
         note(CMD, f"updated {rel(img)}: {after.reason}")
@@ -431,7 +431,7 @@ def freshen(args, plan: Plan, env: dict) -> None:
     recipe = freshness.read_recipe(img)
     how = (f"from its recipe {rel(freshness.recipe_path(img))}" if recipe else
            "with the `bb-dev setup` defaults (--fixtures --debug), as it has no recipe")
-    note(CMD, f"{rel(img)}: {v.reason}, which `beast-booter update` cannot change; it has to be rebuilt {how}: "
+    note(CMD, f"{rel(img)}: {v.reason}, which `beast-boot update` cannot change; it has to be rebuilt {how}: "
               f"{freshness.rebuild_command(img)}")
     if not (args.yes or confirm(f"bb-dev vm: rebuild {rel(img)} now? Its data partition is recreated "
                                 "(files and config.cfg changes made since it was built are lost)")):

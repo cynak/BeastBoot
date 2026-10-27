@@ -1,4 +1,4 @@
-"""QEMU command lines for beast-booter VMs: the one place that knows the flags.
+"""QEMU command lines for beast-boot VMs: the one place that knows the flags.
 
 Used by `bb-dev vm` (bbdev/commands/vm.py) and by the e2e harness
 (tests/e2e/bbe2e/qemu.py). Building a command is pure: nothing here starts
@@ -11,7 +11,7 @@ Firmware profiles
            OVMF_VARS_4M.fd (pflash 1)
   uefi-sb  OVMF_CODE_4M.secboot.fd, q35 with SMM, secure pflash, vars from
            OVMF_VARS_4M.ms.fd (Microsoft keys, Secure Boot on). "Enrolled"
-           vars also carry the beast-booter certificate in MokList
+           vars also carry the beast-boot certificate in MokList
            (virt-fw-vars --add-mok), which is exactly what enrolling it in
            MokManager does. Nothing here disables or bypasses verification.
 
@@ -265,7 +265,7 @@ def bus_devices(bus: str, drive_id: str = DRIVE_ID) -> list[str]:
 
 @dataclass
 class QemuSpec:
-    """Everything that decides a beast-booter QEMU command line.
+    """Everything that decides a beast-boot QEMU command line.
 
     `argv()` emits the options in a fixed order, so the same spec always gives
     the same command (the e2e harness relies on this).

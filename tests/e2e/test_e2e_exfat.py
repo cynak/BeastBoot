@@ -65,7 +65,7 @@ def test_exfat_fs_addon_dryrun(mode, udisks_ok, make_drive, vm_factory):
     assert lin.has_token(f"iso-scan/filename={path}"), str(lin)
     ird = vm.wait_record("dryrun", r"^dryrun initrd ", after=boot.start)
     assert ird.has_token("(loop)/casper/initrd"), str(ird)
-    assert ird.has_token(f"newc:beast-booter/modules/exfat.ko.zst:{ADDON_KO}"), str(ird)
+    assert ird.has_token(f"newc:beast-boot/modules/exfat.ko.zst:{ADDON_KO}"), str(ird)
     assert any(re.match(HOOK_RX, t) for v in ird.variants() for t in v.split()), str(ird)
 
 

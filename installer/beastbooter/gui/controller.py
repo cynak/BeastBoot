@@ -126,14 +126,14 @@ def drive_problem(d: DiskInfo) -> str | None:
 PROBLEM_DETAILS = {
     "holds the running system": "It holds the running operating system (or its boot or swap space).",
     "write-protected": "It is write-protected. Check for a lock switch on the drive or card.",
-    "internal disk": "It is an internal disk. beast-booter only writes to removable drives.",
+    "internal disk": "It is an internal disk. beast-boot only writes to removable drives.",
     "no medium": "There is no medium in it (an empty card reader?).",
 }
 
 
 def problem_detail(problem: str) -> str:
     if problem.startswith("too small"):
-        return f"It is smaller than the {MIN_DISK_MIB} MiB beast-booter needs."
+        return f"It is smaller than the {MIN_DISK_MIB} MiB beast-boot needs."
     return PROBLEM_DETAILS.get(problem, problem)
 
 
@@ -141,8 +141,8 @@ def problem_detail(problem: str) -> str:
 class DriveRow:
     disk: DiskInfo
     problem: str | None
-    # Which beast-booter the drive has, compared with this app's boot files
-    # (installed.assess); None: not a beast-booter drive, or not checked (yet).
+    # Which beast-boot the drive has, compared with this app's boot files
+    # (installed.assess); None: not a beast-boot drive, or not checked (yet).
     freshness: Freshness | None = None
     probe: ProbeResult | None = None  # what backend.probe_installed said (firmware packs: probe.installed.firmware)
 
@@ -435,7 +435,7 @@ class _Task:
 
 
 def thread_spawn(task: _Task) -> None:
-    threading.Thread(target=task.run, name="beast-booter-gui", daemon=True).start()
+    threading.Thread(target=task.run, name="beast-boot-gui", daemon=True).start()
 
 
 def inline_spawn(task: _Task) -> None:
@@ -506,7 +506,7 @@ class Controller:
         self.list_error: str | None = None
         self._list_gen = 0
         self.selected_id: str | None = None
-        # Which beast-booter the listed drives have (backend.probe_installed, in a worker thread)
+        # Which beast-boot the listed drives have (backend.probe_installed, in a worker thread)
         self.probing = False
         self._probe_pending = False  # the rows still need a check (deferred while a job runs)
         self._probe_gen = 0  # bumped when the rows' results would be stale
@@ -599,10 +599,10 @@ class Controller:
             if len(usable) == 1:  # one candidate: preselect it (the confirmation names it)
                 self.selected_id = usable[0].id
 
-    # -- which beast-booter the drives have ----------------------------------
+    # -- which beast-boot the drives have ----------------------------------
 
     def _start_probe(self) -> None:
-        """Check the usable drives for beast-booter boot files, in a worker thread.
+        """Check the usable drives for beast-boot boot files, in a worker thread.
         Never while an install, update or firmware job runs (poll() retries later)."""
         if not self._probe_pending or self.probing or self.phase is Phase.RUNNING or self.other_job_running():
             return
@@ -682,16 +682,16 @@ class Controller:
             f = r.freshness
             assert f is not None
             if f.state == OTHER_BUILD:
-                what = f"{r.title} has a different build of beast-booter {app} than this app."
-                short = f"Update available: {r.title} has a different build of beast-booter {app}."
+                what = f"{r.title} has a different build of beast-boot {app} than this app."
+                short = f"Update available: {r.title} has a different build of beast-boot {app}."
             else:
-                what = f"{r.title} has beast-booter {has(f)}; this app has {app}."
-                short = f"Update available: {r.title} has beast-booter {has(f)} (this app: {app})."
+                what = f"{r.title} has beast-boot {has(f)}; this app has {app}."
+                short = f"Update available: {r.title} has beast-boot {has(f)} (this app: {app})."
             return UpdateNotice("Boot files update available", f"{what} Select it and click Update boot files.",
                                 r.id, short)
         names = ", ".join(f"{r.title} ({has(r.freshness)})" for r in rows if r.freshness)
         return UpdateNotice("Boot files updates available",
-                            f"These drives have older or different beast-booter boot files than this app "
+                            f"These drives have older or different beast-boot boot files than this app "
                             f"({app}): {names}. Select one and click Update boot files.", None,
                             f"Update available for {len(rows)} drives with older or different boot files.")
 
@@ -759,7 +759,7 @@ class Controller:
         if p := self._dist_problem():
             return p
         if self.selected_row is None:
-            return "Select a beast-booter USB drive."
+            return "Select a beast-boot USB drive."
         return None
 
     def image_blocker(self) -> str | None:
@@ -788,7 +788,7 @@ class Controller:
         spec = JobSpec("install", "device", row.id, disk=row.disk, options=o)
         details = [
             "Everything on this drive will be erased: all partitions and all files on them.",
-            f"beast-booter then creates a storage partition for your ISO files ({FS_TEXT[o.fs]}, "
+            f"beast-boot then creates a storage partition for your ISO files ({FS_TEXT[o.fs]}, "
             f"label {o.label}) and a {ESP_SIZE_MIB} MiB boot partition ({ESP_LABEL}). "
             f"Partition table: {LAYOUT_TEXT[o.layout]}.",
         ]
@@ -796,7 +796,7 @@ class Controller:
             details.append("Its volumes will be unmounted first: " + ", ".join(row.disk.mountpoints))
         f = row.freshness
         if f is not None and f.state != REINSTALL:
-            have = f"beast-booter {f.installed.version}" if f.installed and f.installed.version else "beast-booter"
+            have = f"beast-boot {f.installed.version}" if f.installed and f.installed.version else "beast-boot"
             details.append(f"It already has {have}. To keep the files on it, cancel and use "
                            "Update boot files instead.")
         details.append("Your system will ask for administrator rights to write to the drive.")
@@ -816,10 +816,10 @@ class Controller:
         f = row.freshness
         now = f" (it has {f.installed.version} now)" if f and f.installed and f.installed.version else ""
         details = (
-            f"The boot code and the boot partition are replaced with beast-booter {version}{now}.",
+            f"The boot code and the boot partition are replaced with beast-boot {version}{now}.",
             *(("That is older than what the drive has: this downgrades it.",) if f and f.state == NEWER else ()),
             "The storage partition with your files is not touched.",
-            "This only works on a drive that beast-booter installed; anything else is refused.",
+            "This only works on a drive that beast-boot installed; anything else is refused.",
             "Your system will ask for administrator rights to write to the drive.",
         )
         req = ConfirmRequest(spec, False, "Update the boot files?", row.describe(), details, "", "Update")
@@ -887,7 +887,7 @@ class Controller:
         if spec.kind == "device":
             self.hold_probes()
         # A private directory (mode 0700): nobody else can create its cancel file.
-        tmp = tempfile.mkdtemp(prefix="beast-booter-gui-", dir=self._tmp_root)
+        tmp = tempfile.mkdtemp(prefix="beast-boot-gui-", dir=self._tmp_root)
         progress_file = os.path.join(tmp, "progress.jsonl")
         # Created here so it belongs to the user even when an elevated CLI appends to it.
         open(progress_file, "x").close()
@@ -899,7 +899,7 @@ class Controller:
             argv = build_cli_argv(spec, python=self.python, launcher=self.launcher,
                                   progress_file=progress_file, dist=str(self.dist.path), cancel_file=cancel_path)
             if not os.path.isfile(self.launcher):
-                raise BeastError(f"{self.launcher} is missing; the beast-booter folder is incomplete")
+                raise BeastError(f"{self.launcher} is missing; the beast-boot folder is incomplete")
             elevated = spec.kind == "device" and not self.backend().is_elevated()
             state.note("running: " + " ".join(_quote(a) for a in argv), "debug")
         except Exception as e:  # noqa: BLE001 - shown in the window
@@ -1100,7 +1100,7 @@ class Controller:
         if spec.action == "update":
             return ("Stopping in the middle can leave the boot files incomplete, so the drive may not boot "
                     "until you run Update again. Your own files are not touched by an update.")
-        return ("Stopping in the middle of writing leaves the drive unusable until you install beast-booter "
+        return ("Stopping in the middle of writing leaves the drive unusable until you install beast-boot "
                 "on it again, and its previous contents may already be gone.")
 
     def dismiss(self) -> None:
@@ -1139,7 +1139,7 @@ class Controller:
         if isinstance(data, dict) and isinstance(data.get("label"), str) and data["label"]:
             label = data["label"]
         secure_boot = (
-            "First start with Secure Boot on: shim reports that it cannot verify beast-booter and opens "
+            "First start with Secure Boot on: shim reports that it cannot verify beast-boot and opens "
             f'MokManager. Choose "Enroll key from disk", open {ESP_LABEL} and select {CERT_FILE}. '
             'Choose "View key" and compare its fingerprint with the one below, then Continue, Yes, '
             "Reboot. Each computer asks only once."
@@ -1162,7 +1162,7 @@ class Controller:
             return [
                 "Your ISO files and other data on the drive were not touched.",
                 ubuntu,
-                "Computers that already enrolled this beast-booter key start it directly. "
+                "Computers that already enrolled this beast-boot key start it directly. "
                 "On any other computer: " + secure_boot[0].lower() + secure_boot[1:],
             ]
         return [
@@ -1182,15 +1182,15 @@ class Controller:
 def _ok_title(spec: JobSpec) -> str:
     if spec.kind == "image":
         return "Image file created"
-    return "Boot files updated" if spec.action == "update" else "beast-booter is ready"
+    return "Boot files updated" if spec.action == "update" else "beast-boot is ready"
 
 
 def _ok_message(spec: JobSpec, version: str) -> str:
     if spec.kind == "image":
-        return f"{spec.target} now holds beast-booter {version}."
+        return f"{spec.target} now holds beast-boot {version}."
     if spec.action == "update":
-        return f"{spec.target_text} now has the boot files of beast-booter {version}."
-    return f"{spec.target_text} is now a beast-booter {version} drive."
+        return f"{spec.target_text} now has the boot files of beast-boot {version}."
+    return f"{spec.target_text} is now a beast-boot {version} drive."
 
 
 def _fail_title(spec: JobSpec) -> str:
@@ -1208,7 +1208,7 @@ def _target_state(spec: JobSpec, st: ProgressState) -> str:
     if spec.action == "update":
         return ("The boot files on the drive may be incomplete: run Update again before using it. "
                 "Your files in the storage partition are not touched by an update.")
-    return ("The drive was partly rewritten and won't work until you install beast-booter on it again. "
+    return ("The drive was partly rewritten and won't work until you install beast-boot on it again. "
             "Its previous contents are gone.")
 
 

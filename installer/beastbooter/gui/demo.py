@@ -2,7 +2,7 @@
 
 DemoBackend implements interfaces.PlatformBackend with a fixed set of
 realistic drives (a usable USB stick, one that fails while writing, a
-write-protected SD card, internal disks, one with an older beast-booter on it, ...). Its run_elevated() does not ask
+write-protected SD card, internal disks, one with an older beast-boot on it, ...). Its run_elevated() does not ask
 for administrator rights; it starts the command as a normal process. The demo
 controller points the command at fake_cli.py instead of the real CLI, so
 nothing is ever written.
@@ -27,7 +27,7 @@ from .localproc import LocalProcess
 
 GB = 1000**3
 FAKE_CLI = Path(__file__).resolve().with_name("fake_cli.py")
-# A drive that already has an older beast-booter: the window offers Update boot files.
+# A drive that already has an older beast-boot: the window offers Update boot files.
 OLD_BEAST = "Kingston DataTraveler Max"
 OLD_BOOT = InstalledBoot("0.0.9", "0000demo0000", 2, install_id="demo", how="demo")
 # ... with a firmware pack on it (an installed.json entry, as `firmware install` writes it)

@@ -569,5 +569,5 @@ def test_line_ui_document_and_header():
     ui = LineUI(io.StringIO("2\n"), out)
     ui.set_mode("beast-net: Ubuntu's Secure Boot key", ())
     assert ui.document("Fingerprints", "SHA-256 abc", [Item("Continue", 1), Item("Back", 2)]) == 2
-    assert "beast-booter / beast-net    beast-net: Ubuntu's Secure Boot key" in out.getvalue()
+    assert "beast-boot / beast-net    beast-net: Ubuntu's Secure Boot key" in out.getvalue()
     assert "SHA-256 abc" in out.getvalue()

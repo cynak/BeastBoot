@@ -1,4 +1,4 @@
-"""beast-booter desktop GUI (Tkinter/ttk; Tk ships with the portable Python runtime).
+"""beast-boot desktop GUI (Tkinter/ttk; Tk ships with the portable Python runtime).
 
     python beast_booter_launch.py --gui [--dist DIR] [--demo] [--scale FACTOR] [--theme dark|light]
     python beast_booter_launch.py --gui --selftest
@@ -28,8 +28,8 @@ import sys
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="beast-booter --gui",
-        description="Make a beast-booter multi-boot USB drive (graphical).",
+        prog="beast-boot --gui",
+        description="Make a beast-boot multi-boot USB drive (graphical).",
     )
     p.add_argument("--dist", metavar="DIR",
                    help="boot files directory (default: $BEAST_BOOTER_DIST, the portable "
@@ -52,16 +52,16 @@ def main(argv: list[str] | None = None) -> int:
     sys.dont_write_bytecode = True
     args = build_parser().parse_args(argv)
     if args.scale is not None and not 0.5 <= args.scale <= 4.0:
-        print("beast-booter: error: --scale must be between 0.5 and 4", file=sys.stderr)
+        print("beast-boot: error: --scale must be between 0.5 and 4", file=sys.stderr)
         return 2
     try:
         import tkinter  # noqa: F401
     except ImportError as e:
         print(
-            "beast-booter: error: the graphical interface needs Tkinter, which this Python "
-            f"does not have ({e}).\n  Use the portable beast-booter package (its Python includes Tk), "
+            "beast-boot: error: the graphical interface needs Tkinter, which this Python "
+            f"does not have ({e}).\n  Use the portable beast-boot package (its Python includes Tk), "
             "install your distribution's python3-tk package, or use the command line: "
-            "beast-booter --help",
+            "beast-boot --help",
             file=sys.stderr,
         )
         return 1

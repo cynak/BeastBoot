@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# beast-booter: create a local Secure Boot signing key (run via `make keys`).
+# beast-boot: create a local Secure Boot signing key (run via `make keys`).
 #
 # Writes, into ${BB_KEY_DIR:-$BB_ROOT/keys}:
-#   beast-booter.key   RSA-2048 private key, PEM, mode 0600. NEVER share or commit it.
-#   beast-booter.crt   self-signed X.509 certificate, PEM (used by sbsign)
-#   beast-booter.cer   the same certificate, DER (shipped on the drive as
+#   beast-boot.key   RSA-2048 private key, PEM, mode 0600. NEVER share or commit it.
+#   beast-boot.crt   self-signed X.509 certificate, PEM (used by sbsign)
+#   beast-boot.cer   the same certificate, DER (shipped on the drive as
 #                      ENROLL_THIS_KEY_IN_MOKMANAGER.cer for MokManager)
 #
 # The certificate carries extendedKeyUsage=codeSigning only. In particular it
@@ -16,7 +16,7 @@
 #                 certificate will no longer trust newly signed builds)
 # Environment:
 #   BB_KEY_DIR    output directory          (default: $BB_ROOT/keys)
-#   BB_KEY_CN     certificate common name   (default: "beast-booter Secure Boot key (local)")
+#   BB_KEY_CN     certificate common name   (default: "beast-boot Secure Boot key (local)")
 #   BB_KEY_DAYS   validity in days          (default: 3650, about 10 years;
 #                 firmware and shim do not check certificate dates)
 set -euo pipefail
@@ -24,7 +24,7 @@ export LC_ALL=C
 
 BB_ROOT="${BB_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 KEY_DIR="${BB_KEY_DIR:-$BB_ROOT/keys}"
-CN="${BB_KEY_CN:-beast-booter Secure Boot key (local)}"
+CN="${BB_KEY_CN:-beast-boot Secure Boot key (local)}"
 DAYS="${BB_KEY_DAYS:-3650}"
 
 die() { echo "keygen: error: $*" >&2; exit 1; }
@@ -42,9 +42,9 @@ command -v openssl >/dev/null || die "openssl not found"
 case "$CN" in */*|*,*|*=*|*+*|*\\*) die "BB_KEY_CN must not contain / , = + or \\" ;; esac
 [[ "$DAYS" =~ ^[0-9]+$ ]] || die "BB_KEY_DAYS must be a number of days"
 
-KEY="$KEY_DIR/beast-booter.key"
-CRT="$KEY_DIR/beast-booter.crt"
-CER="$KEY_DIR/beast-booter.cer"
+KEY="$KEY_DIR/beast-boot.key"
+CRT="$KEY_DIR/beast-boot.crt"
+CER="$KEY_DIR/beast-boot.cer"
 
 existing=()
 for f in "$KEY" "$CRT" "$CER"; do [ -e "$f" ] && existing+=("$f"); done

@@ -58,7 +58,7 @@ def apply(cfg: userconfig.UserConfig, args) -> list[str]:
         cfg.unset(k)
     for k, v in pairs:
         if k not in userconfig.KNOWN:
-            warnings.append(f"{k} is not a beast-booter setting; GRUB gets it as is")
+            warnings.append(f"{k} is not a beast-boot setting; GRUB gets it as is")
         cfg.set(k, v)
     return warnings
 

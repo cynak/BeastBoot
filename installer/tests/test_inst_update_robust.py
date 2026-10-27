@@ -160,7 +160,7 @@ def test_vanish_while_writing_then_rerun_finishes(backend, fake_dist, fake_dist_
     assert err["event"] == "error" and err["code"] == "device-vanished"
     msg = err["message"]
     assert msg.startswith("/dev/fakesdz stopped responding while it was being written: the system now sees it "
-                          "as empty (no medium). This is the drive, not beast-booter")
+                          "as empty (no medium). This is the drive, not beast-boot")
     assert "Unplug it, plug it back in and run Update again; the update starts over and completes" in msg
     assert "partition 1 (your files) is not touched" in msg
     assert f"kernel: {KERNEL_LINE}" in warnings and backend.logs[-1].closed
@@ -168,7 +168,7 @@ def test_vanish_while_writing_then_rerun_finishes(backend, fake_dist, fake_dist_
     with ImageTarget(str(backend.disk_file), writable=False) as t:  # recognisably unfinished
         assert not any(t.read(esp_offset(backend), SECTOR_SIZE))
     assert len(records(backend)) == 1
-    with pytest.raises(BeastError, match="not a beast-booter drive"):
+    with pytest.raises(BeastError, match="not a beast-boot drive"):
         commands.info(str(backend.disk_file), None)
 
     backend.replug()
@@ -321,7 +321,7 @@ def test_changed_after_first_read_uses_fresh_state(backend, fake_dist, fake_dist
 def test_vanished_message_wording():
     m = commands.vanished_message("/dev/sda", "update", "before")
     assert m == ("/dev/sda stopped responding before anything was written: the system now sees it as empty (no "
-                 "medium). This is the drive, not beast-booter: some USB sticks do this when they are warm or after "
+                 "medium). This is the drive, not beast-boot: some USB sticks do this when they are warm or after "
                  "long use. Unplug it, plug it back in and run Update again; the update starts over and completes; "
                  "nothing was changed.")
     assert "after it was written, before it could be checked" in commands.vanished_message("x", "install", "written")

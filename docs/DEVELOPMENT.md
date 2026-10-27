@@ -140,7 +140,7 @@ Activate it in a shell with `source .venv/bin/activate` if you want its
 
 | Path | What it is |
 |---|---|
-| `installer/beastbooter/` | the installer package (`bin/beast-booter`, `python3 -m beastbooter`). `layout.py` is the numeric layout contract. |
+| `installer/beastbooter/` | the installer package (`bin/beast-boot`, `python3 -m beastbooter`). `layout.py` is the numeric layout contract. |
 | `installer/beastbooter/gui/`, `installer/beast_booter_launch.py` | the graphical front end and the self-contained CLI/GUI entry point |
 | `installer/tests/` | installer unit tests (pytest; image files in temporary directories) |
 | `grub/` | the menu: `grub.cfg` and `beast/*.cfg` (GRUB script) -> `dist/esp/grub/` |
@@ -152,7 +152,7 @@ Activate it in a shell with `source .venv/bin/activate` if you want its
 | `beastnet/` | the helper's own code: `python/beastnet/` (network, WiFi, download, hand-off, curses and plain UIs), `rootfs/` (`/init`, udhcpc script), `tests/` (unit tests) |
 | `keys/` | your local Secure Boot signing key (`make keys`; private files are git-ignored) |
 | `dist/` | build output (git-ignored): exactly what goes on a drive, plus `manifest.json` |
-| `bin/` | `beast-booter` (installer) and `bb-dev` (developer helpers) |
+| `bin/` | `beast-boot` (installer) and `bb-dev` (developer helpers) |
 | `devtools/bbdev/` | `bb-dev`: `cli.py`, `paths.py`, `qemu.py` (all QEMU flags), `commands/<command>.py` |
 | `devtools/gdb/` | gdb scripts and the Python helper (`bbgrub.py`) used by `bb-dev gdb` |
 | `devtools/tests/` | unit tests of `bb-dev` (fast, no QEMU) |
@@ -171,7 +171,7 @@ Generated, git-ignored:
 |---|---|
 | `.tools/` | rootless toolchain (`bin/` wrappers, `root/` unpacked packages, `debs/`) and other tools (ShellCheck, syft, grype, osv-scanner); `cache/` holds the beast-net `.deb`s, linux-firmware files and the portable runtimes. Never delete files you did not put there. |
 | `.venv/` | Python dev virtualenv |
-| `out/dev/` | dev images: `beast-booter-dev.img` by default |
+| `out/dev/` | dev images: `beast-boot-dev.img` by default |
 | `out/vm/<image stem>/` | per-image VM state: `<mode>.vars`, `serial-<mode>.log`, `ovmf-debug.log`/`seabios-debug.log`, `monitor.sock`, `qmp.sock`, `qemu-<mode>.cmd` |
 | `out/dev/vscode.env` | environment for VS Code's Test Explorer (written by a VS Code task, see section 8) |
 | `out/e2e/` | e2e logs, cached fixture ISOs, base images, per-test work dirs |
@@ -185,8 +185,8 @@ Use this after changing anything in `build/`, `installer/`, the module lists,
 the SBAT template or the key, and before trusting a result:
 
 ```sh
-make build                              # dist/ (signs GRUB with keys/beast-booter.key)
-bin/bb-dev image --fixtures --debug     # out/dev/beast-booter-dev.img (make dev-image)
+make build                              # dist/ (signs GRUB with keys/beast-boot.key)
+bin/bb-dev image --fixtures --debug     # out/dev/beast-boot-dev.img (make dev-image)
 bin/bb-dev image --fixtures --debug --force   # ... again, replacing the existing image
 bin/bb-dev vm                           # boot it: UEFI, USB stick, a window (make vm)
 bin/bb-dev vm --mode bios               # the same image under SeaBIOS (make vm MODE=bios)
@@ -209,7 +209,7 @@ recipe next to it, `out/dev/<name>.bbdev.json` (with the `dist/` build id
 and the installer's layout version), so it can be rebuilt the same way.
 On an existing image without `--force`, `bb-dev image` offers a refresh
 instead of failing: nothing to do when the image is current,
-`beast-booter update` (boot files only, data partition kept) when only the
+`beast-boot update` (boot files only, data partition kept) when only the
 build differs, a rebuild with the given options when its layout is older.
 `--yes` answers that question; `--force` always replaces the image.
 
@@ -221,7 +221,7 @@ marker):
 | The image | What `bb-dev vm` does |
 |---|---|
 | same layout and build id as `dist/` | boots it |
-| another build id, same layout | runs `bin/beast-booter update --image IMG --yes` and says so; the ISOs and `config.cfg` on the data partition stay |
+| another build id, same layout | runs `bin/beast-boot update --image IMG --yes` and says so; the ISOs and `config.cfg` on the data partition stay |
 | an older layout (layout 1: 64 MiB FAT16 ESP, no beast-net) | `update` cannot move partitions, so it asks, then rebuilds it from its recipe (`bb-dev image --force` with the same options, fixtures and ISOs copied again); `--yes` skips the question. An image without a recipe gets the setup defaults (`--fixtures --debug`), and it says so |
 | any of these with `--snapshot` | changes nothing, warns that it boots the old bootloader |
 | `dist/` older than `grub/` or `build/` | warns and suggests `make build`; `--build` runs it first |
@@ -267,10 +267,10 @@ Ctrl+Alt+Del in the QEMU window, or quit and run `bin/bb-dev vm` again.
   source directory, as for `build.sh`.
 - It refuses an image whose boot files are older than `dist/` (another
   build id, or an older layout), so menu edits are never tried on an old
-  bootloader, and prints the fix: `bin/beast-booter update --image ...`, or
+  bootloader, and prints the fix: `bin/beast-boot update --image ...`, or
   the `bb-dev image --force ...` command from the image's recipe. Running
   `bin/bb-dev vm` once does the same.
-- It writes the ESP with mtools at the offset `beast-booter info --json`
+- It writes the ESP with mtools at the offset `beast-boot info --json`
   reports, and prints what changed. `--watch` polls every second
   (`--interval`).
 - It works in every mode, Secure Boot included: GRUB script files are not
@@ -285,9 +285,9 @@ Ctrl+Alt+Del in the QEMU window, or quit and run `bin/bb-dev vm` again.
 
 ```sh
 make test                                           # installer unit tests (seconds)
-bin/beast-booter install --image out/dev/try.img --size 2G --fs fat32 --yes
-bin/beast-booter info --image out/dev/try.img --json
-bin/beast-booter update --image out/dev/try.img --yes   # rewrite boot code + ESP from dist/
+bin/beast-boot install --image out/dev/try.img --size 2G --fs fat32 --yes
+bin/beast-boot info --image out/dev/try.img --json
+bin/beast-boot update --image out/dev/try.img --yes   # rewrite boot code + ESP from dist/
 ```
 
 Drives use layout 2: partition 1 is the data partition (exFAT, FAT32 or
@@ -301,7 +301,7 @@ ESP of an image with mtools:
 
 ```sh
 source scripts/dev-env.sh
-esp=$(bin/beast-booter info --image out/dev/try.img --json |
+esp=$(bin/beast-boot info --image out/dev/try.img --json |
       python3 -c 'import json, sys; print(json.load(sys.stdin)["esp"]["start_lba"] * 512)')
 MTOOLS_SKIP_CHECK=1 mdir -i "out/dev/try.img@@$esp" ::/grub/beast
 MTOOLS_SKIP_CHECK=1 mtype -i "out/dev/try.img@@$esp" ::/grub/beast/device.cfg
@@ -346,7 +346,7 @@ For a non-interactive run, put a plan in a JSON file on the data partition
 and point `bb_beastnet_script` at it (`bb-dev debug-config --set
 bb_beastnet_script=/plan.json`; format in [BEASTNET.md §5](BEASTNET.md#5-the-helper-environment-initramfs)).
 `bb-dev menu-sync` does not update `beast-net/`; run `make build`, and the
-next `bb-dev vm` updates the image (or `bin/beast-booter update --image ...`).
+next `bb-dev vm` updates the image (or `bin/beast-boot update --image ...`).
 
 ### 4.5 Desktop app loop
 
@@ -368,7 +368,7 @@ out/gui-runtime/python/bin/python3 installer/beast_booter_launch.py --gui --demo
 
 That is the same interpreter the Linux package runs, so it is also the
 closest check of what users get. To test the real package, `make portable`
-and unpack `out/portable/beast-booter-<v>-linux-x86_64.tar.gz`.
+and unpack `out/portable/beast-boot-<v>-linux-x86_64.tar.gz`.
 
 The real Tk window tests (`installer/tests/test_x_gui_window.py`) only run
 when `BB_GUI_TEST_DISPLAY` names an X display, so they never pop up windows
@@ -483,7 +483,7 @@ the data partition and writes `/beast-booter/config.cfg`.
 
 | Option | Default | Effect |
 |---|---|---|
-| `--out PATH` | `out/dev/beast-booter-dev.img` | image file |
+| `--out PATH` | `out/dev/beast-boot-dev.img` | image file |
 | `--size SIZE` | `4G` | image size (`256M`, `8G`, bytes) |
 | `--layout msdos\|gpt` | `msdos` | partition table |
 | `--fs exfat\|fat32\|ntfs` | exFAT if udisks works, else FAT32 | data filesystem |
@@ -507,7 +507,7 @@ Boots an image in QEMU with the flags the e2e suite uses (KVM with
 
 | Option | Default | Effect |
 |---|---|---|
-| `--image PATH` | `out/dev/beast-booter-dev.img` | the drive |
+| `--image PATH` | `out/dev/beast-boot-dev.img` | the drive |
 | `--mode MODE` | `uefi` | firmware, see below |
 | `--bus usb\|sata\|virtio\|nvme` | `usb` | how the drive is attached |
 | `--display gtk\|sdl\|vnc\|none` | `gtk` if there is a desktop session and QEMU's GTK module works, else `sdl` if its SDL module works, else `none` | `gtk` and `sdl` open a window; `vnc` listens on 127.0.0.1:5900+N; an explicit `gtk` that cannot work falls back to `sdl`, then to `vnc`; an explicit `sdl` is used as given |
@@ -530,7 +530,7 @@ Boots an image in QEMU with the flags the e2e suite uses (KVM with
 | `uefi` | OVMF, Secure Boot off | `out/vm/<stem>/uefi.vars`, kept between runs |
 | `sb` | OVMF Secure Boot, Microsoft keys | `sb.vars`, created from the Microsoft-keys template on first run and kept, so a key you enroll by hand in MokManager stays enrolled |
 | `sb-fresh` | same | brand-new Microsoft-keys vars on every run: never enrolled |
-| `sb-enrolled` | same | rebuilt on every run: Microsoft keys plus `keys/beast-booter.cer` in MokList (`virt-fw-vars --add-mok`, exactly what MokManager enrollment stores). Warns when the image was signed with another key (`bb-dev image --force` rebuilds it) |
+| `sb-enrolled` | same | rebuilt on every run: Microsoft keys plus `keys/beast-boot.cer` in MokList (`virt-fw-vars --add-mok`, exactly what MokManager enrollment stores). Warns when the image was signed with another key (`bb-dev image --force` rebuilds it) |
 
 Everything for one image lives in `out/vm/<image stem>/`: `<mode>.vars`,
 `serial-<mode>.log`, `ovmf-debug.log` / `seabios-debug.log`, `monitor.sock`
@@ -618,11 +618,11 @@ shows the gdb command line. What works on `pc` and on `efi` is in
 
 Every boot writes the guest's serial output to
 `out/vm/<image stem>/serial-<mode>.log` (also when serial is on stdio), for
-the default image `out/vm/beast-booter-dev/serial-uefi.log`:
+the default image `out/vm/beast-boot-dev/serial-uefi.log`:
 
 ```sh
-tail -F out/vm/beast-booter-dev/serial-uefi.log
-grep -a 'BEAST:' out/vm/beast-booter-dev/serial-bios.log
+tail -F out/vm/beast-boot-dev/serial-uefi.log
+grep -a 'BEAST:' out/vm/beast-boot-dev/serial-bios.log
 ```
 
 - By default (`--serial stdio`) the terminal you started `bb-dev vm` in is
@@ -636,8 +636,8 @@ grep -a 'BEAST:' out/vm/beast-booter-dev/serial-bios.log
 - The log contains GRUB's terminal escape codes; `grep -a` and `less -R`
   cope with that. Lines wrap at 80 columns unless `bb_debug=1` and
   `bb_serial=1` are both on (then GRUB is told the terminal is 1024 wide).
-- The human monitor is a unix socket: `nc -U out/vm/beast-booter-dev/monitor.sock`
-  (OpenBSD netcat) or `socat - UNIX-CONNECT:out/vm/beast-booter-dev/monitor.sock`,
+- The human monitor is a unix socket: `nc -U out/vm/beast-boot-dev/monitor.sock`
+  (OpenBSD netcat) or `socat - UNIX-CONNECT:out/vm/beast-boot-dev/monitor.sock`,
   then for example `system_reset`, `sendkey ret`, `sendkey esc`,
   `screendump /tmp/screen.ppm`, `info status`, `quit`. Sending keys through
   the monitor is more reliable than typing into a serial console attached
@@ -808,15 +808,15 @@ pre-enrolled), never the signed binaries or the verification in them.
 
 ### 7.8 Debugging on real hardware
 
-1. Write a stick with the installer (`bin/beast-booter install --device /dev/sdX`;
+1. Write a stick with the installer (`bin/beast-boot install --device /dev/sdX`;
    it refuses fixed disks and mounted devices and asks you to type the
    device name). bb-dev itself never touches real devices.
 2. Make a debug config and copy it onto the stick's data partition, into
-   the (hidden) `beast-booter` folder:
+   the (hidden) `beast-boot` folder:
 
    ```sh
    bin/bb-dev debug-config --set bb_debug=1 bb_serial=1 pager=1 --print > config.cfg
-   mkdir -p /media/$USER/BEASTBOOTER/beast-booter
+   mkdir -p /media/$USER/BEASTBOOTER/beast-boot
    cp config.cfg /media/$USER/BEASTBOOTER/beast-booter/config.cfg
    ```
 
@@ -835,13 +835,13 @@ Common failures:
 |---|---|---|
 | blue shim screen "Verification failed: (0x1A) Security Violation" | Secure Boot on, BeastBoot key not enrolled on this machine | enroll it, [SECURE_BOOT.md §2](SECURE_BOOT.md#2-first-boot-with-secure-boot-on-enroll-the-key) |
 | shim "SBAT data failed: Security Policy Violation" | the machine's SBAT revocation level is newer than our GRUB | rebuild with a newer GRUB; the sbom-vuln skill checks SBAT |
-| `grub rescue>` or "error: file '/grub/...' not found" | GRUB found no usable ESP / menu files (damaged ESP, or BIOS core.img could not find partition 2) | `beast-booter update --device /dev/sdX` |
-| `BEAST: error no-data-partition`, menu empty | partition 1 not found or not readable; with Secure Boot on an NTFS data partition is invisible | check the partition table (`beast-booter info`); use exFAT/FAT32 |
+| `grub rescue>` or "error: file '/grub/...' not found" | GRUB found no usable ESP / menu files (damaged ESP, or BIOS core.img could not find partition 2) | `beast-boot update --device /dev/sdX` |
+| `BEAST: error no-data-partition`, menu empty | partition 1 not found or not readable; with Secure Boot on an NTFS data partition is invisible | check the partition table (`beast-boot info`); use exFAT/FAT32 |
 | `BEAST: error iso-not-found` | `bb_autoboot` (or a menu path) points to a file that is not there | fix the path; it is relative to the data partition root |
 | `BEAST: error loopback-failed` | GRUB could not open the ISO as a loop device | check the file (checksum); try copying it again |
 | `BEAST: error no-recipe` | the ISO layout is not recognised | [ISO_SUPPORT.md](ISO_SUPPORT.md#recipes); report it with the `BEAST:` output |
 | `BEAST: error windows-sb` | Windows ISO with Secure Boot on (wimboot is unsigned) | turn Secure Boot off for that boot |
-| `BEAST: error grubenv-not-writable` | `save_env` to `($esp)/grub/grubenv` failed (Windows setup/pe mode) | the drive's grubenv is missing or damaged: `beast-booter update` recreates it |
+| `BEAST: error grubenv-not-writable` | `save_env` to `($esp)/grub/grubenv` failed (Windows setup/pe mode) | the drive's grubenv is missing or damaged: `beast-boot update` recreates it |
 | `BEAST: error sb-verify-failed` | shim refused the ISO's kernel (unsigned, or signed by a key this machine does not trust) | enroll that distribution's key via "Enroll a key (MokManager)", or turn Secure Boot off for that boot |
 | `BEAST: error boot-failed` | GRUB's `linux`, `initrd`, `chainloader` or `boot` failed without Secure Boot | read the GRUB error just above; `debug=linux,loader` |
 | kernel starts, then the live system cannot find its medium (casper "Unable to find a medium containing a live file system", dracut timeouts, "/dev/disk/by-uuid/... does not exist") | the ISO's initramfs cannot mount the data partition's filesystem | use a FAT32 data partition, see [ISO_SUPPORT.md](ISO_SUPPORT.md#the-data-partitions-filesystem) |
@@ -889,7 +889,7 @@ terminal; with a window (GTK or SDL) that terminal shows bb-dev's messages, with
 
 | Configuration | What it debugs |
 |---|---|
-| Installer: info --json (dev image) | `python -m beastbooter info --image out/dev/beast-booter-dev.img --json` |
+| Installer: info --json (dev image) | `python -m beastbooter info --image out/dev/beast-boot-dev.img --json` |
 | Installer: install a scratch image... | `install --image out/dev/debug-install.img --size 2G` with a layout and filesystem you pick |
 | Installer: custom arguments... | `python -m beastbooter` with arguments you type |
 | bb-dev: doctor / image / vm --print-cmd / menu-sync / debug-config --show / custom arguments... | `python -m bbdev ...` with `PYTHONPATH=devtools:installer` |
@@ -910,7 +910,7 @@ GRUB debugging step by step:
    with its gdb stub on port 1234.
 2. Start **GRUB (BIOS): attach gdb to QEMU** (F5). Its pre-launch task runs
    `bb-dev gdb --platform pc --print-cmd`, which writes the session file
-   `out/vm/beast-booter-dev/gdb-pc.gdb` (symbol directories, stub address,
+   `out/vm/beast-boot-dev/gdb-pc.gdb` (symbol directories, stub address,
    the helpers from `devtools/gdb/`) without starting gdb, and links the
    matching `kernel.exec` next to it as the configuration's `program`. The
    C/C++ debugger then starts gdb and sources that session file instead of
@@ -927,7 +927,7 @@ GRUB debugging step by step:
 For UEFI use **GRUB (UEFI): attach gdb to QEMU** the same way, after the
 VM (task **VM: wait for gdb**, mode `uefi`, or `bin/bb-dev vm --gdb`) has
 reached the menu at least once (see 7.6). Both configurations work on the
-default image `out/dev/beast-booter-dev.img`; for another image use
+default image `out/dev/beast-boot-dev.img`; for another image use
 `bb-dev gdb --image PATH` in a terminal.
 
 The gdb side of this (sourcing the session file over MI with async mode,

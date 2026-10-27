@@ -7,7 +7,7 @@ falls back to its legacy x86 loader, which exits boot services and enters
 the image without its EFI entry point: wimboot cannot run that way.
 Needs 0001.
 
-beast-booter (build/wimboot/); to be offered upstream with 0001.
+beast-boot (build/wimboot/); to be offered upstream with 0001.
 
 ---
 --- a/src/elf2efi.c

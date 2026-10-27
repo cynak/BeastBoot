@@ -128,16 +128,16 @@ jobs:
           umask 077
           dir="$(mktemp -d "$RUNNER_TEMP/bb-key.XXXXXX")"
           chmod 0700 "$dir"
-          printf '%s\n' "$KEY_PEM" > "$dir/beast-booter.key"
-          printf '%s\n' "$CERT_PEM" > "$dir/beast-booter.crt"
-          openssl x509 -in "$dir/beast-booter.crt" -outform DER -out "$dir/beast-booter.cer"
+          printf '%s\n' "$KEY_PEM" > "$dir/beast-boot.key"
+          printf '%s\n' "$CERT_PEM" > "$dir/beast-boot.crt"
+          openssl x509 -in "$dir/beast-boot.crt" -outform DER -out "$dir/beast-boot.cer"
           echo "BB_KEY_DIR=$dir" >> "$GITHUB_ENV"
 
       - name: Throwaway signing key (dry run)
         if: env.OFFICIAL != 'true'
         run: |
           dir="$(mktemp -d "$RUNNER_TEMP/bb-key.XXXXXX")"
-          BB_KEY_DIR="$dir" BB_KEY_CN="beast-booter dry-run throwaway key (run $GITHUB_RUN_ID)" build/keygen.sh
+          BB_KEY_DIR="$dir" BB_KEY_CN="beast-boot dry-run throwaway key (run $GITHUB_RUN_ID)" build/keygen.sh
           echo "BB_KEY_DIR=$dir" >> "$GITHUB_ENV"
 
       - name: Gate baseline (the previous release's vulnerability report)
@@ -250,7 +250,7 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
-            release/beast-booter-*
+            release/beast-boot-*
             release/SHA256SUMS
 
       - name: Create the GitHub Release
@@ -260,7 +260,7 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
           PRERELEASE: ${{ needs.build.outputs.prerelease }}
         run: |
-          args=(--verify-tag --title "beast-booter $VERSION" --notes-file release/_release/RELEASE_NOTES.md)
+          args=(--verify-tag --title "beast-boot $VERSION" --notes-file release/_release/RELEASE_NOTES.md)
           if [ "$PRERELEASE" = true ]; then args+=(--prerelease); fi
           files=()
           while read -r _ name; do files+=("release/$name"); done < release/SHA256SUMS

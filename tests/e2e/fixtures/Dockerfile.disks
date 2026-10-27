@@ -1,0 +1,18 @@
+# Build environment for the Disk tools fixtures (tests/e2e/fixtures/disks.py).
+# Package versions are pinned to what Ubuntu 26.04 shipped when the recipe was
+# written; if one is gone from the archive, bump the pin (the recipe hash changes,
+# so the cache rebuilds).
+FROM ubuntu:26.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update -qq \
+ && apt-get install -y -qq --no-install-recommends \
+      python3-minimal \
+      mdadm=4.5-5ubuntu1.1 \
+      lvm2=2.03.31-2ubuntu3 \
+      cryptsetup-bin=2:2.8.4-1ubuntu4 \
+      btrfs-progs=6.17.1-1build1 \
+      xfsprogs=6.18.0-3 \
+      ntfs-3g=1:2022.10.3-5ubuntu1.1 \
+      e2fsprogs=1.47.2-3ubuntu4 \
+      gdisk fdisk kmod \
+ && rm -rf /var/lib/apt/lists/*

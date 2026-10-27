@@ -106,7 +106,7 @@ def load_dist(dist_dir: str | os.PathLike, staging: str | os.PathLike) -> Dist:
     try:
         manifest = json.loads(mpath.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        raise BeastError(f"{mpath} is missing; is {root} a beast-booter dist directory?") from None
+        raise BeastError(f"{mpath} is missing; is {root} a beast-boot dist directory?") from None
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
         raise BeastError(f"cannot read {mpath}: {e}") from None
     if not isinstance(manifest, dict) or manifest.get("schema") != MANIFEST_SCHEMA:

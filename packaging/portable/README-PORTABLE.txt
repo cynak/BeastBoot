@@ -11,12 +11,12 @@ deleting the folder removes it.
 START
 %% if linux
   GUI   double-click "BeastBooter" (or run ./BeastBooter in a terminal).
-        beast-booter.desktop does the same from a file manager; on GNOME
+        beast-boot.desktop does the same from a file manager; on GNOME
         right-click it > "Allow Launching" first. It only works inside this
         folder (copy it elsewhere and edit Exec= to an absolute path).
-  CLI   ./beast-booter --help
-        sudo ./beast-booter install --device /dev/sdX
-        ./beast-booter install --image my.img --size 8G      (no root needed)
+  CLI   ./beast-boot --help
+        sudo ./beast-boot install --device /dev/sdX
+        ./beast-boot install --image my.img --size 8G      (no root needed)
 
   Admin rights: the window runs as you. Only writing a USB drive needs root,
   so for that one step the GUI asks for your password (polkit/pkexec, or the
@@ -26,9 +26,9 @@ START
   GUI   double-click "BeastBooter.cmd". A console window flashes up and closes;
         the BeastBooter window stays.
   CLI   open a terminal in this folder:
-          beast-booter.cmd --help
-          beast-booter.cmd install --device \\.\PhysicalDrive2
-          beast-booter.cmd install --image my.img --size 8G   (no admin needed)
+          beast-boot.cmd --help
+          beast-boot.cmd install --device \\.\PhysicalDrive2
+          beast-boot.cmd install --image my.img --size 8G   (no admin needed)
 
   Admin rights: the window runs as you. Only writing a USB drive needs
   administrator rights, so for that one step Windows shows a UAC prompt
@@ -46,9 +46,9 @@ START
 %% if macos
   GUI   double-click "BeastBooter" (BeastBooter.app). The first time, see
         "Gatekeeper" below.
-  CLI   ./beast-booter.command --help            (double-click shows the help)
-        sudo ./beast-booter.command install --device /dev/disk4
-        ./beast-booter.command install --image my.img --size 8G
+  CLI   ./beast-boot.command --help            (double-click shows the help)
+        sudo ./beast-boot.command install --device /dev/disk4
+        ./beast-boot.command install --image my.img --size 8G
                                               (image files: no admin needed)
 
   Admin rights: the window runs as you. Only writing a USB drive needs
@@ -116,11 +116,11 @@ WHAT IS INSIDE
     Resources/payload/sbom/ software bill of materials (if built with one)
     Resources/docs/         SECURE_BOOT.md and PORTABLE.md
     Resources/VERSION       version number
-  beast-booter.command      sh script for the command line
+  beast-boot.command      sh script for the command line
 %% end
 %% if linux
-  BeastBooter, beast-booter sh scripts: GUI and command line
-  beast-booter.desktop      starts the GUI from a file manager
+  BeastBooter, beast-boot sh scripts: GUI and command line
+  beast-boot.desktop      starts the GUI from a file manager
   runtime/                  Python @PYTHON@ (see below), unmodified
   app/                      the BeastBoot program: plain .py source files
   payload/dist/             the boot files written to the USB drive, with
@@ -131,7 +131,7 @@ WHAT IS INSIDE
 %% end
 %% if windows
   BeastBooter.cmd           starts the GUI (runtime\pythonw.exe, no console)
-  beast-booter.cmd          command line (runtime\python.exe)
+  beast-boot.cmd          command line (runtime\python.exe)
   runtime\                  Python @PYTHON@ (see below), unmodified
   app\                      the BeastBoot program: plain .py source files
   payload\dist\             the boot files written to the USB drive, with

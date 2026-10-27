@@ -25,7 +25,7 @@ Layout choices (the same as mkfs.fat for the 64 MiB ESP):
   the root directory are rounded up to whole clusters so that every cluster is
   aligned to its own size on the partition (partitions start on 1 MiB).
 * The boot code area holds a 6-byte stub (int 18h = "not bootable, try the
-  next device", then halt). beast-booter boots through the MBR, never through
+  next device", then halt). beast-boot boots through the MBR, never through
   this volume boot record.
 
 Names: a name that is already a valid upper-case 8.3 name is stored as just

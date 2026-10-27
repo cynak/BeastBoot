@@ -161,5 +161,5 @@ def test_update_refuses_newer_layout(tmp_path, fake_dist, capsys):
         vol.write_file(ESP_MARKER_PATH, text.encode())
     progress = tmp_path / "u.jsonl"
     assert run_cli("update", "--image", img, "--dist", fake_dist, "--progress-file", progress) == 1
-    assert "newer beast-booter" in capsys.readouterr().err
+    assert "newer beast-boot" in capsys.readouterr().err
     assert read_events(progress)[-1]["code"] == "layout-too-new"

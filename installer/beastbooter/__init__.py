@@ -1,4 +1,4 @@
-"""beast-booter installer: create and update beast-booter USB drives and images."""
+"""beast-boot installer: create and update beast-boot USB drives and images."""
 
 from pathlib import Path as _Path
 

@@ -32,17 +32,17 @@ SEV_RANK = {"critical": 5, "high": 4, "medium": 3, "low": 2, "negligible": 1, "u
 OPEN = ("open", "affected", "under_investigation")
 # Every release file except SHA256SUMS, in the order they are listed.
 ASSETS = [
-    "beast-booter-{v}-linux-x86_64.tar.gz",
-    "beast-booter-{v}-windows-x86_64.zip",
-    "beast-booter-{v}-macos-x86_64.zip",
-    "beast-booter-{v}-macos-arm64.zip",
-    "beast-booter-{v}-dist.zip",
-    "beast-booter-{v}-sbom.cdx.json",
-    "beast-booter-{v}-sbom.spdx.json",
-    "beast-booter-{v}-vulnerabilities.json",
-    "beast-booter-{v}-VULNERABILITIES.md",
-    "beast-booter-{v}-ENROLL_THIS_KEY_IN_MOKMANAGER.cer",
-    "beast-booter-{v}-CERTIFICATE.txt",
+    "beast-boot-{v}-linux-x86_64.tar.gz",
+    "beast-boot-{v}-windows-x86_64.zip",
+    "beast-boot-{v}-macos-x86_64.zip",
+    "beast-boot-{v}-macos-arm64.zip",
+    "beast-boot-{v}-dist.zip",
+    "beast-boot-{v}-sbom.cdx.json",
+    "beast-boot-{v}-sbom.spdx.json",
+    "beast-boot-{v}-vulnerabilities.json",
+    "beast-boot-{v}-VULNERABILITIES.md",
+    "beast-boot-{v}-ENROLL_THIS_KEY_IN_MOKMANAGER.cer",
+    "beast-boot-{v}-CERTIFICATE.txt",
 ]
 VERSION_RE = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-~+][0-9A-Za-z.+~-]+)?")
 
@@ -133,8 +133,8 @@ def cert_facts(cer: Path) -> dict:
 
 def cmd_cert(a) -> int:
     f = cert_facts(Path(a.cer))
-    name = f"beast-booter-{a.version}-ENROLL_THIS_KEY_IN_MOKMANAGER.cer"
-    lines = [f"beast-booter {a.version} - Secure Boot certificate", ""]
+    name = f"beast-boot-{a.version}-ENROLL_THIS_KEY_IN_MOKMANAGER.cer"
+    lines = [f"beast-boot {a.version} - Secure Boot certificate", ""]
     if not a.official:
         lines += ["*** UNOFFICIAL LOCAL BUILD: signed with a local development key, NOT the project's",
                   "*** release key. Do not enroll this certificate unless you made this build yourself.", ""]
@@ -247,8 +247,8 @@ def human(n: int) -> str:
 
 def cmd_notes(a) -> int:
     d, v = Path(a.dir), a.version
-    rep = json.loads((d / f"beast-booter-{v}-vulnerabilities.json").read_text())
-    cert = cert_facts(d / f"beast-booter-{v}-ENROLL_THIS_KEY_IN_MOKMANAGER.cer")
+    rep = json.loads((d / f"beast-boot-{v}-vulnerabilities.json").read_text())
+    cert = cert_facts(d / f"beast-boot-{v}-ENROLL_THIS_KEY_IN_MOKMANAGER.cer")
     gate = json.loads(Path(a.gate).read_text()) if a.gate and Path(a.gate).is_file() else None
     s = rep.get("summary", {})
 
@@ -285,7 +285,7 @@ def cmd_notes(a) -> int:
         f"(`{cert['subject']}`), not the project's release key. Not for publication; do not enroll its "
         "certificate unless you made this build yourself.\n\n")
     repo = a.repo or os.environ.get("BB_RELEASE_REPO") or ""
-    attest = (f"gh attestation verify beast-booter-{v}-dist.zip -R {repo}   # build provenance, any file"
+    attest = (f"gh attestation verify beast-boot-{v}-dist.zip -R {repo}   # build provenance, any file"
               if repo and a.attestations else "")
     tmpl = Template((HERE / "RELEASE_NOTES.md.in").read_text())
     text = tmpl.substitute(
@@ -332,8 +332,8 @@ def cmd_verify(a) -> int:
     # SBOM: identical to the validated sbom/ copy, all validations PASS, schemas re-checked on the copies
     import validate_sbom as vs
     schemas = root / ".tools" / "cache" / "schemas"
-    pairs = [(f"beast-booter-{v}-sbom.cdx.json", "beast-booter.cdx.json", "cyclonedx-1.6", "bom-1.6.schema.json"),
-             (f"beast-booter-{v}-sbom.spdx.json", "beast-booter.spdx.json", "spdx-2.3", "spdx-schema.json")]
+    pairs = [(f"beast-boot-{v}-sbom.cdx.json", "beast-boot.cdx.json", "cyclonedx-1.6", "bom-1.6.schema.json"),
+             (f"beast-boot-{v}-sbom.spdx.json", "beast-boot.spdx.json", "spdx-2.3", "spdx-schema.json")]
     for rel_name, src, sdir, sfile in pairs:
         if (d / rel_name).is_file():
             if sha256(d / rel_name) != sha256(root / "sbom" / src):
@@ -345,7 +345,7 @@ def cmd_verify(a) -> int:
     bad = [k for k, r in val["checks"].items() if r["result"] != "PASS"]
     if bad:
         problems.append(f"sbom/validation.json has failing checks: {bad}")
-    cdx = json.loads((d / f"beast-booter-{v}-sbom.cdx.json").read_text())
+    cdx = json.loads((d / f"beast-boot-{v}-sbom.cdx.json").read_text())
     comps = list(vs.walk_components(cdx.get("components")))
     for need, why in (("esp/beast-net/vmlinuz", "beast-net kernel"), ("esp/beast-net/initrd.img", "beast-net initrd")):
         if need in json.loads((root / "dist" / "manifest.json").read_text())["files"] and \
@@ -354,9 +354,9 @@ def cmd_verify(a) -> int:
     if not any(c.get("bom-ref", "").startswith("runtime:python-build-standalone") for c in comps):
         problems.append("SBOM lacks the portable runtimes (packaging/portable/runtimes.lock)")
     # dist.zip: every file matches the manifest inside it, and that manifest is dist/manifest.json
-    zp = d / f"beast-booter-{v}-dist.zip"
+    zp = d / f"beast-boot-{v}-dist.zip"
     with zipfile.ZipFile(zp) as zf:
-        prefix = f"beast-booter-{v}-dist/"
+        prefix = f"beast-boot-{v}-dist/"
         names_in = zf.namelist()
         if any(not n.startswith(prefix) for n in names_in):
             problems.append(f"{zp.name}: entries outside {prefix}")
@@ -374,7 +374,7 @@ def cmd_verify(a) -> int:
         if len(names_in) != len(man["files"]) + 1:
             problems.append(f"{zp.name}: {len(names_in)} entries for {len(man['files'])} manifest files")
     # the certificate equals the one on the drive
-    cer = d / f"beast-booter-{v}-ENROLL_THIS_KEY_IN_MOKMANAGER.cer"
+    cer = d / f"beast-boot-{v}-ENROLL_THIS_KEY_IN_MOKMANAGER.cer"
     if sha256(cer) != man.get("secure_boot", {}).get("cert_sha256"):
         problems.append(f"{cer.name} is not the certificate dist/ was signed for")
     for p in problems:

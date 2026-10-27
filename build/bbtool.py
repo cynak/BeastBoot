@@ -144,7 +144,7 @@ def cmd_sbat_vs_level(args) -> None:
 def cmd_build_id(args) -> None:
     dist = Path(args.dist)
     h = hashlib.sha256()
-    h.update(f"beast-booter {args.version}\n".encode())
+    h.update(f"beast-boot {args.version}\n".encode())
     # Files we sign count by their unsigned hash, so a fresh signature is the same build.
     unsigned = {"esp/EFI/BOOT/grubx64.efi": args.unsigned_sha256}
     for spec in args.unsigned or []:
@@ -193,7 +193,7 @@ def cmd_manifest_write(args) -> None:
     cert = Path(args.cert_der).read_bytes()
     manifest = {
         "schema": 1,
-        "name": "beast-booter",
+        "name": "beast-boot",
         "version": args.version,
         "source_date_epoch": int(args.source_date_epoch),
         "build_id": args.build_id,

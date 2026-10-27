@@ -38,7 +38,7 @@ Example (host dry run of script mode):
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="python3 -m beastnet",
-        description="beast-net: download an ISO onto the beast-booter stick and boot it once.",
+        description="beast-net: download an ISO onto the beast-boot stick and boot it once.",
         epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--root", default="/", metavar="DIR",
                    help="look for proc/, sys/, dev/, etc/, run/, mnt/data and mnt/esp under DIR")

@@ -100,7 +100,7 @@ def test_install_device_failure(fake_dist, tmp_path):
     o = c.outcome
     assert c.phase is Phase.FAILED and o.code == "write-failed" and o.exit_code == 1
     assert "Input/output error" in o.message
-    assert "install beast-booter on it again" in o.target_state
+    assert "install beast-boot on it again" in o.target_state
 
 
 def test_update_success(fake_dist, tmp_path):
@@ -120,7 +120,7 @@ def test_crash_without_error_event(fake_dist, tmp_path):
     run_until_finished(c)
     o = c.outcome
     assert c.phase is Phase.FAILED and o.code == "exit-3"
-    assert "install beast-booter on it again" in o.target_state  # partition was already written
+    assert "install beast-boot on it again" in o.target_state  # partition was already written
 
 
 def test_image_unelevated_with_output_tail(fake_dist, tmp_path):
@@ -174,7 +174,7 @@ def test_cancel_file_stops_the_elevated_cli_between_steps(fake_dist, tmp_path):
     run_until_finished(c)
     o = c.outcome
     assert o.cancelled and o.code == "cancelled" and o.exit_code == 130
-    assert "install beast-booter on it again" in o.target_state
+    assert "install beast-boot on it again" in o.target_state
     steps = c.final_log  # it stopped at a step boundary, long before the end
     assert not any("Reading back what was written" in line.text for line in steps)
 
@@ -235,7 +235,7 @@ def test_cli_command_line_writes_no_bytecode_into_the_package(tmp_path):
     assert "-B" in interpreter
     env = {k: v for k, v in os.environ.items() if k != "PYTHONDONTWRITEBYTECODE"}
     proc = subprocess.run(interpreter + ["--version"], capture_output=True, text=True, env=env, timeout=60)
-    assert proc.returncode == 0 and "beast-booter" in proc.stdout, proc.stderr
+    assert proc.returncode == 0 and "beast-boot" in proc.stdout, proc.stderr
     assert _pycache_dirs(app) == []
     # No negative control ("without -B it writes bytecode"): the launcher itself now
     # sets sys.dont_write_bytecode as well, so -B is a second, independent guard.
@@ -307,7 +307,7 @@ def test_demo_drive_with_old_boot_files_is_current_after_an_update(fake_dist, tm
     f = rows[demo.OLD_BEAST].freshness
     assert f.state == "outdated" and f.installed.version == "0.0.9" and f.installed.build_id == "0000demo0000"
     assert all(r.freshness is None for r in c.rows if r.title != demo.OLD_BEAST)
-    assert c.update_notice.text.startswith(f"{demo.OLD_BEAST} has beast-booter 0.0.9; this app has 0.1.0.")
+    assert c.update_notice.text.startswith(f"{demo.OLD_BEAST} has beast-boot 0.0.9; this app has 0.1.0.")
     assert c.suggest_update
     c.request_update()
     c.confirm()

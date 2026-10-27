@@ -1,4 +1,4 @@
-"""`beast-booter firmware ...`: optional firmware packs for beast-net (docs/BEASTNET.md section 6).
+"""`beast-boot firmware ...`: optional firmware packs for beast-net (docs/BEASTNET.md section 6).
 
   catalog   show the catalog (<dist>/esp/beast-net/catalog.json, or --catalog)
   fetch     unprivileged: download every file of the packs from the catalog's
@@ -193,7 +193,7 @@ def load_catalog(path: str) -> Catalog:
 def dist_catalog(dist: str) -> Catalog:
     """The catalog shipped in a dist/ directory or .zip, checked against its
     manifest.json when the manifest lists it."""
-    with tempfile.TemporaryDirectory(prefix="beast-booter-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="beast-boot-") as tmp:
         root = prepare_dist_dir(dist, tmp)
         path = root / DIST_CATALOG
         where = f"{dist}: {DIST_CATALOG}"
@@ -304,7 +304,7 @@ def _mismatch(f: FwFile, url: str, what: str) -> BeastError:
 
 
 def _download_once(opener, url: str, f: FwFile, dest: str, rep: Reporter, on_bytes) -> None:
-    req = urllib.request.Request(url, headers={"User-Agent": f"beast-booter/{__version__}",
+    req = urllib.request.Request(url, headers={"User-Agent": f"beast-boot/{__version__}",
                                                "Accept-Encoding": "identity"})
     try:
         resp = opener.open(req, timeout=DOWNLOAD_TIMEOUT)
@@ -564,7 +564,7 @@ def _no_space(where: str, ids: list[str], space: esp.FwSpace) -> BeastError:
     return BeastError(
         f"not enough space on the boot partition{on} of {where} for {', '.join(ids)}: "
         f"{human_size(space.need)} needed, {human_size(space.available)} available{freed}; deselect packs or "
-        f"remove installed ones first (beast-booter firmware remove)", code="no-space")
+        f"remove installed ones first (beast-boot firmware remove)", code="no-space")
 
 
 def check_room(packs: list[FwPack], cat: Catalog, image: str | None, device: str | None,
@@ -709,7 +709,7 @@ def install(image: str | None, device: str | None, from_dir: str, dist: str | No
             allow_fixed: bool, rep: Reporter) -> dict:
     where = device if device is not None else image
     rep.start("firmware-install", where)
-    rep.step(f"Reading the beast-booter drive {where}", "check-target", 5)
+    rep.step(f"Reading the beast-boot drive {where}", "check-target", 5)
     drive = _Drive(image, device, allow_fixed=allow_fixed, writable=True)
     where = drive.where
     fetched = _read_pack_dir(from_dir)
@@ -769,7 +769,7 @@ def install(image: str | None, device: str | None, from_dir: str, dist: str | No
 def remove(image: str | None, device: str | None, pack_id: str, *, allow_fixed: bool, rep: Reporter) -> dict:
     where = device if device is not None else image
     rep.start("firmware-remove", where)
-    rep.step(f"Reading the beast-booter drive {where}", "check-target", 10)
+    rep.step(f"Reading the beast-boot drive {where}", "check-target", 10)
     drive = _Drive(image, device, allow_fixed=allow_fixed, writable=True)
     where = drive.where
     with drive.reader() as t:

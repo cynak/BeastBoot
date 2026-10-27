@@ -1,7 +1,7 @@
 """beast-net: "Trust Ubuntu's Secure Boot key" end to end (build/trust/README.md).
 
 The helper boots under OVMF with Secure Boot on (Microsoft keys, the
-beast-booter certificate in MokList), runs the action in script mode
+beast-boot certificate in MokList), runs the action in script mode
 (`{"action": "trust-ubuntu", ...}`), and powers off. The VM's variable store is
 then read with virt-fw-vars: the request mokutil wrote must hold exactly the
 files of build/trust/canonical/.
@@ -16,10 +16,10 @@ files of build/trust/canonical/.
   not its vendor_dbx: 0 of 8 revocations show there.)
 
 The two-step test needs the 0.1.2 chain (Debian's shim, the helper kernel
-signed with the beast-booter key). If dist/ still has Ubuntu's shim, set
+signed with the beast-boot key). If dist/ still has Ubuntu's shim, set
 BB_E2E_DEBIAN_SHIM to Debian's shimx64.efi.signed (shim-signed 1.51+16.1-2,
 SHA-256 pinned below): the test then puts it on its copy of the drive and
-re-signs the helper kernel with keys/beast-booter.key (or $BB_KEY_DIR), as
+re-signs the helper kernel with keys/beast-boot.key (or $BB_KEY_DIR), as
 build.sh does in 0.1.2. The boots need KVM; without it the tests skip.
 """
 
@@ -78,7 +78,7 @@ def use_debian_chain(drive, workdir: Path) -> None:
     data = Path(src).read_bytes()
     assert hashlib.sha256(data).hexdigest() == DEBIAN_SHIM_SHA256, f"{src} is not the pinned Debian shim"
     keys = Path(os.environ.get("BB_KEY_DIR") or env.KEYS_DIR)  # the key build.sh signs with
-    key, crt = keys / "beast-booter.key", keys / "beast-booter.crt"
+    key, crt = keys / "beast-boot.key", keys / "beast-boot.crt"
     missing = [t for t in ("sbsign", "sbattach") if not env.which(t)] + \
         [str(p) for p in (key, crt) if not p.exists()]
     if missing:

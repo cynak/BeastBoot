@@ -143,7 +143,7 @@ class Reporter:
 
     def warn(self, msg: str) -> None:
         # Warnings are shown even with --quiet.
-        self._print(f"beast-booter: warning: {msg}")
+        self._print(f"beast-boot: warning: {msg}")
         self._emit("warning", message=msg)
 
     def done(self, info: dict) -> None:

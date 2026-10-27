@@ -1,4 +1,4 @@
-# ShellCheck settings for beast-booter: used by scripts/lint.sh and by editor
+# ShellCheck settings for beast-boot: used by scripts/lint.sh and by editor
 # integrations (timonwong.shellcheck) alike. See docs/CODE_QUALITY.md.
 
 # Follow `source`/`.` to files given on the command line or found via

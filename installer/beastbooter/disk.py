@@ -70,7 +70,7 @@ def read_partition_table(read_at: ReadAt, disk_sectors: int) -> PartTable:
     table = PartTable("msdos", disk_id)
     for slot, status, ptype, start, size in entries:
         if ptype in MBR_EXTENDED_TYPES:
-            continue  # logical partitions are never part of a beast-booter layout
+            continue  # logical partitions are never part of a beast-boot layout
         table.entries[slot] = PartEntry(slot, start, size, "0x%02x" % ptype, bool(status & 0x80))
     return table
 

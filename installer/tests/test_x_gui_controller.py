@@ -581,7 +581,7 @@ def test_full_success(make, backend):
     assert c.poll() is True
     assert c.phase is Phase.DONE
     o = c.outcome
-    assert o.ok and o.info == info and o.title == "beast-booter is ready"
+    assert o.ok and o.info == info and o.title == "beast-boot is ready"
     assert "SanDisk Ultra" in o.message and "0.1.0" in o.message
     assert not os.path.exists(os.path.dirname(p.progress_file))  # temp dir cleaned up
     steps = c.next_steps(o)
@@ -618,7 +618,7 @@ def test_failure_after_writing_says_drive_needs_reinstall(make, backend):
     p.event(event="error", code="write-failed", message="I/O error")
     p.rc = 1
     c.poll()
-    assert "install beast-booter on it again" in c.outcome.target_state
+    assert "install beast-boot on it again" in c.outcome.target_state
 
 
 def test_update_failure_after_writing_keeps_user_files_message(make, backend):
@@ -693,7 +693,7 @@ def test_run_elevated_error(make, backend):
     c.confirm(True)
     assert c.phase is Phase.FAILED
     assert c.outcome.code == "start-failed" and c.outcome.message == "pkexec not found"
-    assert not list(Path(c._tmp_root).glob("beast-booter-gui-*"))  # temp dir removed
+    assert not list(Path(c._tmp_root).glob("beast-boot-gui-*"))  # temp dir removed
 
 
 def test_missing_launcher_fails_cleanly(make, backend, tmp_path):
@@ -869,7 +869,7 @@ def test_cancel_file_asks_the_elevated_cli_to_stop(make, backend):
     c.poll()
     o = c.outcome
     assert c.phase is Phase.FAILED and o.cancelled and o.code == "cancelled"
-    assert "install beast-booter on it again" in o.target_state
+    assert "install beast-boot on it again" in o.target_state
     assert not os.path.exists(os.path.dirname(cancel_file))  # temp dir cleaned up
 
 
@@ -1053,7 +1053,7 @@ def test_verify_dist_ok_and_failed(make, dist_copy):
 
 
 # ---------------------------------------------------------------------------
-# which beast-booter a drive has: probe_installed + installed.assess
+# which beast-boot a drive has: probe_installed + installed.assess
 # ---------------------------------------------------------------------------
 
 from beastbooter.installed import InstalledBoot, ProbeResult  # noqa: E402
@@ -1090,19 +1090,19 @@ def listed(c: Controller) -> dict:
 
 
 @pytest.mark.parametrize("found, state, summary", [
-    (boot("0.0.9"), "outdated", "beast-booter 0.0.9 · update available (0.1.0)"),
-    (boot("0.1.0"), "current", "beast-booter 0.1.0 · up to date"),
-    (boot("0.2.0"), "newer", "beast-booter 0.2.0 · newer than this app"),
-    (boot("0.0.5", layout=1), "reinstall", "beast-booter 0.0.5 · needs a reinstall"),
-    (boot(""), "outdated", "beast-booter (unknown version) · update available (0.1.0)"),
-    (ProbeResult(None, "no rights"), "unknown", "beast-booter drive"),
+    (boot("0.0.9"), "outdated", "beast-boot 0.0.9 · update available (0.1.0)"),
+    (boot("0.1.0"), "current", "beast-boot 0.1.0 · up to date"),
+    (boot("0.2.0"), "newer", "beast-boot 0.2.0 · newer than this app"),
+    (boot("0.0.5", layout=1), "reinstall", "beast-boot 0.0.5 · needs a reinstall"),
+    (boot(""), "outdated", "beast-boot (unknown version) · update available (0.1.0)"),
+    (ProbeResult(None, "no rights"), "unknown", "beast-boot drive"),
 ])
 def test_listed_drives_get_their_freshness(make, found, state, summary):
     b = ProbingBackend({STICK2.id: found})
     rows = listed(make(backend_factory=lambda: b))
     f = rows[STICK2.id].freshness
     assert f is not None and f.state == state and f.summary == summary
-    assert rows[STICK.id].freshness is None  # not a beast-booter drive (probe returned None)
+    assert rows[STICK.id].freshness is None  # not a beast-boot drive (probe returned None)
 
 
 def test_only_usable_drives_are_probed(make):
@@ -1135,7 +1135,7 @@ def test_notice_and_update_become_the_suggestion(make):
     listed(c)
     n = c.update_notice
     assert n.drive_id == STICK2.id and n.title == "Boot files update available"
-    assert n.text == ("Kingston DataTraveler has beast-booter 0.0.9; this app has 0.1.0. "
+    assert n.text == ("Kingston DataTraveler has beast-boot 0.0.9; this app has 0.1.0. "
                       "Select it and click Update boot files.")
     assert not c.suggest_update  # nothing selected yet
     c.select_drive(STICK.id)
@@ -1144,10 +1144,10 @@ def test_notice_and_update_become_the_suggestion(make):
     assert c.suggest_update and c.update_notice == n  # same notice: the list does not move
     assert "Update boot files" in c.selected_row.freshness.advice
     upd = c.request_update()
-    assert "beast-booter 0.1.0 (it has 0.0.9 now)." in upd.details[0]
+    assert "beast-boot 0.1.0 (it has 0.0.9 now)." in upd.details[0]
     c.cancel_confirm()
     inst = c.request_install()
-    assert any("already has beast-booter 0.0.9" in d and "Update boot files" in d for d in inst.details)
+    assert any("already has beast-boot 0.0.9" in d and "Update boot files" in d for d in inst.details)
     c.cancel_confirm()
     c.other_job_running = lambda: True
     assert not c.suggest_update  # busy: Update can't be clicked anyway

@@ -67,7 +67,7 @@ def test_detect_missing_firmware(laptop, catalog):
     # The GPU, bluetooth and the working r8169 / mt7921e interfaces are not reported.
     adv = {m.module: m.advice() for m in rep.missing}
     assert '"Intel WiFi" pack' in adv["iwlwifi"]
-    assert "no beast-booter firmware pack" in adv["foo_wifi"]
+    assert "no beast-boot firmware pack" in adv["foo_wifi"]
 
 
 def test_failed_link_means_no_firmware(laptop, catalog):

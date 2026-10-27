@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# beast-booter: build dist/ - every file that goes on a beast-booter drive.
+# beast-boot: build dist/ - every file that goes on a beast-boot drive.
 # Run via `make build` (which sources scripts/dev-env.sh first).
 #
 # Output (docs/ARCHITECTURE.md section 4):
@@ -78,7 +78,7 @@ VERSION="$(tr -d ' \t\r\n' < "$BB_ROOT/VERSION")"
 [[ "$VERSION" =~ ^[0-9][0-9A-Za-z.+~-]*$ ]] || die "VERSION has an unexpected format: '$VERSION'"
 
 KEY_DIR="${BB_KEY_DIR:-$BB_ROOT/keys}"
-KEY="$KEY_DIR/beast-booter.key"; CRT="$KEY_DIR/beast-booter.crt"; CER="$KEY_DIR/beast-booter.cer"
+KEY="$KEY_DIR/beast-boot.key"; CRT="$KEY_DIR/beast-boot.crt"; CER="$KEY_DIR/beast-boot.cer"
 for f in "$KEY" "$CRT" "$CER"; do
   [ -f "$f" ] || die "signing key not found: $f
        Run 'make keys' to create a local key (or set BB_KEY_DIR)."
@@ -120,7 +120,7 @@ chmod 0755 "$STAGE"
 ORIGINS="$WORK/origins.tsv"; : > "$ORIGINS"
 EXTRA="$WORK/extra.tsv"; : > "$EXTRA"
 
-log "beast-booter $VERSION, SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH ($SDE_FROM)"
+log "beast-boot $VERSION, SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH ($SDE_FROM)"
 log "menu: $MENU_DIR   key: $CRT"
 
 # ---------------------------------------------------------------------------
@@ -487,7 +487,7 @@ if [ "$reused" = 0 ]; then
   log "grubx64.efi: signed with $CERT_SUBJECT"
 fi
 sbverify --cert "$CRT" "$SIGNED" >/dev/null 2>&1 || die "sbverify failed for the signed GRUB"
-add_file "$SIGNED" esp/EFI/BOOT/grubx64.efi "built:grub-mkimage from $GRUB_ORIGIN:/x86_64-efi + memdisk (build.efi_memdisk), signed:beast-booter"
+add_file "$SIGNED" esp/EFI/BOOT/grubx64.efi "built:grub-mkimage from $GRUB_ORIGIN:/x86_64-efi + memdisk (build.efi_memdisk), signed:beast-boot"
 extra secure_boot.grub_unsigned_sha256 "$UNSIGNED_SHA"
 extra build.efi_modules[] "${EFI_MODULES[*]}"
 extra build.efi_prefix "/grub"
@@ -575,7 +575,7 @@ if [ "${BB_SKIP_BEASTNET:-0}" != 1 ]; then
 
   # The helper kernel is Ubuntu's (Canonical-signed). shim's built-in key is
   # Debian's, so it gets the same treatment as grubx64.efi: every signature
-  # removed, then signed with the beast-booter key (same reuse rule as GRUB:
+  # removed, then signed with the beast-boot key (same reuse rule as GRUB:
   # an existing dist/ copy is kept when ours is its only signature, over the
   # same unsigned image). The manifest records the source and the Authenticode
   # digest, which is the same under Canonical's signature and ours.
@@ -646,7 +646,7 @@ for h in m["vendor_dbx"]["sha256"]:
     cp "$PREV" "$WORK/prev-k"; cp "$PREV" "$WORK/prev-k-stripped"
     if sbattach --remove "$WORK/prev-k-stripped" >/dev/null 2>&1 \
        && cmp -s "$WORK/prev-k-stripped" "$BN_UNSIGNED" \
-       && efi_inspect require "$WORK/prev-k" --only "beast-booter=$CRT" >/dev/null 2>&1; then
+       && efi_inspect require "$WORK/prev-k" --only "beast-boot=$CRT" >/dev/null 2>&1; then
       cp "$WORK/prev-k" "$BN_SIGNED"; reused=1
       log "beast-net/vmlinuz: unsigned image unchanged, keeping the existing signature (BB_RESIGN=1 to re-sign)"
     fi
@@ -656,11 +656,11 @@ for h in m["vendor_dbx"]["sha256"]:
       || { cat "$WORK/sbsign.log" >&2; die "sbsign failed for the helper kernel"; }
     log "beast-net/vmlinuz: replaced the signature of ${bn_replaced:-?} with $CERT_SUBJECT"
   fi
-  efi_inspect require "$BN_SIGNED" --only "beast-booter=$CRT" > "$WORK/bn-sigs.log" 2>&1 \
+  efi_inspect require "$BN_SIGNED" --only "beast-boot=$CRT" > "$WORK/bn-sigs.log" 2>&1 \
     || { cat "$WORK/bn-sigs.log" >&2; die "the re-signed helper kernel must carry exactly one signature, ours"; }
   [ "$(efi_inspect authenticode "$BN_SIGNED")" = "$BN_AUTH" ] || die "the re-signed helper kernel has another Authenticode digest"
   add_file "$BN_SIGNED" esp/beast-net/vmlinuz \
-    "built:$BN_KERNEL_ORIGIN with its signatures removed (sbattach --remove), signed:beast-booter"
+    "built:$BN_KERNEL_ORIGIN with its signatures removed (sbattach --remove), signed:beast-boot"
   extra secure_boot.beastnet_kernel_source "$BN_KERNEL_ORIGIN"
   extra secure_boot.beastnet_kernel_authenticode_sha256 "$BN_AUTH"
   extra secure_boot.beastnet_kernel_unsigned_sha256 "$BN_UNSIGNED_SHA"

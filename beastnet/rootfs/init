@@ -2,14 +2,15 @@
 # beast-net /init (PID 1, busybox sh).
 #
 # Mounts the kernel filesystems, loads drivers for the hardware present,
-# mounts the beast-booter data partition and ESP, and runs the beast-net app
+# mounts the beast-boot data partition and ESP, and runs the beast-net app
 # (python3 -m beastnet) on the console. The app is a child process, not
 # exec'd: whatever happens to it, PID 1 survives and offers a shell, so a
 # failure can never turn into a kernel panic loop.
 #
 # Kernel parameters: beastnet.data=UUID=... beastnet.esp=UUID=...
 # beastnet.debug=1 (see docs/BEASTNET.md section 5; the app reads the rest,
-# e.g. beastnet.action=trust-ubuntu).
+# e.g. beastnet.action=trust-ubuntu). beastnet.netboot=1 instead of data/esp:
+# started over the network (BeastServer, no stick): see mount_ram.
 
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 HOME=/root
@@ -48,6 +49,7 @@ param() {
 DEBUG=$(param beastnet.debug)
 DATA=$(param beastnet.data)
 ESP=$(param beastnet.esp)
+NETBOOT=$(param beastnet.netboot)
 
 # The console the user sees: the last console= wins, like /dev/console.
 CONSOLE=/dev/tty1
@@ -157,9 +159,29 @@ mount_all() {
 	return 0
 }
 
+# Network boot (beastnet.netboot=1): there is no stick, so small RAM filesystems
+# stand in for the data partition (logs, ddrescue progress files, a plan) and the
+# ESP. Files the boot loader added under /netboot (GRUB "initrd newc:netboot/..."),
+# e.g. the plan of beastnet.script=/plan.json, are copied onto the data one.
+mount_ram() {
+	if ! is_mounted /mnt/data; then
+		mount -t tmpfs -o nosuid,nodev,noexec,mode=0755,size=64m beastnet-data /mnt/data || return 1
+		[ -d /netboot ] && cp -R /netboot/. /mnt/data/
+	fi
+	if ! is_mounted /mnt/esp; then
+		mount -t tmpfs -o nosuid,nodev,noexec,mode=0755,size=1m beastnet-esp /mnt/esp || return 1
+	fi
+	emit "netboot data=ram esp=ram"
+	return 0
+}
+
 [ -w /proc/sys/kernel/hotplug ] && echo /sbin/mdev >/proc/sys/kernel/hotplug
 coldplug
-until mount_all; do shell; done
+if [ "$NETBOOT" = 1 ]; then
+	until mount_ram; do shell; done
+else
+	until mount_all; do shell; done
+fi
 
 if [ "$CONSOLE" != /dev/tty1 ] && [ -c /dev/tty1 ]; then
 	echo "beast-net is running on the serial console ($CONSOLE)." >/dev/tty1 2>/dev/null

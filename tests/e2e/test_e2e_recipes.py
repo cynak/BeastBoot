@@ -109,8 +109,8 @@ def test_debian_installer_dryrun(mode, make_drive, vm_factory):
     assert "(loop)/install.amd/vmlinuz" in kernel_of(lin), str(lin)
     ini = vm.wait_record("dryrun", r"^dryrun initrd ", after=boot.start)
     assert ini.tokens[2] == "(loop)/install.amd/initrd.gz", str(ini)
-    assert any(t.startswith("newc:beast-booter/debian.iso:") and t.endswith(path) for t in ini.tokens), str(ini)
-    assert any(t.startswith("newc:beast-booter/loop.udeb:(loop)/pool/main/l/linux-signed-amd64/loop-modules-")
+    assert any(t.startswith("newc:beast-boot/debian.iso:") and t.endswith(path) for t in ini.tokens), str(ini)
+    assert any(t.startswith("newc:beast-boot/loop.udeb:(loop)/pool/main/l/linux-signed-amd64/loop-modules-")
                for t in ini.tokens), str(ini)
     # /lib is a symlink in the installer's initrd: the script must not be under lib/
     assert any(t.startswith("newc:usr/lib/debian-installer-startup.d/S45beast-iso:") for t in ini.tokens), str(ini)
@@ -139,7 +139,7 @@ def test_alpine_dryrun(mode, make_drive, vm_factory):
     assert lin.has_token("rdinit=/beast-init"), str(lin)
     ini = vm.wait_record("dryrun", r"^dryrun initrd ", after=boot.start)
     assert ini.tokens[2] == "(loop)/boot/initramfs-lts", str(ini)
-    assert any(t.startswith("newc:beast-booter/alpine.iso:") and t.endswith(path) for t in ini.tokens), str(ini)
+    assert any(t.startswith("newc:beast-boot/alpine.iso:") and t.endswith(path) for t in ini.tokens), str(ini)
     assert any(t.startswith("newc:beast-init:") for t in ini.tokens), str(ini)
     assert not vm.records("error", after=boot.start)
 

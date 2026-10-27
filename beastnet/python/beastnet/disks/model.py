@@ -192,6 +192,7 @@ class CopyPlan:
     erases: str = ""             # plain words: what on the target is overwritten ("" for image files)
     commands: list[list[str]] = field(default_factory=list)  # what will run, for the plan screen
     verify: bool = True          # hash/read-back after the copy
+    confirmed: bool = False      # clone/restore: the typed confirmation matched (run() refuses otherwise)
 
 
 @dataclass

@@ -30,7 +30,7 @@ name starts it ([§8](#8-trust-ubuntus-secure-boot-key)).
 
 - **Secure Boot stays intact.** The helper kernel is Ubuntu's kernel with its
   code unchanged; the build checks Canonical's signature, then replaces it with
-  the beast-booter key's (§5), and shim verifies it like `grubx64.efi`. Its
+  the beast-boot key's (§5), and shim verifies it like `grubx64.efi`. Its
   modules are the unmodified Canonical-signed `.ko` files of that same kernel
   build. The
   helper never kexecs into another kernel when Secure Boot is on; the hand-off
@@ -44,7 +44,7 @@ name starts it ([§8](#8-trust-ubuntus-secure-boot-key)).
 ## 3. Files on the ESP (layout version 2: 512 MiB FAT32 ESP)
 
 ```
-beast-net/vmlinuz                 Ubuntu's kernel (linux-image-<kver>), re-signed with the beast-booter key (code unchanged)
+beast-net/vmlinuz                 Ubuntu's kernel (linux-image-<kver>), re-signed with the beast-boot key (code unchanged)
 beast-net/initrd.img              base initramfs (compressed cpio; see §5)
 beast-net/VERSION                 "beast-net <bb version> kernel <kver>"
 beast-net/catalog.json            firmware pack catalog (§6)
@@ -98,7 +98,7 @@ all versions recorded in the manifest:
   `build/build.sh` treats the kernel like `grubx64.efi`: it checks that the
   kernel is signed through Canonical's Master CA and not by a certificate or
   hash Ubuntu revoked (`build/trust/canonical/`), removes every signature
-  (`sbattach --remove`) and signs it with the beast-booter key. The code is
+  (`sbattach --remove`) and signs it with the beast-boot key. The code is
   unchanged: the Authenticode digest is the same before and after. An
   existing `dist/` copy is kept when ours is its only signature and the
   unsigned image is unchanged; `BB_RESIGN=1` forces a fresh signature. The
@@ -106,7 +106,7 @@ all versions recorded in the manifest:
   (`deb:<pkg>=<ver>:/boot/vmlinuz-...`), `beastnet_kernel_authenticode_sha256`,
   `beastnet_kernel_unsigned_sha256` and `beastnet_kernel_replaced_signers`;
   the build id counts the kernel by its unsigned hash. `build/verify-dist.sh`
-  checks that the kernel carries only the beast-booter signature and that its
+  checks that the kernel carries only the beast-boot signature and that its
   digest matches the manifest (and the kernel in the `.deb`, when that is in
   the beast-net cache). The SBOM lists it under its `linux-image` package,
   marked re-signed.
@@ -151,6 +151,7 @@ Kernel command line parameters read by the helper:
 | `beastnet.script=/path` | non-interactive run from a JSON file on the data partition (tests, power users); the menu passes it when `/beast-booter/config.cfg` sets `bb_beastnet_script=/path` |
 | `beastnet.ui=plain` | line-based prompts instead of the curses screens (serial consoles) |
 | `beastnet.action=trust-ubuntu` | open "Trust Ubuntu's Secure Boot key" first (§8; set by the Tools menu entry). Other values are ignored. Its "Download an ISO from a link" item then leads to the normal screens |
+| `beastnet.action=disk` | open Disk tools first (recovery and cloning, RAID-aware; set by the "Disk tools: recovery and cloning" Tools menu entry; see [DISK_TOOLS.md](DISK_TOOLS.md)). Every beast-net boot gets `raid=noautodetect md_mod.start_ro=1` on the kernel command line, so no RAID array starts on its own or writes before Disk tools set it read-only |
 
 Script file (`beastnet.script`):
 ```json
@@ -243,18 +244,18 @@ replaces them.
 
 Installer CLI (installer/beastbooter, implemented with the cross-platform installer):
 ```
-beast-booter firmware catalog [--dist DIR] [--json]
-beast-booter firmware fetch --pack ID [--pack ID ...] --out DIR [--catalog FILE] [--progress-file F]
+beast-boot firmware catalog [--dist DIR] [--json]
+beast-boot firmware fetch --pack ID [--pack ID ...] --out DIR [--catalog FILE] [--progress-file F]
                             [--for-image P | --for-device X]
      # unprivileged: download each file from the catalog source, verify SHA-256,
      # write DIR/<id>.cpio + DIR/<id>.json (the installed.json entry);
      # --for-*: first check that the packs fit on that target (see "Room" below)
-beast-booter firmware install (--device X | --image P) --from DIR [--progress-file F]
+beast-boot firmware install (--device X | --image P) --from DIR [--progress-file F]
      # elevated for devices: re-verify every file inside each cpio against the
      # catalog, check the free space, then write beast-net/firmware/<id>.cpio and
      # update installed.json
-beast-booter firmware remove (--device X | --image P) --pack ID
-beast-booter firmware list (--device X | --image P) [--json]
+beast-boot firmware remove (--device X | --image P) --pack ID
+beast-boot firmware list (--device X | --image P) [--json]
 ```
 The desktop GUI shows each pack's title, chips/modules, size, licences, the
 exact source URL and tag, and the SHA-256s, before anything is downloaded.
@@ -299,7 +300,7 @@ loop device backed by a file on it, and the drive BeastBoot runs from.
 Every request is a plain HTTP/1.1 `GET` with:
 
 ```
-User-Agent: beast-net/<version> (beast-booter)
+User-Agent: beast-net/<version> (beast-boot)
 Accept: */*
 Accept-Encoding: identity
 Connection: close

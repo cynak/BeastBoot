@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Code-quality checks for beast-booter, open-source tools only:
+# Code-quality checks for beast-boot, open-source tools only:
 #   ruff        (MIT)    Python: settings in ruff.toml
 #   ShellCheck  (GPL-3)  shell scripts: settings in .shellcheckrc
 # See docs/CODE_QUALITY.md.

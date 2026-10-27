@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build beast-booter's no-install portable packages.
+# Build beast-boot's no-install portable packages.
 #
 #   scripts/build_portable.sh                  # this machine's target (e.g. linux-x86_64)
 #   scripts/build_portable.sh --all            # linux-x86_64, windows-x86_64, macos-x86_64, macos-arm64
@@ -87,7 +87,7 @@ step "Building packages: ${ARGS[*]}"
 python3 -I "$ROOT/packaging/portable/build.py" "${ARGS[@]}"
 
 shopt -s nullglob
-ARCHIVES=("$OUT"/beast-booter-*.tar.gz "$OUT"/beast-booter-*.zip)
+ARCHIVES=("$OUT"/beast-boot-*.tar.gz "$OUT"/beast-boot-*.zip)
 [ "${#ARCHIVES[@]}" -gt 0 ] || die "no archives found in $OUT"
 
 step "Verifying archives against their manifests"

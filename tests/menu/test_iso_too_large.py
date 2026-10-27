@@ -29,6 +29,6 @@ def test_initrd_failure_of_whole_iso_recipes_is_iso_too_large():
 
 
 def test_whole_iso_recipes_load_the_iso_through_initrd():
-    assert 'bb_initrd "$bb_ird" "newc:beast-booter/alpine.iso:' in LIB
-    assert 'bb_initrd "$bb_ird" "newc:beast-booter/debian.iso:' in LIB
+    assert 'bb_initrd "$bb_ird" "newc:beast-boot/alpine.iso:' in LIB
+    assert 'bb_initrd "$bb_ird" "newc:beast-boot/debian.iso:' in LIB
     assert re.search(r'bb_initrd[^\n]*\n\s*fi\n\s*if \[ "\$bb_ok" != "1" \]; then\n\s*bb_fail initrd', LIB)

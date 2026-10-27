@@ -27,16 +27,16 @@ Each package is built to be checked by its users. It contains:
 
 | File | For |
 |---|---|
-| `beast-booter-<version>-windows-x86_64.zip` | Windows 10 or newer, 64-bit (x86_64) |
-| `beast-booter-<version>-macos-arm64.zip` | Macs with Apple silicon (M1 and later), macOS 11 or newer |
-| `beast-booter-<version>-macos-x86_64.zip` | Intel Macs, macOS 10.15 or newer |
-| `beast-booter-<version>-linux-x86_64.tar.gz` | Linux x86_64 with glibc 2.17 or newer, and X11 or XWayland for the window |
+| `beast-boot-<version>-windows-x86_64.zip` | Windows 10 or newer, 64-bit (x86_64) |
+| `beast-boot-<version>-macos-arm64.zip` | Macs with Apple silicon (M1 and later), macOS 11 or newer |
+| `beast-boot-<version>-macos-x86_64.zip` | Intel Macs, macOS 10.15 or newer |
+| `beast-boot-<version>-linux-x86_64.tar.gz` | Linux x86_64 with glibc 2.17 or newer, and X11 or XWayland for the window |
 | `SHA256SUMS` | SHA-256 of every release file |
 
 The same release page also has the boot files on their own
-(`beast-booter-<version>-dist.zip`, usable with `--dist`), the Secure Boot
-certificate (`beast-booter-<version>-ENROLL_THIS_KEY_IN_MOKMANAGER.cer` and
-`beast-booter-<version>-CERTIFICATE.txt` with its fingerprints), the SBOM
+(`beast-boot-<version>-dist.zip`, usable with `--dist`), the Secure Boot
+certificate (`beast-boot-<version>-ENROLL_THIS_KEY_IN_MOKMANAGER.cer` and
+`beast-boot-<version>-CERTIFICATE.txt` with its fingerprints), the SBOM
 (`-sbom.cdx.json`, `-sbom.spdx.json`) and the vulnerability report
 (`-vulnerabilities.json`, `-VULNERABILITIES.md`), all listed in `SHA256SUMS`
 and covered by GitHub build-provenance attestations. How to check those:
@@ -59,14 +59,14 @@ grep -F macos-arm64.zip SHA256SUMS | shasum -a 256 -c -
 
 ```powershell
 # Windows (PowerShell): compare the output with the line for this file in SHA256SUMS
-Get-FileHash .\beast-booter-0.2.0-windows-x86_64.zip -Algorithm SHA256
+Get-FileHash .\beast-boot-0.3.0-windows-x86_64.zip -Algorithm SHA256
 ```
 
 **2. The unpacked files match `PACKAGE-MANIFEST.json`.** Unpack the archive and run
 the included checker with any Python 3.8 or newer:
 
 ```sh
-python3 beast-booter-0.2.0-linux-x86_64/verify-package.py
+python3 beast-boot-0.3.0-linux-x86_64/verify-package.py
 ```
 
 It recomputes the SHA-256 of every file and checks symlinks and executable
@@ -74,7 +74,7 @@ bits. It also checks the boot files against `payload/dist/manifest.json` (the
 same check the installer makes before it writes a drive) and the layout the
 launchers need, and it reports any file that is missing or that is not part of
 the package. You can also run it on an archive without unpacking it:
-`python3 verify-package.py beast-booter-0.2.0-macos-arm64.zip`.
+`python3 verify-package.py beast-boot-0.3.0-macos-arm64.zip`.
 
 If you have no Python, use the bundled one, but only after step 1, and always
 with `-I -S -B`:
@@ -134,14 +134,14 @@ is the one that was published.
 
 1. Optional, but it avoids the warnings below: before you unpack, right-click
    the `.zip` > **Properties** > tick **Unblock** > **OK** (or run
-   `Unblock-File .\beast-booter-<version>-windows-x86_64.zip` in PowerShell).
+   `Unblock-File .\beast-boot-<version>-windows-x86_64.zip` in PowerShell).
 2. Unpack the archive (right-click > **Extract All...**) to any folder, for
    example your Desktop or a USB stick. The path may contain spaces.
 3. Double-click **`BeastBooter.cmd`**. A console window flashes up and closes,
    and the BeastBooter window opens.
 
-Command line: open a terminal in the folder and run `beast-booter.cmd --help`
-or `beast-booter.cmd install --device \\.\PhysicalDrive2`. To write to a device,
+Command line: open a terminal in the folder and run `beast-boot.cmd --help`
+or `beast-boot.cmd install --device \\.\PhysicalDrive2`. To write to a device,
 start the terminal with **Run as administrator**.
 
 **SmartScreen.** The package is not code signed. If you did not unblock the
@@ -156,9 +156,9 @@ Security Warning"*. Check the download first (above), then choose
    `ditto -x -k <file>.zip <folder>` or `unzip`, not a tool that drops symlinks.
 2. Double-click **BeastBooter** (`BeastBooter.app`).
 
-Command line: `./beast-booter.command --help`,
-`sudo ./beast-booter.command install --device /dev/disk4`. Double-clicking
-`beast-booter.command` opens Terminal and shows the help.
+Command line: `./beast-boot.command --help`,
+`sudo ./beast-boot.command install --device /dev/disk4`. Double-clicking
+`beast-boot.command` opens Terminal and shows the help.
 
 **Gatekeeper.** The app is not signed or notarized by Apple, so the first
 double-click is refused ("cannot be opened because Apple cannot check it for
@@ -174,7 +174,7 @@ first (above), then:
   set on the download:
 
   ```sh
-  xattr -dr com.apple.quarantine ~/Downloads/beast-booter-0.2.0-macos-arm64
+  xattr -dr com.apple.quarantine ~/Downloads/beast-boot-0.3.0-macos-arm64
   ```
 
 While an app is quarantined, macOS may run it from a hidden, read-only copy
@@ -184,14 +184,14 @@ into its own folder.
 ### Linux
 
 ```sh
-tar xzf beast-booter-0.2.0-linux-x86_64.tar.gz
-cd beast-booter-0.2.0-linux-x86_64
+tar xzf beast-boot-0.3.0-linux-x86_64.tar.gz
+cd beast-boot-0.3.0-linux-x86_64
 ./BeastBooter                  # the GUI
-./beast-booter --help          # the CLI
-sudo ./beast-booter install --device /dev/sdX
+./beast-boot --help          # the CLI
+sudo ./beast-boot install --device /dev/sdX
 ```
 
-`beast-booter.desktop` starts the GUI from a file manager. In GNOME Files,
+`beast-boot.desktop` starts the GUI from a file manager. In GNOME Files,
 right-click it and choose **Allow Launching** first. It finds `BeastBooter`
 next to itself, so it only works inside the package folder. For a menu entry,
 copy it to `~/.local/share/applications/` and set `Exec=` to the absolute path
@@ -223,10 +223,10 @@ only for `--device`.
 ## What is inside a package
 
 ```
-beast-booter-<v>-windows-x86_64/           beast-booter-<v>-linux-x86_64/
+beast-boot-<v>-windows-x86_64/           beast-boot-<v>-linux-x86_64/
   BeastBooter.cmd     GUI (pythonw.exe)      BeastBooter            GUI (sh)
-  beast-booter.cmd    CLI (python.exe)       beast-booter           CLI (sh)
-  runtime\            CPython, unmodified    beast-booter.desktop   file-manager launcher
+  beast-boot.cmd    CLI (python.exe)       beast-boot           CLI (sh)
+  runtime\            CPython, unmodified    beast-boot.desktop   file-manager launcher
   app\                beastbooter\*.py,      runtime/               CPython, unmodified
                       beast_booter_launch.py app/                   beastbooter/*.py, beast_booter_launch.py
   payload\dist\       boot files + manifest  payload/dist/          boot files + manifest.json
@@ -236,7 +236,7 @@ beast-booter-<v>-windows-x86_64/           beast-booter-<v>-linux-x86_64/
   VERSION, README.txt, LICENSE,              VERSION, README.txt, LICENSE,
   verify-package.py, PACKAGE-MANIFEST.json   verify-package.py, PACKAGE-MANIFEST.json
 
-beast-booter-<v>-macos-arm64/  (and -macos-x86_64)
+beast-boot-<v>-macos-arm64/  (and -macos-x86_64)
   BeastBooter.app/Contents/
     Info.plist                 bundle id, version, minimum macOS, architecture
     MacOS/BeastBooter          GUI (sh)
@@ -246,7 +246,7 @@ beast-booter-<v>-macos-arm64/  (and -macos-x86_64)
     Resources/payload/sbom/    SBOM (if built)
     Resources/docs/            SECURE_BOOT.md, PORTABLE.md
     Resources/VERSION
-  beast-booter.command         CLI (sh)
+  beast-boot.command         CLI (sh)
   README.txt, LICENSE, verify-package.py, PACKAGE-MANIFEST.json
 ```
 
@@ -307,8 +307,8 @@ make portable                    # this machine's target, e.g. linux-x86_64
 make portable ARGS=--all         # linux-x86_64, windows-x86_64, macos-x86_64, macos-arm64
 scripts/build_portable.sh --target windows-x86_64 --target macos-arm64
 ls out/portable/
-#   beast-booter-0.2.0-linux-x86_64.tar.gz   beast-booter-0.2.0-macos-arm64.zip
-#   beast-booter-0.2.0-macos-x86_64.zip      beast-booter-0.2.0-windows-x86_64.zip
+#   beast-boot-0.3.0-linux-x86_64.tar.gz   beast-boot-0.3.0-macos-arm64.zip
+#   beast-boot-0.3.0-macos-x86_64.zip      beast-boot-0.3.0-windows-x86_64.zip
 #   SHA256SUMS
 ```
 
@@ -346,7 +346,7 @@ What `build.py` checks before it writes anything:
   right SHA-256, no file is unlisted, and there are no symlinks. The installer's
   own verifier (`beastbooter.dist.load_dist`) must also accept it;
 - `sbom/` is included only if it describes exactly this `dist/` (its
-  `beast-booter:manifest-sha256` equals the SHA-256 of `dist/manifest.json`).
+  `beast-boot:manifest-sha256` equals the SHA-256 of `dist/manifest.json`).
   Otherwise the build stops; pass `--no-sbom` to build without it;
 - runtime members stay inside the runtime folder (no absolute paths and no `..`,
   and symlinks only on Linux and macOS);

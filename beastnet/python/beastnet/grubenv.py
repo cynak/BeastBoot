@@ -128,7 +128,7 @@ def load(path: str) -> GrubEnv:
     except FileNotFoundError:
         raise BeastNetError(GRUBENV, f"{path} is missing",
                             "The stick was set up without a GRUB environment block; "
-                            "update it with the beast-booter app.") from None
+                            "update it with the beast-boot app.") from None
     except OSError as e:
         raise BeastNetError(GRUBENV, f"cannot read {path}: {e.strerror}") from None
     if st.st_size != SIZE:

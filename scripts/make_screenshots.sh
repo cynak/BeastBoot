@@ -31,13 +31,13 @@ example_dist() {
   rm -rf "$d"; mkdir -p "$d/esp/beast-net"
   cer="$d/esp/ENROLL_THIS_KEY_IN_MOKMANAGER.cer"
   openssl req -x509 -newkey rsa:2048 -nodes -keyout /dev/null -days 3650 -outform DER -out "$cer" \
-    -subj "/CN=beast-booter Secure Boot key (example)" 2>/dev/null
+    -subj "/CN=beast-boot Secure Boot key (example)" 2>/dev/null
   cp "$ROOT/dist/esp/beast-net/catalog.json" "$d/esp/beast-net/"
   python3 -I - "$ROOT/dist/manifest.json" "$d/manifest.json" "$cer" <<'PY2'
 import hashlib, json, sys
 m = json.load(open(sys.argv[1]))
 der = open(sys.argv[3], "rb").read()
-m["secure_boot"].update(cert_subject="CN=beast-booter Secure Boot key (example)",
+m["secure_boot"].update(cert_subject="CN=beast-boot Secure Boot key (example)",
                         cert_sha1=hashlib.sha1(der).hexdigest(), cert_sha256=hashlib.sha256(der).hexdigest())
 json.dump(m, open(sys.argv[2], "w"), indent=1)
 PY2
@@ -48,10 +48,10 @@ app_shots() {
   engine="$(command -v podman || command -v docker || true)"
   [ -n "$engine" ] || die "the app screenshots need podman or docker"
   version="$(tr -d '[:space:]' < "$ROOT/VERSION")"
-  pkg="/home/you/beast-booter-$version-linux-x86_64"
+  pkg="/home/you/beast-boot-$version-linux-x86_64"
   example_dist "$WORK/app-dist"
   log "building the screenshot container with $(basename "$engine")"
-  "$engine" build -q -t beast-booter-screenshots -f "$ROOT/scripts/screenshots/Containerfile" \
+  "$engine" build -q -t beast-boot-screenshots -f "$ROOT/scripts/screenshots/Containerfile" \
     "$ROOT/scripts/screenshots" >/dev/null
   log "taking the app screenshots"
   # shellcheck disable=SC2016 # the sh -c script is expanded inside the container
@@ -60,7 +60,7 @@ app_shots() {
     -v "$WORK/app-dist:$pkg/payload/dist:ro" \
     -v "$ROOT/scripts/screenshots:/src/shots:ro" -v "$OUT:/out" \
     -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" -e PKG_DIST="$pkg/payload/dist" \
-    beast-booter-screenshots sh -c '
+    beast-boot-screenshots sh -c '
       xvfb-run -a -s "-screen 0 1920x1200x24 -dpi 96" \
         python3 -B /src/shots/app_screens.py /src/installer "$PKG_DIST" /out
       rc=$?; chown "$HOST_UID:$HOST_GID" /out/app-*.png 2>/dev/null; exit $rc'

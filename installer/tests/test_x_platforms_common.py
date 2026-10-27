@@ -62,12 +62,12 @@ def test_check_common_passes_and_refuses():
 def test_running_from_the_target_is_refused():
     d = disk(mountpoints=("/media/me/MY STICK",))
     with pytest.raises(BeastError, match=r"running from /dev/sdx \(/media/me/MY STICK\)"):
-        check_common(d, allow_fixed=False, paths=["/media/me/MY STICK/beast-booter/python/bin/python3"])
+        check_common(d, allow_fixed=False, paths=["/media/me/MY STICK/beast-boot/python/bin/python3"])
     check_common(d, allow_fixed=False, paths=["/media/me/MY STICK2/app"])  # prefix but not inside
 
 
 def test_running_from_windows_paths():
-    paths = [r"E:\beast-booter\python\python.exe"]
+    paths = [r"E:\beast-boot\python\python.exe"]
     assert running_from(["E:\\"], paths, pathmod=ntpath) == "E:\\"
     assert running_from(["e:\\"], paths, pathmod=ntpath) == "e:\\"  # case-insensitive
     assert running_from(["F:\\", "C:\\Archive\\"], paths, pathmod=ntpath) is None

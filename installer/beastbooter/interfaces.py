@@ -148,9 +148,9 @@ class PlatformBackend(Protocol):
     def partition_path(self, disk: DiskInfo, index: int) -> str: ...  # for native formatters
     def format_ntfs(self, disk: DiskInfo, index: int, label: str) -> None: ...  # BeastError if unsupported
     def is_elevated(self) -> bool: ...
-    # Which beast-booter the drive already has (installed.py), WITHOUT administrator
+    # Which beast-boot the drive already has (installed.py), WITHOUT administrator
     # rights; may mount the boot partition read-only for a moment (Linux: udisks)
-    # and always leaves it as it found it. None: not a beast-booter drive as far
+    # and always leaves it as it found it. None: not a beast-boot drive as far
     # as can be seen. Never raises (problems become ProbeResult(None, note)).
     # should_stop: optional callable; when it returns True the probe stops before mounting.
     def probe_installed(self, disk: DiskInfo, *, should_stop=None) -> ProbeResult | None: ...
@@ -167,10 +167,10 @@ class ElevatedProcess(Protocol):
 # CLI additions the GUI relies on (commands.py / cli.py, wired by the lead)
 # ---------------------------------------------------------------------------
 #
-#   beast-booter list-devices [--json] [--all]
+#   beast-boot list-devices [--json] [--all]
 #       --all includes fixed/system disks (marked not eligible).
-#   beast-booter install ... --progress-file PATH
-#   beast-booter update  ... --progress-file PATH
+#   beast-boot install ... --progress-file PATH
+#   beast-boot update  ... --progress-file PATH
 #       Appends JSON lines (schema below) to PATH as work proceeds; stdout/stderr
 #       stay as today. --dist also accepts a .zip of a dist/ directory.
 #

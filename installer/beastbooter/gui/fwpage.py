@@ -305,7 +305,7 @@ class FirmwarePage(ttk.Frame):
             self.target_var.set("")
         installed = f.installed_on_target
         if f.target is None:
-            text = "Choose the beast-booter drive, or an image file, to install the packs to."
+            text = "Choose the beast-boot drive, or an image file, to install the packs to."
         elif installed is None:
             text = UNKNOWN_TEXTS.get(f.unknown_why or "", UNKNOWN_TEXTS["not-read"])
         elif installed:
@@ -537,7 +537,7 @@ class FirmwarePage(ttk.Frame):
         self.app.render()
 
     def _choose_image(self) -> None:
-        path = filedialog.askopenfilename(parent=self.app.root, title="Choose a beast-booter image file",
+        path = filedialog.askopenfilename(parent=self.app.root, title="Choose a beast-boot image file",
                                           filetypes=[("Disk images", "*.img"), ("All files", "*")])
         if path:
             self.app._act(self.fw.set_target_image, path)

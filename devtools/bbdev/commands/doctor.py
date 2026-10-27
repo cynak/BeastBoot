@@ -494,17 +494,17 @@ def _cert_end(ctx: Ctx, crt: Path) -> _dt.datetime | None:
 
 def check_keys(ctx: Ctx, now: _dt.datetime | None = None) -> Check:
     k = ctx.repo / "keys"
-    miss = [n for n in ("beast-booter.key", "beast-booter.crt", "beast-booter.cer") if not (k / n).is_file()]
+    miss = [n for n in ("beast-boot.key", "beast-boot.crt", "beast-boot.cer") if not (k / n).is_file()]
     if miss:
         return Check("keys", FAIL, f"keys/: missing {', '.join(miss)} (the build signs GRUB with it)",
                      "run `make keys` (creates a local signing key; never commit it)", KEYS, "repo")
-    mode = (k / "beast-booter.key").stat().st_mode & 0o777
+    mode = (k / "beast-boot.key").stat().st_mode & 0o777
     if mode & 0o077:
-        return Check("keys", WARN, f"keys/beast-booter.key is readable by others (mode {mode:o})",
-                     "chmod 600 keys/beast-booter.key", "", "repo")
-    end = _cert_end(ctx, k / "beast-booter.crt")
+        return Check("keys", WARN, f"keys/beast-boot.key is readable by others (mode {mode:o})",
+                     "chmod 600 keys/beast-boot.key", "", "repo")
+    end = _cert_end(ctx, k / "beast-boot.crt")
     if end is None:
-        return ok("keys", "keys/beast-booter.{key,crt,cer} (expiry unknown)", "repo")
+        return ok("keys", "keys/beast-boot.{key,crt,cer} (expiry unknown)", "repo")
     now = now or _dt.datetime.now(_dt.timezone.utc)
     days = (end - now).days
     when = end.strftime("%Y-%m-%d")
@@ -514,7 +514,7 @@ def check_keys(ctx: Ctx, now: _dt.datetime | None = None) -> Check:
     if days < CERT_WARN_DAYS:
         return Check("keys", WARN, f"certificate expires on {when} ({days} days)",
                      "build/keygen.sh --force before then (machines must enroll the new certificate)", "", "repo")
-    return ok("keys", f"keys/beast-booter.{{key,crt,cer}}; certificate valid until {when} ({days} days)", "repo")
+    return ok("keys", f"keys/beast-boot.{{key,crt,cer}}; certificate valid until {when} ({days} days)", "repo")
 
 
 def check_dist(ctx: Ctx) -> Check:
@@ -562,7 +562,7 @@ def check_dev_image(ctx: Ctx) -> Check:
     if v.action == freshness.CURRENT:
         return ok(name, f"{short(img, ctx)} is current: {v.reason}", "repo")
     if v.action == freshness.UPDATE:
-        fix = "bin/bb-dev vm updates it before booting (or bin/beast-booter update --image " \
+        fix = "bin/bb-dev vm updates it before booting (or bin/beast-boot update --image " \
               f"{short(img, ctx)} --yes)"
     elif v.action == freshness.REBUILD:
         fix = f"bin/bb-dev vm --yes rebuilds it, the same as: {freshness.rebuild_command(img)}"
@@ -645,7 +645,7 @@ def render(results: list[Check], stream=None, only_problems: bool = False) -> No
 
 def register(sub) -> None:
     p = sub.add_parser("doctor", help="check the dev environment and explain fixes",
-                       description="Check everything beast-booter development needs; each problem comes "
+                       description="Check everything beast-boot development needs; each problem comes "
                                    "with a one-line fix. Exit status 1 if any check FAILs.")
     p.add_argument("--json", action="store_true", help="machine-readable output")
     p.set_defaults(func=run)
@@ -656,6 +656,6 @@ def run(args) -> int:
     if args.json:
         print(to_json(results))
     else:
-        print("bb-dev doctor: beast-booter development environment")
+        print("bb-dev doctor: beast-boot development environment")
         render(results)
     return 1 if counts(results)[FAIL] else 0

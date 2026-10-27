@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Extract a shim's built-in trust (vendor certificate and vendor_dbx revocations).
 
-beast-booter boots through Debian's shim, which trusts Debian's key, not
+beast-boot boots through Debian's shim, which trusts Debian's key, not
 Canonical's. Ubuntu ISOs (and Ubuntu-based ones) keep booting with Secure Boot
 on only after the user opts in to "Trust Ubuntu's key" in the beast-net
 helper, which enrolls exactly what Ubuntu's own shim trusts and revokes:

@@ -75,7 +75,7 @@ def run(tmp_path: Path, cmdline: str, consoles: list[str], *, source: bool = Fal
     text = HOOK.read_text()
     for a, b in (("/tmp/bb-", f"{root}/tmp/bb-"), ("/proc/cmdline", f"{root}/proc/cmdline"),
                  ("/etc/", f"{root}/etc/"), ("/var/run/", f"{root}/var/run/"),
-                 ("/dev/kmsg", f"{root}/dev/kmsg"), ("/beast-booter/", f"{root}/bb/")):
+                 ("/dev/kmsg", f"{root}/dev/kmsg"), ("/beast-boot/", f"{root}/bb/")):
         text = text.replace(a, b)
     hook = tmp_path / "hook.sh"
     hook.write_text(text)

@@ -1,16 +1,16 @@
 #!/bin/sh
-# beast-booter portable (Linux): the command line interface.
+# beast-boot portable (Linux): the command line interface.
 #
-#   ./beast-booter --help
-#   sudo ./beast-booter install --device /dev/sdX      (writing a drive needs root)
-#   ./beast-booter install --image my.img --size 8G    (image files: no root)
+#   ./beast-boot --help
+#   sudo ./beast-boot install --device /dev/sdX      (writing a drive needs root)
+#   ./beast-boot install --image my.img --size 8G    (image files: no root)
 #
 # Runs only what is in this folder (runtime/, app/, payload/dist); installs nothing.
 #   -s  ignore ~/.local Python packages      -E  ignore PYTHON* variables
 #   -B  write no .pyc files into this folder -S  no site-packages, no .pth files
 set -e
 
-# Find this folder, also when started through a symlink (e.g. ~/bin/beast-booter).
+# Find this folder, also when started through a symlink (e.g. ~/bin/beast-boot).
 self=$0
 while [ -L "$self" ]; do
   link=$(readlink "$self")

@@ -1,5 +1,5 @@
 #!/bin/sh
-# beast-booter portable (macOS): BeastBooter.app's main program; starts the GUI.
+# beast-boot portable (macOS): BeastBooter.app's main program; starts the GUI.
 #
 # Runs only what is inside the app: the bundled Python (Resources/runtime),
 # the installer sources (Resources/app) and the verified boot files

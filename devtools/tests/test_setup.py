@@ -146,12 +146,12 @@ class World:
         self.venv_ok = True
         keys = tmp / "keys"
         keys.mkdir()
-        for n in ("beast-booter.key", "beast-booter.crt", "beast-booter.cer"):
+        for n in ("beast-boot.key", "beast-boot.crt", "beast-boot.cer"):
             (keys / n).write_text("x")
         self.keys = keys
         (tmp / "dist").mkdir()
         self.manifest = write_manifest(tmp / "dist", "b-new")
-        self.image = tmp / "out" / "dev" / "beast-booter-dev.img"
+        self.image = tmp / "out" / "dev" / "beast-boot-dev.img"
         # what the image says: version.cfg's build id and the marker's layout (None: unreadable)
         self.image_build_id: str | None = "b-new"
         self.image_layout: int | None = layout.LAYOUT_VERSION
@@ -213,7 +213,7 @@ def test_fresh_then_noop(world):
     world.results = ok_results(qemu=doctor.FAIL, venv=doctor.WARN)
     world.venv_ok = False
     world.dist_ok = False
-    (world.keys / "beast-booter.key").unlink()
+    (world.keys / "beast-boot.key").unlink()
     rc, out = world.run()
     assert rc == 0, out
     assert world.cmds == ["bash bootstrap-tools.sh", "make_venv", "make keys", "make build",
@@ -225,7 +225,7 @@ def test_fresh_then_noop(world):
     world.results = ok_results()
     world.venv_ok = True
     world.dist_ok = True
-    (world.keys / "beast-booter.key").write_text("x")
+    (world.keys / "beast-boot.key").write_text("x")
     rc, out = world.run()
     assert rc == 0 and world.cmds == [], world.cmds
     assert "nothing changed" in out and "exists" in out
@@ -384,7 +384,7 @@ def test_image_build_id(tmp_path, monkeypatch, data, want):
 
 def test_image_build_id_unreadable_image(tmp_path, monkeypatch):
     def boom(img):
-        raise Failure("not a beast-booter image")
+        raise Failure("not a beast-boot image")
     monkeypatch.setattr(diskimg, "image_info", boom)
     assert setup.image_build_id(tmp_path / "x.img") is None
 

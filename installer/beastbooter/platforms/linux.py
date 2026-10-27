@@ -13,7 +13,7 @@ A disk is refused when it
     filesystems;
   * is held by device-mapper/LVM/LUKS/RAID (sysfs holders), or a loop device
     uses a file on it (a mounted ISO, a live system's squashfs);
-  * holds the running beast-booter itself (platforms/common.check_common).
+  * holds the running beast-boot itself (platforms/common.check_common).
 Being mounted is not a refusal: prepare() unmounts every filesystem of the
 selected drive (desktop auto-mounts under /media or /run/media through
 `udisksctl unmount`, so udisks and the desktop stay in step, falling back to
@@ -496,7 +496,7 @@ def elevation_command(argv: list[str], env=None, which=shutil.which) -> list[str
         if env.get("SUDO_ASKPASS"):
             cmd.append("-A")
         return [*cmd, "--", prog, *rest]
-    raise BeastError("cannot get root rights: neither pkexec nor sudo was found; run beast-booter as root")
+    raise BeastError("cannot get root rights: neither pkexec nor sudo was found; run beast-boot as root")
 
 
 class LinuxBackend:
@@ -810,7 +810,7 @@ class LinuxBackend:
         return KernelLog.open(kernel_patterns(bd.name, bd.sysdir))
 
     def state_dir(self) -> str:
-        """Where this machine keeps beast-booter's state (an interrupted update's recovery copy)."""
+        """Where this machine keeps beast-boot's state (an interrupted update's recovery copy)."""
         if self.is_elevated():
             return STATE_DIR
         base = os.environ.get("XDG_STATE_HOME") or os.path.join(os.path.expanduser("~"), ".local", "state")

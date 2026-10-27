@@ -203,7 +203,7 @@ def fake_fw(tmp_path, monkeypatch):
     monkeypatch.setattr(paths, "VM_OUT", tmp_path / "vm")
     keys = tmp_path / "keys"
     keys.mkdir()
-    (keys / "beast-booter.cer").write_bytes(b"cert")
+    (keys / "beast-boot.cer").write_bytes(b"cert")
     monkeypatch.setattr(paths, "KEYS", keys)
     env = dict(os.environ, PATH=f"{bindir}{os.pathsep}{os.environ['PATH']}")
     return qemu.Firmware(d, d), env, tool
@@ -250,7 +250,7 @@ def test_sb_enrolled_uses_a_cached_template(fake_fw, tmp_path):
 
 def test_sb_enrolled_needs_a_certificate(fake_fw, tmp_path, monkeypatch):
     fw, env, _ = fake_fw
-    (paths.KEYS / "beast-booter.cer").unlink()
+    (paths.KEYS / "beast-boot.cer").unlink()
     monkeypatch.setattr(paths, "DIST", tmp_path / "nodist")
     with pytest.raises(Failure, match="certificate"):
         vm.prepare_vars(planned("sb-enrolled", fw, tmp_path), host(fw=fw), env, reset=False)
