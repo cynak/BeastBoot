@@ -457,10 +457,17 @@ def env_block(values: dict[str, str], *, size: int = 1024) -> bytes:
 def config_env(text: str) -> bytes:
     """config.env for the plain `set NAME="VALUE"` lines of a user_config() text
     (later lines win, as in GRUB). Anything else in it (GRUB script) is not
-    carried over; the menu reads only its allow-list from config.env anyway."""
+    carried over; the menu reads only its allow-list from config.env anyway. Values
+    config.env refuses (a quote or a control character) are left out: with Secure Boot
+    off, config.cfg alone then sets them, as before 0.4.0 (e.g. an ISO name with a quote,
+    which the recipes refuse themselves)."""
     values: dict[str, str] = {}
     for ln in text.splitlines():
         m = _SET_LINE.match(ln.strip())
         if m:
-            values[m.group(1)] = re.sub(r"\\(.)", r"\1", m.group(2))
+            v = re.sub(r"\\(.)", r"\1", m.group(2))
+            if '"' in v or re.search(r"[\x00-\x1f\x7f]", v):
+                values.pop(m.group(1), None)
+                continue
+            values[m.group(1)] = v
     return env_block(values)

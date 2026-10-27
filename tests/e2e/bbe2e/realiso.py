@@ -485,12 +485,14 @@ def build_drive(iso: Iso, fs: str, path: Path) -> images.Drive:
 
 
 def prepare_windows(root: Path, dest: str) -> list[str]:
-    """Run `beast-boot prepare-windows` on the staged ISO (root + dest, root standing in
-    for the data partition); returns the files it wrote, as data-partition paths. The
-    stamp is last, as the tool writes it (docs/WINDOWS_SECURE_BOOT.md)."""
+    """Run prepare-windows' code (beastbooter.winboot.prepare, staging=True: root is the
+    folder the drive image is built from, not a mounted drive) on the staged ISO (root +
+    dest); returns the files it wrote, as data-partition paths. The stamp is last, as
+    the tool writes it (docs/WINDOWS_SECURE_BOOT.md)."""
     (root / "beast-booter").mkdir(parents=True, exist_ok=True)
-    env.run([env.python(), "-m", "beastbooter", "prepare-windows", "--quiet", str(root / dest.lstrip("/")),
-             "--data-root", str(root)], timeout=1200)
+    code = ("import sys; from beastbooter import winboot; from beastbooter.util import Reporter; "
+            "winboot.prepare(sys.argv[1], sys.argv[2], False, Reporter(quiet=True), staging=True)")
+    env.run([env.python(), "-c", code, str(root / dest.lstrip("/")), str(root)], timeout=1200)
     d = root / "beast-booter" / "winboot" / dest.lstrip("/")
     return [f"/beast-booter/winboot{dest}/{n}" for n in ("boot.wim", "iso-head.bin", "stamp.env") if (d / n).is_file()]
 

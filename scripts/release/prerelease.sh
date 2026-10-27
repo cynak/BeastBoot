@@ -131,13 +131,15 @@ step installer 1800 pytest_q installer/tests
 step menu 600 pytest_q tests/menu
 step beastnet 900 env PYTHONPATH=beastnet/python "$PY" -m pytest -q -p no:cacheprovider beastnet/tests
 step devtools 900 pytest_q devtools/tests
-step selftest 1800 python3 -I scripts/selftest.py
+# selftest checks the SBOM: on a full run it goes after the scan, which rewrites sbom/
+[ $QUICK = 0 ] || step selftest 1800 python3 -I scripts/selftest.py
 if [ $QUICK = 0 ]; then
   step e2e 10800 pytest_q -rs tests/e2e
   # kernel_vex needs a fresh scan first, then the scan again with its statements
   step scan-pre 3600 make vulns
   step kernel-vex 3600 python3 -I scripts/kernel_vex.py
   step scan 3600 scan
+  step selftest 1800 python3 -I scripts/selftest.py
   [ $REAL_ISO = 0 ] || step real-iso 22200 env BB_REAL_ISO=1 timeout 21600 "$PY" -m pytest -q -p no:cacheprovider \
     -rs --tb=short tests/e2e/test_e2e_real_isos.py
   step verify-dist 7200 build/verify-dist.sh --rebuild

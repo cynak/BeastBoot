@@ -339,3 +339,36 @@ def test_vendored_modules_identical():
     for name in ("udf.py", "safedir.py"):
         assert (repo / "installer/beastbooter" / name).read_bytes() == \
             (repo / "beastnet/python/beastnet" / name).read_bytes(), f"{name} diverged; copy it over"
+
+
+def test_staging_skips_only_the_drive_checks(tmp_path, image, monkeypatch):
+    """staging=True (drive images built from a folder, tests/e2e real-ISO harness): no
+    mount-point or FAT32/exFAT check, the same writes; the command line cannot set it."""
+    monkeypatch.setattr(winboot, "is_mount", lambda p: False)
+    monkeypatch.setattr(winboot, "fs_type", lambda p: "ext4")
+    stage = tmp_path / "stage"
+    (stage / "isos").mkdir(parents=True)
+    (stage / "isos/w.iso").write_bytes(image)
+    iso = stage / "isos/w.iso"
+    with pytest.raises(BeastError):  # not staging: refused
+        prep(iso, data_root=stage)
+    with pytest.raises(BeastError) as e:  # staging needs the data root
+        winboot.prepare(str(iso), None, False, Reporter(quiet=True), staging=True)
+    assert e.value.code == "windows-data-root"
+    r = winboot.prepare(str(iso), str(stage), False, Reporter(quiet=True), staging=True)
+    assert r["iso"] == "/isos/w.iso"
+    out = stage / "beast-booter/winboot/isos/w.iso"
+    assert sorted(p.name for p in out.iterdir()) == ["boot.wim", "iso-head.bin", "stamp.env"]
+    if safedir.HAVE_DIRFD:  # link-safe writing still applies
+        out2 = tmp_path / "outside"
+        out2.mkdir()
+        (stage / "isos/x.iso").write_bytes(image)
+        (stage / "beast-booter/winboot/isos/x.iso").symlink_to(out2)
+        with pytest.raises(BeastError):
+            winboot.prepare(str(stage / "isos/x.iso"), str(stage), False, Reporter(quiet=True), staging=True)
+        assert not any(out2.iterdir())
+
+
+def test_cli_has_no_staging_option():
+    from beastbooter import cli
+    assert "staging" not in (cli.__doc__ or "") and "--staging" not in open(cli.__file__).read()

@@ -273,7 +273,12 @@ def _write(sd: SafeDir, name: str, chunks, size: int, rep: Reporter | None = Non
         raise
 
 
-def prepare(iso: str, data_root: str | None, force: bool, rep: Reporter) -> dict:
+def prepare(iso: str, data_root: str | None, force: bool, rep: Reporter, *, staging: bool = False) -> dict:
+    """Copy the Windows ISO's boot.wim for Secure Boot (docs/WINDOWS_SECURE_BOOT.md).
+    staging=True: data_root is a folder a drive image is built from (the real-ISO test
+    harness), not a mounted drive, so the mount-point and FAT32/exFAT checks are skipped;
+    everything else, the link-safe writing included, is the same. Never set from the
+    command line."""
     if os.path.islink(iso):
         raise BeastError(f"{iso} is a link; give the ISO file itself", code="windows-iso")
     real = os.path.realpath(iso)
@@ -285,9 +290,11 @@ def prepare(iso: str, data_root: str | None, force: bool, rep: Reporter) -> dict
         raise BeastError(f"{iso}: not a file", code="windows-iso")
     if data_root:
         root = os.path.realpath(data_root)
-        if not is_mount(root):
+        if not staging and not is_mount(root):
             raise BeastError(f"{root} is not a mount point; --data-root must be where the BeastBoot "
                              "data partition is mounted", code="windows-data-root")
+    elif staging:
+        raise BeastError("staging needs the data root", code="windows-data-root")
     else:
         root = find_data_root(iso)
     try:
@@ -300,8 +307,8 @@ def prepare(iso: str, data_root: str | None, force: bool, rep: Reporter) -> dict
     parts = [MARKER, "winboot", *iso_path.strip("/").split("/")]
     out_dir = os.path.join(root, *parts)
 
-    fstype = fs_type(root)
-    if fstype not in OK_FS:
+    fstype = None if staging else fs_type(root)
+    if not staging and fstype not in OK_FS:
         raise BeastError(f"the data partition {root} is {fstype or 'of a type this system does not report'}; "
                          "only FAT32 or exFAT can be prepared (with Secure Boot on, GRUB reads only those)",
                          code="windows-fs")
