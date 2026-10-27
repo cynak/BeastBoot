@@ -40,5 +40,6 @@ scan). Status: **fixes in progress**.
 
 ## Decisions for the maintainer
 
-- D1 (existing since 0.1): `config.cfg` on the data partition is sourced as GRUB script, also under Secure Boot. Lockdown holds, but untrusted script controls `linux`/`initrd` arguments.
-- D2: sign wimboot with its own leaf certificate (BeastBoot CA enrolled once), so one MokListX entry revokes every wimboot build without touching GRUB. Changes enrollment for existing users.
+- D1 (existing since 0.1): `config.cfg` on the data partition is sourced as GRUB script, also under Secure Boot. Lockdown holds, but untrusted script controls `linux`/`initrd` arguments. **Decided: fix in 0.4.0.** With Secure Boot on, the menu reads only `config.env` (GRUB environment block) through `load_env` with an allow-list of settings, and ignores `config.cfg`.
+- D2: sign wimboot with its own leaf certificate (BeastBoot CA enrolled once), so one MokListX entry revokes every wimboot build without touching GRUB. Changes enrollment for existing users. **Decided: 0.5.0.** 0.4.0 keeps one key; a bad wimboot is revoked by hash (MokListX).
+- D3: the menu scripts, hooks and themes on the ESP are unsigned, so the `config.env` allow-list protects only the data partition. **Decided: 0.5.0** ([ROADMAP-0.5.0.md](ROADMAP-0.5.0.md)).
