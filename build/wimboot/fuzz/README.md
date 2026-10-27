@@ -34,9 +34,11 @@ frame, by `triage.awk`), crash inputs in `OUTDIR/<target>/crashes/`, logs in
 `OUTDIR/<target>/log.*`. Replay one input: `OUTDIR/bin/fuzz_wim FILE`.
 
 `--from-wim` takes LZX chunks from a real WIM (e.g. `sources/boot.wim` of a
-Windows ISO) as seeds; without it the LZX target starts from the crafted
-WIM seeds' data only. The other seeds are built by `mkseeds.py` (a small
-WIM in plain, XPRESS and LZX form with `\Windows\Boot\EFI\bootmgfw.efi` and
+Windows ISO, `7z e ISO sources/boot.wim`) as seeds, for the `lzx` target and
+as small LZX WIMs for the `wim` target. Use it: without it there are no LZX
+seeds and the fuzzer barely gets into the LZX decoder (19 edges in 2
+minutes; run.sh warns). The other seeds are built by `mkseeds.py` (a small
+WIM in plain and XPRESS form with `\Windows\Boot\EFI\bootmgfw.efi` and
 `\Windows\System32`, XCA chunks from its own encoder, and newc initrds).
 No wimlib needed.
 

@@ -6,8 +6,9 @@ images with \\Windows\\Boot\\EFI\\bootmgfw.efi and \\Windows\\System32, in
 three flavours: uncompressed, XPRESS Huffman (XCA) compressed with a small
 encoder below, and LZX. wimlib is not needed. LZX needs real compressed
 chunks: pass --from-wim PATH (any LZX WIM, e.g. sources/boot.wim of a
-Windows ISO) and the LZX seeds are chunks copied out of it; without it the
-LZX corpus starts from the WIM seeds' raw chunks only.
+Windows ISO) and the LZX seeds (and the LZX WIM seeds) are chunks copied
+out of it; without it there are no LZX seeds at all and the LZX code is
+barely reached.
 
 Usage: mkseeds.py OUT [--from-wim boot.wim]
 """

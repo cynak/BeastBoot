@@ -74,6 +74,7 @@ done
 echo "built: $(cd "$OUT/bin" && echo fuzz_*)"
 
 # --- seeds ----------------------------------------------------------------
+[ -n "$FROM_WIM" ] || echo "warning: no --from-wim: no LZX seeds, the LZX decoder is barely fuzzed" >&2
 python3 -I "$HERE/mkseeds.py" "$OUT/seeds" ${FROM_WIM:+--from-wim "$FROM_WIM"}
 
 # --- fuzz -----------------------------------------------------------------
