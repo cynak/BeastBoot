@@ -163,8 +163,8 @@ def build_parser(on_error=None) -> argparse.ArgumentParser:
                              "(docs/WINDOWS_SECURE_BOOT.md)", on_error=on_error)
     sp.add_argument("iso", metavar="ISO", help="the Windows ISO, already on a mounted BeastBoot data partition")
     sp.add_argument("--data-root", metavar="DIR",
-                    help="mount point of the data partition (default: the nearest parent of ISO "
-                         "containing beast-booter/)")
+                    help="mount point of the data partition, FAT32 or exFAT (default: the mount "
+                         "point holding ISO, if it has beast-booter/ at its root)")
     sp.add_argument("--force", action="store_true", help="copy again even if a matching stamp exists")
     sp.add_argument("--quiet", "-q", action="store_true", help="no progress output")
     sp.add_argument("--progress-file", metavar="PATH", help="append JSON-lines progress events to PATH (for the GUI)")

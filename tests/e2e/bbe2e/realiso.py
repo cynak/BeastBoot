@@ -472,7 +472,9 @@ def build_drive(iso: Iso, fs: str, path: Path) -> images.Drive:
         with drive.data_writer() as w:
             w.put(iso_dest(iso), staged)
             w.mkdir("/beast-booter")
-            w.put(images.USER_CONFIG, config_text(iso.entry))
+            cfg = config_text(iso.entry)
+            w.put(images.USER_CONFIG, cfg)
+            w.put(images.USER_ENV, images.config_env(cfg))  # read instead under Secure Boot
             for rel in prepared:
                 w.mkdir(rel.rsplit("/", 1)[0])
                 w.put(rel, root / rel.lstrip("/"))

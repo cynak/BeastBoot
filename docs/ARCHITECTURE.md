@@ -228,8 +228,15 @@ Files on the ESP, sourced in this order by `grub/grub.cfg`:
 1. `$prefix/beast/version.cfg` (build) — `bb_version`, `bb_build_id`.
 2. `$prefix/beast/device.cfg` (installer, may be missing) — see below.
 3. `$prefix/beast/main.cfg` — the menu. It locates the data partition, then
-   sources the optional user config `/beast-booter/config.cfg` **from the data
-   partition**, then shows the menu (or autoboots, see below).
+   reads the optional user settings **from the data partition**, then shows
+   the menu (or autoboots, see below): `/beast-booter/config.env`, a GRUB
+   environment block read with `load_env` and an allow-list of names, then
+   `/beast-booter/config.cfg`, GRUB script, sourced only with Secure Boot
+   off. With Secure Boot on, `config.cfg` is ignored: anyone who can write
+   the drive could otherwise run GRUB commands in lockdown and choose the
+   arguments of signed kernels and loaders. `bb_sb` comes from GRUB's
+   `lockdown` before and again after the settings, so no setting can change
+   it ([MENU.md](MENU.md#user-configuration-configenv-and-configcfg)).
 
 `device.cfg`, written by the installer (GRUB script, `set` lines only):
 

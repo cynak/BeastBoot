@@ -540,33 +540,52 @@ disks.
 
 ## 10. Menu settings
 
-Create `beast-booter/config.cfg` on the BEASTBOOTER partition; plain `set`
-lines:
+Create `beast-booter/config.env` on the BEASTBOOTER partition: the first
+line exactly `# GRUB Environment Block`, then one `name=value` per line, no
+quotes, every line ending with a line break:
 
 ```sh
-# /beast-booter/config.cfg
-set timeout=10                       # start the default entry after 10 s
-set default=0                        # the first entry
-set bb_autoboot="/linux/ubuntu.iso"  # boot this ISO straight away
-set bb_gfx=0                         # text menu instead of the graphical one
-set bb_gfxmode=1280x720              # screen mode of the graphical menu
-set bb_serial=1                      # also show the menu on serial port 0
+# GRUB Environment Block
+timeout=10
+default=0
+bb_autoboot=/linux/ubuntu.iso
+bb_gfx=0
+bb_gfxmode=1280x720
+bb_serial=1
 ```
 
-The file is GRUB script: a typo shows up as a GRUB error at boot. All
-settings, including your own theme (`bb_theme`) and debug output:
-[MENU.md](MENU.md).
+| Setting | Meaning |
+|---|---|
+| `timeout=10` | start the default entry after 10 seconds |
+| `default=0` | the default entry: the first one |
+| `bb_autoboot=/linux/ubuntu.iso` | boot this ISO straight away (path from the partition root, starting with `/`) |
+| `bb_gfx=0` | text menu instead of the graphical one |
+| `bb_gfxmode=1280x720` | screen mode of the graphical menu |
+| `bb_serial=1` | also show the menu on serial port 0 |
+
+On Linux, `grub-editenv /media/$USER/BEASTBOOTER/beast-booter/config.env set
+timeout=10` creates or edits the file safely. A value the menu does not
+accept is ignored with a short notice. All settings, including your own
+theme (`bb_theme`) and debug output: [MENU.md](MENU.md).
+
+**Secure Boot on:** the menu reads only `config.env`. The older
+`beast-booter/config.cfg` (GRUB script with `set` lines) is then ignored;
+the menu says so and adds a help entry at the end. Anyone who can write to
+the stick could otherwise use it to change what Secure Boot lets start.
+With Secure Boot off both files are read, `config.cfg` last, so its values
+win.
 
 ## 11. Troubleshooting
 
 ### Messages in the menu
 
-With `set bb_debug=1` in `config.cfg`, the menu also prints a `BEAST: error
+With `bb_debug=1` in `config.env`, the menu also prints a `BEAST: error
 <code>` line; include it in bug reports.
 
 | Code | Meaning | What to do |
 |---|---|---|
 | `sb-verify-failed` | Secure Boot refused the ISO's kernel: it is not signed by a key this computer trusts | Ubuntu or based on it: **Trust Ubuntu's Secure Boot key** ([section 6](#ubuntu-isos-with-secure-boot-on)). Other distributions: enroll their key with **Enroll a key (MokManager)** if they publish one. Or turn Secure Boot off for this ISO. BeastBoot never retries without verification. |
+| `config-env-bad-value` | a setting in `beast-booter/config.env` has a value the menu does not accept; it is ignored | fix the value ([MENU.md](MENU.md)) |
 | `no-recipe` | BeastBoot does not recognise how this ISO boots | check [ISO_SUPPORT.md](ISO_SUPPORT.md#recipes); report the ISO |
 | `windows-sb-no-helper` | a Windows ISO, Secure Boot is on, it is not prepared and the drive has no helper | run `beast-boot prepare-windows <ISO>` on the computer, or update the boot files ([section 7](#7-update-the-boot-files)); or turn Secure Boot off ([Install Windows](#install-windows-from-the-stick)) |
 | `windows-bad-name` | a Windows ISO whose path contains a quote (") or a control character (possible on NTFS) | rename the file or folder without those characters |

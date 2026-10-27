@@ -40,7 +40,9 @@ def test_every_linux_recipe_appends_kargs_unquoted():
 
 def test_kargs_only_in_iso_recipes():
     text = LIB.read_text()
-    users = [ln for ln in code_lines(text) if "bb_kargs" in ln]
+    # bb_env_load only reads and checks the setting (config.env, test_user_config.py)
+    env_load = code_lines(function_body(text, "bb_env_load"))
+    users = [ln for ln in code_lines(text) if "bb_kargs" in ln and ln not in env_load]
     body = code_lines(function_body(text, "bb_r_linux"))
     assert users and all(ln in body for ln in users), users
     for fn in ("bb_beastnet", "bb_r_loopback", "bb_r_windows", "bb_r_efi_chainload", "bb_linux"):

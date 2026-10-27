@@ -46,6 +46,18 @@ Writers: write `boot.wim.part`, fsync, rename to `boot.wim`; same for
 first, then the old `iso-head.bin` and `boot.wim`. Never write
 outside `/beast-booter/winboot/`.
 
+The drive's contents are untrusted. Both writers use one implementation
+(`installer/beastbooter/safedir.py`, shipped byte-identical as
+`beastnet/python/beastnet/safedir.py`): every folder below the data root is
+opened from its parent's descriptor with `O_DIRECTORY|O_NOFOLLOW` and created
+with `mkdir` relative to it; temp files are created with
+`O_CREAT|O_EXCL|O_NOFOLLOW`, renamed and deleted relative to the folder's
+descriptor; a final check confirms the folder is where the path says. On
+Windows (no `dir_fd`), each component is checked with `lstat` and refused if it
+is a reparse point. A link, reparse point or non-regular file (e.g. a FIFO) in
+the way stops the writer with nothing written there; a stale regular `.part`
+or `.tmp` is deleted first (and its space counts as free).
+
 ### ISO identity
 
 `iso-head.bin` = the ISO's bytes 32768 to 98303 (2048-byte sectors 16-47: the
@@ -89,31 +101,44 @@ ISO's boot manager, wimboot prints `Could not load …`; the menu cannot see it
 (required; missing -> error screen, no writes). The helper reads `iso-head.bin`'s
 bytes from the ISO file itself.
 
-1. Validate `bb_wb_iso`: absolute, no `..`, no NUL/newline, a regular file on the
-   data partition (`/mnt/data`).
+1. Validate `bb_wb_iso` as a string: absolute, no `..`, no control characters
+   (`\x00-\x1f`, `\x7f`), `"`, backslash or non-UTF-8 bytes.
 2. The data partition must be vfat or exfat (GRUB cannot read ntfs in lockdown):
-   otherwise explain and stop.
-3. Attach read-only (loop, `ro`), mount `udf` read-only (fall back to `iso9660`),
-   find `sources/boot.wim` case-insensitively; none -> "not a Windows ISO", stop.
-   Kind from `sources/install.{wim,esd,swm}`.
-4. Space: `boot.wim` size + 16 MiB must fit; on vfat `boot.wim` must be < 4 GiB.
+   otherwise explain and stop. This comes before anything on the partition is
+   looked at. `init` mounts it `nosuid,nodev,noexec`.
+3. The ISO's real path must be inside `/mnt/data` and a regular file (not a
+   link). Read it in userspace with the host tool's UDF reader
+   (`installer/beastbooter/udf.py`, shipped byte-identical as
+   `beastnet/python/beastnet/udf.py`, bounds-checked and fuzzed): no loop
+   device, no kernel `udf`/`iso9660` mount, so nothing inside the ISO can point
+   outside it. Find `sources/boot.wim` case-insensitively; none (or not UDF) ->
+   "not a Windows ISO" / "cannot read the ISO", stop. Kind from
+   `sources/install.{wim,esd,swm}`.
+4. Space: `boot.wim` size + 16 MiB must fit (an old `boot.wim`/`.part` counts as
+   free); on vfat `boot.wim` must be < 4 GiB.
 5. Copy with progress per the writer rules; stamp with `bb_wb_by=helper <version>`.
-6. Unmount and detach always (also on error or interruption).
-7. Remove `winboot/` directories whose ISO no longer exists (only inside
+6. Remove `winboot/` directories whose ISO no longer exists (only inside
    `/beast-booter/winboot/`, only directories holding a `stamp.env`).
-8. On success: unset `bb_wb_iso`; set `bb_oneshot` to
-   `<iso>` (the menu boots it next); reboot. `--dry-run` skips the reboot.
+7. On success: set `bb_oneshot` to `<iso>` (the menu boots it next); reboot.
+   `--dry-run` skips the reboot.
+8. `bb_wb_iso` is unset on every exit: success, error, Back and cancel.
 
 ## Host tool (installer/)
 
 `beast-boot prepare-windows ISO [--data-root DIR] [--force]`: for an ISO already on
-a mounted BeastBoot data partition. Data root: `--data-root`, else the nearest
-parent directory of ISO containing `beast-booter/`. Reads the ISO with a
-read-only pure-Python UDF reader (no mounting, no root, works on any OS), copies
-the identity bytes, writes the same layout with
+a mounted BeastBoot data partition. Data root: `--data-root` (must be a mount
+point), else the mount point of the filesystem holding the ISO, which must have
+`beast-booter/` at its root (discovery never looks above the mount point). The
+ISO must be inside the data root (not a link), its path UTF-8 without control
+characters or `"`. The data partition must be FAT32 or exFAT, also with
+`--data-root`: Linux `/proc/mounts` `vfat`/`msdos`/`exfat` (`fuseblk` only if
+`lsblk`/`blkid` say `exfat`), macOS `statfs` `f_fstypename` (`msdos`/`exfat`,
+else `diskutil info`), Windows `GetVolumeInformationW` (`FAT32`/`FAT`/`exFAT`);
+anything else or unknown is refused. Reads the ISO with a read-only
+pure-Python UDF reader (no mounting, no root, works on any OS; running as root
+gets a warning), copies the identity bytes, writes the same layout with
 `bb_wb_by=host <version>`. Skips (unless `--force`) when a stamp for this path exists and `iso-head.bin` matches.
-Same space and 4 GiB checks (from the data root's free space and filesystem,
-where the OS tells it).
+Same space and 4 GiB checks.
 
 ## Records and errors (new)
 

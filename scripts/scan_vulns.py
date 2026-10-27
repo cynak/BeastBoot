@@ -889,7 +889,11 @@ ORIGIN_GRUB_FILE = re.compile(r"grub-src:([a-z0-9][a-z0-9+.-]*)=(\S+?):(/\S+)")
 def check_boot_chain(root: Path, dist: Path, manifest: dict, fetch: Fetcher, idx: dict,
                      manifest_sha: str, sbom_manifest_sha: str | None) -> dict:
     now = now_utc()
-    efis = {rel: efi.inspect_efi(dist / rel) for rel in sorted(manifest["files"]) if rel.lower().endswith(".efi")}
+    # signed PE files are chosen by extension OR by the manifest's "signed:" origin, so extension-less
+    # binaries (esp/beast-booter/wimboot) get the same SBAT / signer / dbx checks as the .efi files
+    efis = {rel: efi.inspect_efi(dist / rel) for rel, meta in sorted(manifest["files"].items())
+            if rel.lower().endswith(".efi") or "signed:" in meta.get("origin", "")}
+    bb_signed = [r for r in efis if "signed:beast-boot" in manifest["files"][r].get("origin", "")]
     res: dict = {"findings": [], "efi": {rel: efi.public_view(i) for rel, i in efis.items()}}
     F = res["findings"]
 
@@ -1051,12 +1055,15 @@ def check_boot_chain(root: Path, dist: Path, manifest: dict, fetch: Fetcher, idx
             for s in efis[grub_rel]["signatures"]:
                 if s.get("signer"):
                     grub_signer = s["signer"]["sha256"]
+        not_bb = [r for r in bb_signed if not any((s.get("signer") or {}).get("sha256") == c["sha256"]
+                                                   for s in efis[r]["signatures"])]
         bbcert = {"file": cer, "subject": c["subject"], "sha256": c["sha256"], "key": f"{c['key_algorithm']} {c['key_bits']}",
                   "signature_algorithm": c["signature_algorithm"], "not_before": c["not_before"],
                   "not_after": c["not_after"], "days_left": days_left, "eku": c["extended_key_usage"],
                   "code_signing_eku": c["code_signing_eku"], "self_signed": c["self_signed"],
                   "matches_manifest": c["sha256"] == manifest.get("secure_boot", {}).get("cert_sha256"),
-                  "signs_grubx64": grub_signer == c["sha256"]}
+                  "signs_grubx64": grub_signer == c["sha256"],
+                  "signed_files": bb_signed, "not_signed_by_cert": not_bb}
         problems = []
         if c["key_algorithm"] == "rsaEncryption" and (c["key_bits"] or 0) < 2048:
             problems.append(f"RSA key of {c['key_bits']} bits (< 2048)")
@@ -1072,9 +1079,12 @@ def check_boot_chain(root: Path, dist: Path, manifest: dict, fetch: Fetcher, idx
             problems.append("grubx64.efi is not signed by this certificate")
         if "sha1" in c["signature_algorithm"].lower() or "md5" in c["signature_algorithm"].lower():
             problems.append(f"weak signature algorithm {c['signature_algorithm']}")
+        for r in not_bb:
+            if r != grub_rel:
+                problems.append(f"{r} is not signed by this certificate")
         bbcert["problems"] = problems
         if problems:
-            sev = "critical" if any(x.startswith(("expired", "grubx64", "differs", "no extended")) for x in problems) else "medium"
+            sev = "critical" if any(x.startswith(("expired", "grubx64", "differs", "no extended")) or x.endswith("not signed by this certificate") for x in problems) else "medium"
             finding("BB-CERT-PROBLEM", sev, comp_of(cer), "beast-boot signing certificate: " + "; ".join(problems),
                     json.dumps({k: bbcert[k] for k in ("subject", "key", "not_after")}), "R-CERT", "boot-chain:cert")
 
@@ -1551,7 +1561,7 @@ def write_markdown(path: Path, rep: dict) -> None:
     if c:
         a(f"`{c['file']}`: `{c['subject']}`, {c['key']}, {c['signature_algorithm']}, valid {c['not_before'][:10]} to "
           f"{c['not_after'][:10]} ({c['days_left']} days left), EKU: {c['eku'] or 'none'}, self-signed: {c['self_signed']}, "
-          f"matches manifest: {c['matches_manifest']}, signs grubx64.efi: {c['signs_grubx64']}. SHA-256 `{c['sha256']}`. "
+          f"matches manifest: {c['matches_manifest']}, signs grubx64.efi: {c['signs_grubx64']}, signed:beast-boot files checked: {len(c.get('signed_files', []))} (not signed by it: {', '.join(c.get('not_signed_by_cert', [])) or 'none'}). SHA-256 `{c['sha256']}`. "
           + ("Problems: " + "; ".join(c["problems"]) if c["problems"] else "No problems found."))
     else:
         a("No certificate in dist/.")

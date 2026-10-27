@@ -2,19 +2,26 @@
 
 With Secure Boot on, GRUB cannot read UDF, so the menu boots a copy of boot.wim kept
 on the (FAT32 or exFAT) data partition. Layout, stamp.env keys and writer rules:
-docs/WINDOWS_SECURE_BOOT.md. The pure functions here are tested directly; the
-side-effecting part (loop device, mounts) goes through an injectable runner.
+docs/WINDOWS_SECURE_BOOT.md. The ISO is read in userspace with the UDF reader the
+host tool uses (udf.py, vendored byte-identical): no loop device, no kernel
+udf/iso9660 mount, so links inside the ISO mean nothing and a crafted image only
+meets bounds-checked Python. Writes go through safedir.SafeDir (no links followed).
 """
 
 from __future__ import annotations
 
 import contextlib
 import os
+import re
+import stat
 from dataclasses import dataclass
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Sequence
+from typing import BinaryIO
 
 from . import __version__, grubenv
-from .errors import COPY, GRUBENV, MOUNT, NO_SPACE, WINBOOT, BeastNetError
+from .errors import COPY, GRUBENV, NO_SPACE, WINBOOT, BeastNetError
+from .safedir import SafeDir, UnsafePath
+from .udf import UdfError, UdfFile, open_udf
 
 WINBOOT_DIR = "/beast-booter/winboot"
 WIM = "boot.wim"
@@ -27,12 +34,13 @@ KEYS = ("bb_wb_iso",)
 HEAD = "iso-head.bin"
 HEAD_START, HEAD_END = 32768, 98304
 INSTALL_NAMES = ("install.wim", "install.esd", "install.swm")
+_BAD = re.compile(r'[\x00-\x1f\x7f"\\\ufffd]')  # controls, quote, backslash, undecodable (non-UTF-8) bytes
 
 
 def validate_iso(iso: str | None) -> str:
-    """The data-partition path of the ISO: absolute, no '..', no NUL/newline/backslash."""
-    if (not iso or not iso.startswith("/") or "\0" in iso or "\n" in iso or "\\" in iso
-            or ".." in iso.split("/")):
+    """The data-partition path of the ISO: absolute, no '..', no control characters,
+    double quote, backslash or non-UTF-8 bytes (grubenv decodes those to U+FFFD)."""
+    if not iso or not iso.startswith("/") or _BAD.search(iso) or ".." in iso.split("/"):
         raise BeastNetError(WINBOOT, f"the ISO path {iso!r} is not valid",
                             "Pick the ISO again in the menu.")
     parts = [p for p in iso.split("/") if p not in ("", ".")]
@@ -58,33 +66,23 @@ def check_fs(fstype: str) -> None:
                             "off or use a drive with a FAT32 or exFAT data partition.")
 
 
-def find_ci(root: str, *parts: str) -> str | None:
-    """Walk ``parts`` below ``root`` matching names case-insensitively."""
-    cur = root
-    for part in parts:
-        try:
-            names = os.listdir(cur)
-        except OSError:
-            return None
-        hit = next((n for n in sorted(names) if n.lower() == part.lower()), None)
-        if hit is None:
-            return None
-        cur = os.path.join(cur, hit)
-    return cur
+def _iso_error(e: Exception) -> BeastNetError:
+    return BeastNetError(WINBOOT, f"cannot read the ISO: {e}",
+                         "The file may be damaged or not a Windows ISO.")
 
 
-def find_wim(mount: str) -> tuple[str, str]:
-    """(path of sources/boot.wim, kind) in a mounted ISO; BeastNetError if it is not Windows."""
-    wim = find_ci(mount, "sources", "boot.wim")
-    if wim is None or not os.path.isfile(wim):
-        raise BeastNetError(WINBOOT, "this is not a Windows ISO (no sources/boot.wim)",
-                            "Only Windows install or Windows PE ISOs can be prepared.")
-    src = find_ci(mount, "sources")
-    kind = "native"
-    if src:
-        with contextlib.suppress(OSError):
-            if any(n.lower() in INSTALL_NAMES for n in os.listdir(src)):
-                kind = "setup"
+def inspect_iso(f: BinaryIO) -> tuple[UdfFile, str]:
+    """(sources/boot.wim, kind) of an open ISO, read as UDF in userspace; BeastNetError if
+    it is not a Windows ISO."""
+    try:
+        vol = open_udf(f)
+        wim = vol.lookup("sources/boot.wim")
+        if wim is None or wim.is_dir:
+            raise BeastNetError(WINBOOT, "this is not a Windows ISO (no sources/boot.wim)",
+                                "Only Windows install or Windows PE ISOs can be prepared.")
+        kind = "setup" if any(vol.lookup("sources/" + n) is not None for n in INSTALL_NAMES) else "native"
+    except UdfError as e:
+        raise _iso_error(e) from None
     return wim, kind
 
 
@@ -98,12 +96,28 @@ def check_space(size: int, free: int, fstype: str) -> None:
                             "Free some space on the data partition and try again.")
 
 
-def read_head(iso_file: str) -> bytes:
+def open_iso(data_root: str, iso: str) -> BinaryIO:
+    """The ISO for reading: a regular file whose real path is inside ``data_root``."""
+    local = iso_local(data_root, iso)
+    root = os.path.realpath(data_root)
+    real = os.path.realpath(local)
+    if os.path.islink(local) or os.path.commonpath([root, real]) != root or real == root:
+        raise BeastNetError(WINBOOT, f"{iso} is not a file on the data partition")
+    try:
+        fd = os.open(real, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+    except OSError:
+        raise BeastNetError(WINBOOT, f"{iso} is not a file on the data partition") from None
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        raise BeastNetError(WINBOOT, f"{iso} is not a file on the data partition")
+    return os.fdopen(fd, "rb")
+
+
+def read_head(f: BinaryIO) -> bytes:
     """The ISO's bytes 32768..98303 (its identity), read from the file itself."""
     try:
-        with open(iso_file, "rb") as f:
-            f.seek(HEAD_START)
-            data = f.read(HEAD_END - HEAD_START)
+        f.seek(HEAD_START)
+        data = f.read(HEAD_END - HEAD_START)
     except OSError as e:
         raise BeastNetError(WINBOOT, f"cannot read the ISO: {e.strerror}") from None
     if len(data) != HEAD_END - HEAD_START:
@@ -123,80 +137,72 @@ def stamp_bytes(iso: str, kind: str, size: int, by: str | None = None) -> bytes:
     return data
 
 
-def _fsync_dir(path: str) -> None:
-    with contextlib.suppress(OSError):
-        fd = os.open(path, os.O_RDONLY)
-        try:
-            os.fsync(fd)
-        finally:
-            os.close(fd)
+def winboot_parts(iso: str) -> list[str]:
+    return [*WINBOOT_DIR.strip("/").split("/"), *iso.strip("/").split("/")]
 
 
-def _unlink(path: str) -> None:
-    with contextlib.suppress(FileNotFoundError):
-        os.unlink(path)
-
-
-def write_copy(src: str, data_root: str, iso: str, stamp: bytes, head: bytes = b"",
-               progress: Callable[[int, int], None] | None = None,
+def write_copy(chunks: Iterable[bytes], total: int, data_root: str, iso: str, stamp: bytes,
+               head: bytes = b"", progress: Callable[[int, int], None] | None = None,
                cancelled: Callable[[], bool] | None = None) -> bool:
-    """Copy ``src`` to the winboot directory of ``iso``, stamp last. False if cancelled.
+    """Write ``chunks`` (``total`` bytes) as boot.wim of ``iso``, stamp last. False if cancelled.
 
     Order: delete stamp.env, iso-head.bin, boot.wim; write boot.wim.part (fsync), rename;
-    iso-head.bin.part (fsync), rename; write stamp.env.tmp (fsync), rename, fsync the directory.
+    iso-head.bin.part (fsync), rename; write stamp.env.tmp (fsync), rename, fsync the
+    directory. Every folder is reached and every file created without following links
+    (safedir); a link or non-regular file in the way stops the copy.
     """
-    base = os.path.join(data_root, WINBOOT_DIR.lstrip("/"))
-    d = dest_dir(data_root, iso)
-    if os.path.commonpath([base, d]) != base or d == base:
-        raise BeastNetError(WINBOOT, "refusing to write outside the winboot folder")
-    total = os.path.getsize(src)
+    iso = validate_iso(iso)
+    sd = None
     try:
-        os.makedirs(d, exist_ok=True)
-        _unlink(os.path.join(d, STAMP))
-        _unlink(os.path.join(d, HEAD))
-        _unlink(os.path.join(d, WIM))
-        part = os.path.join(d, WIM + ".part")
+        sd = SafeDir(data_root, winboot_parts(iso))
+        for n in (STAMP, HEAD, WIM, WIM + ".part", HEAD + ".part", STAMP + ".tmp"):
+            sd.remove(n)
         done = 0
-        with open(src, "rb") as fi, open(part, "wb") as fo:
-            while True:
+        with sd.create(WIM + ".part") as fo:
+            for buf in chunks:
                 if cancelled and cancelled():
-                    break
-                buf = fi.read(CHUNK)
-                if not buf:
                     break
                 fo.write(buf)
                 done += len(buf)
                 if progress:
                     progress(done, total)
-            else:
-                pass
-            if done == total:
+            if done == total and not (cancelled and cancelled()):
                 fo.flush()
                 os.fsync(fo.fileno())
-        if done != total:
-            _unlink(part)
+        if done != total or (cancelled and cancelled()):
+            sd.remove(WIM + ".part")
             return False
-        os.rename(part, os.path.join(d, WIM))
-        hpart = os.path.join(d, HEAD + ".part")
-        with open(hpart, "wb") as f:
-            f.write(head)
-            f.flush()
-            os.fsync(f.fileno())
-        os.rename(hpart, os.path.join(d, HEAD))
-        tmp = os.path.join(d, STAMP + ".tmp")
-        with open(tmp, "wb") as f:
-            f.write(stamp)
-            f.flush()
-            os.fsync(f.fileno())
-        os.rename(tmp, os.path.join(d, STAMP))
-        _fsync_dir(d)
+        sd.replace(WIM + ".part", WIM)
+        for name, tmp, data in ((HEAD, HEAD + ".part", head), (STAMP, STAMP + ".tmp", stamp)):
+            with sd.create(tmp) as f:
+                f.write(data)
+                f.flush()
+                os.fsync(f.fileno())
+            sd.replace(tmp, name)
+        sd.fsync()
         return True
-    except OSError as e:
-        for n in (WIM + ".part", HEAD + ".part", STAMP + ".tmp"):
-            _unlink(os.path.join(d, n))
+    except (OSError, UnsafePath, UdfError) as e:
+        if sd is not None:
+            for n in (WIM + ".part", HEAD + ".part", STAMP + ".tmp"):
+                with contextlib.suppress(OSError, UnsafePath):
+                    sd.remove(n)
+        if isinstance(e, UnsafePath):
+            raise BeastNetError(WINBOOT, f"refusing to write: {e}",
+                                "The drive's winboot folder holds a link or a special file; "
+                                "nothing was written there.") from None
+        if isinstance(e, UdfError):
+            raise _iso_error(e) from None
         code = NO_SPACE if e.errno == 28 else COPY
         raise BeastNetError(code, f"copying boot.wim failed: {e.strerror or e}",
                             "The data partition may be full or damaged.") from None
+    finally:
+        if sd is not None:
+            sd.close()
+
+
+def _unlink(path: str) -> None:
+    with contextlib.suppress(FileNotFoundError):
+        os.unlink(path)
 
 
 def cleanup_stale(data_root: str, keep: str | None = None) -> list[str]:
@@ -236,33 +242,6 @@ def cleanup_stale(data_root: str, keep: str | None = None) -> list[str]:
 
 
 # -- the side-effecting part -------------------------------------------------------------
-@contextlib.contextmanager
-def mounted_iso(runner, iso_file: str, mnt: str) -> Iterator[str]:
-    """Attach ``iso_file`` read-only and mount it (udf, else iso9660); always undone."""
-    dev = ""
-    mounted = False
-    try:
-        cp = runner.run(["losetup", "-r", "-f", "--show", iso_file], timeout=30)
-        dev = (cp.stdout or "").strip()
-        if cp.returncode != 0 or not dev.startswith("/dev/"):
-            raise BeastNetError(MOUNT, "could not attach the ISO", (cp.stderr or "").strip())
-        os.makedirs(mnt, exist_ok=True)
-        for fs in ("udf", "iso9660"):
-            cp = runner.run(["mount", "-t", fs, "-o", "ro", dev, mnt], timeout=60)
-            if cp.returncode == 0:
-                mounted = True
-                break
-        if not mounted:
-            raise BeastNetError(MOUNT, "could not open the ISO as a disc image",
-                                "The file may be damaged or not an ISO.")
-        yield mnt
-    finally:
-        if mounted:
-            runner.run(["umount", mnt], timeout=60)
-        if dev:
-            runner.run(["losetup", "-d", dev], timeout=30)
-
-
 def data_fstype(runner, data_root: str) -> str:
     cp = runner.run(["findmnt", "-n", "-o", "FSTYPE", "--target", data_root], timeout=10)
     return (cp.stdout or "").strip().splitlines()[0] if cp.returncode == 0 and cp.stdout.strip() else ""
@@ -291,7 +270,6 @@ class WinBoot:
     def __init__(self, paths, runner, *, esp_env: str | None = None) -> None:
         self.paths = paths
         self.runner = runner
-        self.mnt = os.path.join(paths.run, "winiso")
         self.env_path = esp_env or paths.grubenv
 
     def read_inputs(self) -> str:
@@ -306,32 +284,34 @@ class WinBoot:
     def plan(self) -> WinPlan:
         iso = self.read_inputs()
         data = self.paths.data
-        local = iso_local(data, iso)
-        if not os.path.isfile(local) or os.path.islink(local):
-            raise BeastNetError(WINBOOT, f"{iso} is not a file on the data partition")
-        read_head(local)
         fstype = data_fstype(self.runner, data)
-        check_fs(fstype)
-        with mounted_iso(self.runner, local, self.mnt) as m:
-            wim, kind = find_wim(m)
-            size = os.path.getsize(wim)
+        check_fs(fstype)  # before anything on the data partition is looked at
+        with open_iso(data, iso) as f:
+            read_head(f)
+            wim, kind = inspect_iso(f)
+            size = wim.size
         st = os.statvfs(data)
         free = st.f_bavail * st.f_frsize
-        old = os.path.join(dest_dir(data, iso), WIM)
-        if os.path.isfile(old):
-            free += os.path.getsize(old)  # replaced by the new copy
+        try:
+            with SafeDir(data, winboot_parts(iso), create=False) as sd:
+                free += sd.regular_size(WIM) + sd.regular_size(WIM + ".part")  # replaced by the new copy
+        except FileNotFoundError:
+            pass
+        except UnsafePath as e:
+            raise BeastNetError(WINBOOT, f"refusing to write: {e}") from None
         check_space(size, free, fstype)
         return WinPlan(iso, fstype, size, kind, free)
 
     def run(self, plan: WinPlan, progress: Callable[[int, int], None] | None = None,
             cancelled: Callable[[], bool] | None = None) -> WinResult:
         data = self.paths.data
-        with mounted_iso(self.runner, iso_local(data, plan.iso), self.mnt) as m:
-            wim, kind = find_wim(m)
-            size = os.path.getsize(wim)
-            stamp = stamp_bytes(plan.iso, kind, size)
-            head = read_head(iso_local(data, plan.iso))
-            ok = write_copy(wim, data, plan.iso, stamp, head, progress, cancelled)
+        check_fs(data_fstype(self.runner, data))
+        with open_iso(data, plan.iso) as f:
+            head = read_head(f)
+            wim, kind = inspect_iso(f)
+            stamp = stamp_bytes(plan.iso, kind, wim.size)
+            ok = write_copy(wim.read_chunks(CHUNK), wim.size, data, plan.iso, stamp, head,
+                            progress, cancelled)
         if not ok:
             return WinResult(False, [])
         removed = cleanup_stale(data, keep=plan.iso)
@@ -346,6 +326,16 @@ class WinBoot:
         env.set(grubenv.ONESHOT_KEY, iso)
         grubenv.save(self.env_path, env)
 
+    def clear_inputs(self) -> None:
+        """Unset bb_wb_iso (every exit: error, cancel, back), so a stale request is never
+        acted on again. Best effort; writes only if the key is there."""
+        with contextlib.suppress(BeastNetError, OSError):
+            env = grubenv.load(self.env_path)
+            if any(env.get(k) is not None for k in KEYS):
+                for k in KEYS:
+                    env.unset(k)
+                grubenv.save(self.env_path, env)
 
-__all__: Sequence[str] = ("WinBoot", "WinPlan", "WinResult", "validate_iso", "find_wim", "check_space",
-                          "stamp_bytes", "write_copy", "cleanup_stale", "mounted_iso")
+
+__all__: Sequence[str] = ("WinBoot", "WinPlan", "WinResult", "validate_iso", "inspect_iso", "open_iso",
+                          "check_space", "stamp_bytes", "write_copy", "cleanup_stale")

@@ -9,7 +9,7 @@ boots the downloaded ISO once (through the normal recipes) and clears the entry.
 
 Images: the "browse" base (FAT32; exFAT for one download run) with its ISOs
 removed, so the root menu holds only the tool entries.
-The helper runs in script mode (`bb_beastnet_script` in config.cfg ->
+The helper runs in script mode (`bb_beastnet_script` in config.cfg / config.env ->
 `beastnet.script=`), so no questions are asked.
 """
 

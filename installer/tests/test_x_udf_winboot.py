@@ -3,143 +3,32 @@
 from __future__ import annotations
 
 import io
+import os
 import struct
 from pathlib import Path
 
 import pytest
 
-from beastbooter import cli, udf, winboot
+from beastbooter import cli, safedir, udf, winboot
+from beastbooter.errors import BeastError
 from beastbooter.udf import UdfError
+from beastbooter.util import Reporter
 
-S = 2048
-PART = 270  # first sector of the partition
-
-
-def tag(ident: int, body: bytes, loc: int = 0) -> bytes:
-    """A descriptor: 16-byte tag + body, padded to a sector."""
-    raw = bytearray(struct.pack("<HHBBHHHI", ident, 2, 0, 0, 0, 0, len(body), loc))
-    raw += body
-    raw += bytes(S - len(raw))
-    raw[4] = (sum(raw[:4]) + sum(raw[5:16])) & 0xFF
-    return bytes(raw)
-
-
-def fid(name: str, is_dir: bool, lbn: int) -> bytes:
-    nm = b"\x08" + name.encode("latin-1")
-    long_ad = struct.pack("<IIH6x", S, lbn, 0)
-    ent = bytearray(struct.pack("<H", 1) + bytes([2 if is_dir else 0, len(nm)]) + long_ad + struct.pack("<H", 0) + nm)
-    full = bytearray(16) + ent  # tag room
-    full[0:16] = tag(257, b"")[:16]
-    while len(full) % 4:
-        full.append(0)
-    # fix tag id/checksum for the FID (length irrelevant to the reader)
-    t = bytearray(struct.pack("<HHBBHHHI", 257, 2, 0, 0, 0, 0, 0, 0))
-    t[4] = (sum(t[:4]) + sum(t[5:16])) & 0xFF
-    full[0:16] = t
-    return bytes(full)
-
-
-def fe(is_dir: bool, size: int, ads: bytes, kind: int, ident: int = 261) -> bytes:
-    body = bytearray(S)
-    icb = struct.pack("<IHHHBB", 0, 4, 0, 1, 0, 4 if is_dir else 5)
-    body[16:16 + len(icb)] = icb
-    struct.pack_into("<H", body, 34, kind)
-    struct.pack_into("<Q", body, 56, size)
-    if ident == 261:
-        struct.pack_into("<II", body, 168, 0, len(ads))
-        base = 176
-    else:
-        struct.pack_into("<II", body, 208, 0, len(ads))
-        base = 216
-    body[base:base + len(ads)] = ads
-    t = bytearray(struct.pack("<HHBBHHHI", ident, 2, 0, 0, 0, 0, 0, 0))
-    body[0:16] = t
-    body[4] = (sum(body[:4]) + sum(body[5:16])) & 0xFF
-    return bytes(body)
-
-
-def build_image(wim: bytes, with_install: bool = True) -> bytes:
-    n_total = 400 + (len(wim) + S - 1) // S
-    img = bytearray(n_total * S)
-
-    def put(sector: int, data: bytes) -> None:
-        img[sector * S:sector * S + len(data)] = data
-
-    pvd = bytearray(S)
-    pvd[0], pvd[1:6], pvd[6] = 1, b"CD001", 1
-    pvd[40:72] = b"CCCOMA_X64FRE_EN-US_DV9".ljust(32)
-    pvd[813:829] = b"0000000000000000"
-    pvd[830:846] = b"2026091412345678"
-    put(16, bytes(pvd))
-    term = bytearray(S)
-    term[0], term[1:6], term[6] = 255, b"CD001", 1
-    put(17, bytes(term))
-
-    # layout (partition-relative blocks): 0 FSD, 1 root FE, 2 root dir, 3 sources FE, 4 sources dir,
-    # 5 boot.wim FE, 6 install.wim FE, 7 readme FE, 8.. data
-    avdp = struct.pack("<IIII", 3 * S, 257, 3 * S, 257) + b""
-    put(256, tag(2, avdp[0:0] + bytes(0), 256)[:16] + struct.pack("<II", 3 * S, 257) + struct.pack("<II", 3 * S, 257)
-        + bytes(S - 32))
-    # fix AVDP checksum (tag body was empty, rebuild properly)
-    a = bytearray(img[256 * S:257 * S])
-    a[4] = (sum(a[:4]) + sum(a[5:16])) & 0xFF
-    put(256, bytes(a))
-
-    pd = bytearray(S)
-    struct.pack_into("<H", pd, 22, 0)
-    struct.pack_into("<II", pd, 188, PART, n_total - PART)
-    put(257, tag(5, b"")[:16] + bytes(pd[16:]))
-    lv = bytearray(S)
-    struct.pack_into("<I", lv, 212, S)
-    struct.pack_into("<IH", lv, 248, S, 0)  # placeholder, fixed next
-    struct.pack_into("<IIH", lv, 248, S, 0, 0)  # long_ad: length, lbn 0, partition ref 0
-    struct.pack_into("<II", lv, 264, 6, 1)
-    lv[440:446] = bytes([1, 6]) + struct.pack("<HH", 1, 0)
-    put(258, tag(6, b"")[:16] + bytes(lv[16:]))
-    put(259, tag(8, b""))
-    for sec in (257, 258, 259):
-        a = bytearray(img[sec * S:(sec + 1) * S])
-        a[4] = (sum(a[:4]) + sum(a[5:16])) & 0xFF
-        put(sec, bytes(a))
-    # the descriptors above were built with tag().. but seq number zero is fine
-
-    def pb(b: int) -> int:
-        return PART + b
-
-    fsd = bytearray(S)
-    struct.pack_into("<IIH", fsd, 400, S, 1, 0)
-    fsd[0:16] = tag(256, b"")[:16]
-    put(pb(0), bytes(fsd))
-    root_dir = fid("README.TXT", False, 7) + fid("Sources", True, 3)
-    put(pb(2), root_dir)
-    put(pb(1), fe(True, len(root_dir), struct.pack("<II", len(root_dir), 2), 0))
-    src = fid("boot.WIM", False, 5) + (fid("install.wim", False, 6) if with_install else b"")
-    put(pb(4), src)
-    put(pb(3), fe(True, len(src), struct.pack("<II", len(src), 4), 0))
-    # boot.wim in two short extents (first one split mid-way), data from block 10
-    half = (len(wim) // 2) // S * S
-    def nb(n: int) -> int:
-        return (n + S - 1) // S
-
-    first = struct.pack("<II", half, 10)
-    second = struct.pack("<II", len(wim) - half, 10 + nb(half) + 3)  # gap of 3 blocks
-    put(pb(10), wim[:half])
-    put(pb(10 + nb(half) + 3), wim[half:])
-    put(pb(5), fe(False, len(wim), first + second, 0, ident=266))
-    # install.wim: long ad with a not-recorded (zero) extent
-    zero_ext = struct.pack("<IIH6x", (1 << 30) | 4096, 0, 0)
-    put(pb(6), fe(False, 4096, zero_ext, 1))
-    put(pb(7), fe(False, 5, b"hello", 3))  # inline
-    return bytes(img)
-
-
-def wim_bytes(n: int = 70000) -> bytes:
-    return b"MSWIM\0\0\0" + bytes((i * 7) & 0xFF for i in range(n - 8))
+from udf_synth import PART, S, build_image, fe, fid, tag, wim_bytes  # noqa: F401 (fuzzers import them from here)
 
 
 @pytest.fixture
 def image() -> bytes:
     return build_image(wim_bytes())
+
+
+@pytest.fixture(autouse=True)
+def drive(monkeypatch):
+    """tmp dirs stand in for a mounted exFAT data partition: any folder named 'data'
+    (or 'drive') is a mount point."""
+    monkeypatch.setattr(winboot, "fs_type", lambda p: "exfat")
+    monkeypatch.setattr(winboot, "is_mount", lambda p: os.path.basename(p) in ("data", "drive")
+                        or p == os.path.dirname(p))
 
 
 def test_read_files(image):
@@ -235,3 +124,218 @@ def test_real_iso_boot_wim():
         assert w is not None and w.size > 1 << 20
         assert next(w.read_chunks())[:8] == b"MSWIM\0\0\0"
         assert vol.lookup("sources/install.wim") or vol.lookup("sources/install.esd")
+
+
+# -- security regressions (docs/SECURITY_REVIEW-0.4.0.md H1-H5, F6) -----------------------
+def prep(iso, data_root=None, force=False):
+    return winboot.prepare(str(iso), str(data_root) if data_root else None, force, Reporter(quiet=True))
+
+
+def make_victims(tmp_path: Path) -> dict[Path, bytes]:
+    v = tmp_path / "victim"
+    v.mkdir()
+    out = {}
+    for n in ("cfg", "headtarget", "bashrc"):
+        (v / n).write_bytes(b"precious " + n.encode())
+        out[v / n] = (v / n).read_bytes()
+    return out
+
+
+@pytest.mark.skipif(not safedir.HAVE_DIRFD, reason="POSIX symlinks")
+@pytest.mark.parametrize("links", [("stamp.env", "iso-head.bin", "boot.wim.part"), ("boot.wim.part",),
+                                   ("iso-head.bin.part",), ("stamp.env.tmp",)])
+def test_h1_symlinked_files_are_not_followed(tmp_path, image, links):
+    """revC/poc: links in the winboot folder must never redirect a write."""
+    root, iso = make_root(tmp_path, image)
+    victims = make_victims(tmp_path)
+    d = root / "beast-booter/winboot/isos/Win11.iso"
+    d.mkdir(parents=True)
+    targets = {"stamp.env": "cfg", "iso-head.bin": "headtarget", "boot.wim.part": "bashrc",
+               "iso-head.bin.part": "headtarget", "stamp.env.tmp": "cfg"}
+    for n in links:
+        (d / n).symlink_to(tmp_path / "victim" / targets[n])
+    with pytest.raises(BeastError) as e:
+        prep(iso)
+    assert e.value.code == "windows-unsafe"
+    for p, data in victims.items():
+        assert p.read_bytes() == data
+
+
+@pytest.mark.skipif(not safedir.HAVE_DIRFD, reason="POSIX symlinks")
+@pytest.mark.parametrize("at", ["beast-booter/winboot", "beast-booter/winboot/isos", "beast-booter/winboot/isos/Win11.iso"])
+def test_h1_symlinked_folder_is_not_followed(tmp_path, image, at):
+    """revC/poc2: beast-booter/winboot (or a folder below) links outside the drive."""
+    root, iso = make_root(tmp_path, image)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "keep").write_bytes(b"k")
+    link = root / at
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.symlink_to(outside)
+    assert cli.main(["prepare-windows", "-q", str(iso)]) == 1
+    with pytest.raises(BeastError) as e:
+        prep(iso, force=True)
+    assert e.value.code == "windows-unsafe"
+    assert [p.name for p in outside.rglob("*")] == ["keep"]
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="POSIX FIFOs")
+def test_h5_fifo_part_refused_and_stale_part_counted(tmp_path, image, monkeypatch):
+    root, iso = make_root(tmp_path, image)
+    d = root / "beast-booter/winboot/isos/Win11.iso"
+    d.mkdir(parents=True)
+    os.mkfifo(d / "boot.wim.part")
+    with pytest.raises(BeastError) as e:  # refused at once, not blocked on open()
+        prep(iso)
+    assert e.value.code == "windows-unsafe"
+    os.unlink(d / "boot.wim.part")
+    (d / "boot.wim.part").write_bytes(b"x" * 5000)  # stale, from an interrupted run
+    free = 70000 + winboot.HEADROOM - 4000
+    monkeypatch.setattr(winboot.shutil, "disk_usage", lambda p: type("U", (), {"free": free})())
+    assert prep(iso)["skipped"] is False  # the stale part's space counts as free
+    assert sorted(p.name for p in d.iterdir()) == ["boot.wim", "iso-head.bin", "stamp.env"]
+
+
+def test_h4_non_utf8_name_refused_before_writing(tmp_path, image):
+    """revC/poc3: a non-UTF-8 file name is refused up front (it used to crash after the copy)."""
+    if os.name == "nt" or isinstance(os.fsdecode(b"\xff"), bytes):
+        pytest.skip("POSIX byte file names")
+    root, _ = make_root(tmp_path, image)
+    try:
+        iso = Path(os.path.join(str(root), os.fsdecode(b"w\xffin.iso")))
+        iso.write_bytes(image)
+    except (OSError, UnicodeError):
+        pytest.skip("the filesystem refuses non-UTF-8 names")
+    with pytest.raises(BeastError) as e:
+        prep(iso)
+    assert e.value.code == "windows-path"
+    assert not (root / "beast-booter/winboot").exists()
+    assert cli.main(["prepare-windows", "-q", str(iso)]) == 1
+
+
+@pytest.mark.parametrize("name", ['a"b.iso', "a\tb.iso", "a\x7fb.iso", "a\x1bb.iso"])
+def test_h4_control_chars_and_quotes_refused(tmp_path, image, name):
+    root, _ = make_root(tmp_path, image)
+    try:
+        iso = root / name
+        iso.write_bytes(image)
+    except OSError:
+        pytest.skip("the filesystem refuses this name")
+    with pytest.raises(BeastError) as e:
+        prep(iso)
+    assert e.value.code == "windows-path"
+
+
+def test_f6_dotdot_prefixed_name_accepted(tmp_path, image):
+    """revC/poc4: '..win.iso' is inside the data root; only '..' components escape it."""
+    root, _ = make_root(tmp_path, image)
+    iso = root / "..win.iso"
+    iso.write_bytes(image)
+    assert prep(iso)["iso"] == "/..win.iso"
+    assert (root / "beast-booter/winboot/..win.iso/stamp.env").is_file()
+
+
+def test_h3_discovery_stops_at_the_mount_point(tmp_path, image):
+    """revC/poc5: a source checkout's beast-booter/ above the ISO is not a data root."""
+    home = tmp_path / "home"
+    (home / "Code/beast-booter/.git").mkdir(parents=True)
+    (home / "Code/dl").mkdir(parents=True)
+    iso = home / "Code/dl/win.iso"
+    iso.write_bytes(image)
+    with pytest.raises(BeastError) as e:
+        prep(iso)
+    assert e.value.code == "windows-data-root"
+    assert not (home / "Code/beast-booter/winboot").exists()
+    # the mount point (a folder named 'drive' here) needs beast-booter/ at its root
+    drv = tmp_path / "drive"
+    (drv / "isos").mkdir(parents=True)
+    (drv / "isos/w.iso").write_bytes(image)
+    with pytest.raises(BeastError):
+        prep(drv / "isos/w.iso")
+    assert prep(drv / "isos/w.iso", data_root=drv)["iso"] == "/isos/w.iso"  # --data-root: no marker needed
+    with pytest.raises(BeastError) as e:  # but it must be a mount point
+        prep(drv / "isos/w.iso", data_root=drv / "isos")
+    assert e.value.code == "windows-data-root"
+
+
+@pytest.mark.skipif(not safedir.HAVE_DIRFD, reason="POSIX symlinks")
+def test_symlinked_iso_refused(tmp_path, image):
+    root, iso = make_root(tmp_path, image)
+    (root / "link.iso").symlink_to(iso)
+    with pytest.raises(BeastError) as e:
+        prep(root / "link.iso")
+    assert e.value.code == "windows-iso"
+
+
+@pytest.mark.parametrize("fs", [None, "ext4", "tmpfs", "ntfs3", "fuseblk (ntfs)", "fuseblk (unknown)"])
+def test_h2_only_fat_and_exfat(tmp_path, image, monkeypatch, fs):
+    root, iso = make_root(tmp_path, image)
+    monkeypatch.setattr(winboot, "fs_type", lambda p: fs)
+    for data_root in (None, root):  # --data-root does not bypass the check
+        with pytest.raises(BeastError) as e:
+            prep(iso, data_root)
+        assert e.value.code == "windows-fs"
+    assert not (root / "beast-booter/winboot").exists()
+
+
+def test_h2_linux_mounts(tmp_path, monkeypatch):
+    m = tmp_path / "mounts"
+    m.write_text("/dev/sda2 / ext4 rw 0 0\n"
+                 "/dev/sdb1 /media/u/BEAST\\040BOOT exfat rw 0 0\n"
+                 "/dev/sdc1 /media/u/FAT vfat rw 0 0\n"
+                 "/dev/sdd1 /media/u/FUSE fuseblk rw 0 0\n"
+                 "tmpfs /tmp tmpfs rw 0 0\n")
+    probed = {"/dev/sdd1": "exfat"}
+    monkeypatch.setattr(winboot, "_probe_dev_fs", lambda dev: probed.get(dev))
+    fs = lambda p: winboot._linux_fs(p, str(m))  # noqa: E731
+    assert fs("/media/u/BEAST BOOT") == "exfat"
+    assert fs("/media/u/BEAST BOOT/isos") == "exfat"
+    assert fs("/media/u/FAT") == "fat"
+    assert fs("/media/u/FATTER") == "ext4"
+    assert fs("/tmp/x") == "tmpfs"
+    assert fs("/media/u/FUSE") == "exfat"
+    probed["/dev/sdd1"] = "ntfs"
+    assert fs("/media/u/FUSE") == "fuseblk (ntfs)"
+    probed.clear()
+    assert fs("/media/u/FUSE") == "fuseblk (unknown)"
+    assert winboot._linux_fs("/x", str(tmp_path / "missing")) is None
+
+
+def test_root_warning(tmp_path, image, monkeypatch, capsys):
+    root, iso = make_root(tmp_path, image)
+    monkeypatch.setattr(winboot.os, "geteuid", lambda: 0, raising=False)
+    prep(iso)
+    assert "running as root is not needed" in capsys.readouterr().err
+
+
+@pytest.mark.skipif(not safedir.HAVE_DIRFD, reason="POSIX symlinks")
+def test_safedir_unit(tmp_path):
+    (tmp_path / "out").mkdir()
+    (tmp_path / "r").mkdir()
+    (tmp_path / "r/l").symlink_to(tmp_path / "out")
+    with pytest.raises(safedir.UnsafePath):
+        safedir.SafeDir(str(tmp_path / "r"), ["l", "x"])
+    for bad in ("..", ".", "", "a/b", "a\0b"):
+        with pytest.raises(safedir.UnsafePath):
+            safedir.SafeDir(str(tmp_path / "r"), [bad])
+    with safedir.SafeDir(str(tmp_path / "r"), ["a", "b"]) as sd:
+        (tmp_path / "r/a/b/dangling").symlink_to(tmp_path / "out/new")
+        with pytest.raises(FileExistsError):
+            sd.create("dangling")
+        assert not (tmp_path / "out/new").exists()
+        assert sd.read("dangling", 10) is None
+        with sd.create("f") as f:
+            f.write(b"hi")
+        assert sd.read("f", 10) == b"hi" and sd.regular_size("f") == 2
+        sd.replace("f", "dangling")  # replaces the link itself
+        assert (tmp_path / "r/a/b/dangling").read_bytes() == b"hi" and not (tmp_path / "out/new").exists()
+    with pytest.raises(FileNotFoundError):
+        safedir.SafeDir(str(tmp_path / "r"), ["zz"], create=False)
+
+
+def test_vendored_modules_identical():
+    """The helper ships byte-identical copies of the UDF reader and the safe writer."""
+    repo = Path(__file__).resolve().parents[2]
+    for name in ("udf.py", "safedir.py"):
+        assert (repo / "installer/beastbooter" / name).read_bytes() == \
+            (repo / "beastnet/python/beastnet" / name).read_bytes(), f"{name} diverged; copy it over"

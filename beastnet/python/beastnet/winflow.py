@@ -20,6 +20,13 @@ class WinbootScreens:
         self.wb = wb or winboot.WinBoot(flow.ctx.paths, flow.ctx.system.runner)
 
     def run(self) -> None:
+        """The action; bb_wb_iso is unset on every way out (done, error, Back, cancel)."""
+        try:
+            self._run()
+        finally:
+            self.wb.clear_inputs()
+
+    def _run(self) -> None:
         try:
             plan = self.ui.task(TITLE, "Reading the ISO...", self.wb.plan)
         except BeastNetError as e:

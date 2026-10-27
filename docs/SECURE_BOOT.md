@@ -427,6 +427,31 @@ unknown key (the screen from step 1) **(unverified: exact message)**. Update
 the drive with a newer BeastBoot release; your ISOs on partition 1 are not
 touched.
 
+### Revoking a bad wimboot (0.4.0)
+
+wimboot carries two SBAT lines: `wimboot,1` (upstream's name) and
+`wimboot.beastboot,1` (ours).
+
+- **A bug in our wimboot:** fix it and rebuild with a higher
+  `wimboot.beastboot` generation. Only a shim that has that generation in its
+  SbatLevel will then refuse the older builds.
+- **Why we cannot push that generation ourselves:** SbatLevel comes only from
+  shim's built-in policy. With Debian's shim we cannot add our own level, so
+  old BeastBoot builds stay bootable on a PC until its shim learns the level.
+- **One bad binary, right now:** import its Authenticode SHA-256 as a blocked
+  hash with `mokutil --mokx --import-hash <authenticode sha256>`, then confirm
+  it in MokManager on the next boot. `make vulns` prints the hash of each
+  signed file.
+- **The BeastBoot key is compromised:** the only fix is a new key (section 5
+  describes enrolling a key). Remove the old one (section 4).
+- **Rollback:** a drive you can write to lets anyone put back an older signed
+  wimboot or GRUB. Revocation (above) is what stops that, not the drive.
+- **The prepared copy is not a security boundary.** The copy of an ISO that
+  BeastBoot prepares on the data partition can be changed by anyone who can
+  write to it. A tampered `boot.wim`, like a tampered ISO, can run anything in
+  Windows PE. Secure Boot protects the boot chain (shim, GRUB, wimboot), not
+  the contents of the ISO.
+
 ### Known compatibility limits of 0.1.1 and older (found by `make vulns`, 2026-10-23)
 
 With Secure Boot **on**, BeastBoot 0.1.1 and older will not start on a PC in

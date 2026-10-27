@@ -1035,7 +1035,7 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
                 or (o["kind"] == "beastmount-src" and bm_ref is None):
             m.dep(root_ref, fref, "CONTAINS")
         # EFI binaries: SBAT, Authenticode, signers
-        if rel.lower().endswith(".efi"):
+        if rel.lower().endswith(".efi") or "signed:" in o["raw"]:
             info = efi.inspect_efi(dist / rel)
             efi_facts[rel] = efi.public_view(info)
             item["props"].update({

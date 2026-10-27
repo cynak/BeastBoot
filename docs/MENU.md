@@ -84,12 +84,27 @@ needs roughly one pass over the folder for every entry shown, so keep a few
 hundred entries per folder at most. Other files (photos, documents) cost
 time too, even though they are not listed.
 
-## User configuration: `/beast-booter/config.cfg`
+## User configuration: `config.env` and `config.cfg`
 
-You can create `beast-booter/config.cfg` on the data partition (the folder
-itself is hidden from the menu). It is GRUB script and is sourced after the
-data partition has been found and before the menu is built, so plain `set`
-lines are all you need:
+Two optional files in the `beast-booter` folder of the data partition (the
+folder itself is hidden from the menu) hold your settings:
+
+- `/beast-booter/config.env`: a GRUB environment block, one `name=value` per
+  line. The menu reads only the names in the table below from it, with
+  GRUB's `load_env` and an explicit list, and checks every value; it can
+  never run GRUB commands. Read in every mode.
+- `/beast-booter/config.cfg`: GRUB script, sourced after `config.env`, so
+  its values win. **Not read when Secure Boot is on** (below).
+
+```sh
+# GRUB Environment Block
+timeout=10
+default=2
+bb_autoboot=/linux/ubuntu-24.04.iso
+bb_serial=1
+```
+
+The same settings as `config.cfg`:
 
 ```sh
 # /beast-booter/config.cfg
@@ -99,11 +114,27 @@ set bb_autoboot="/linux/ubuntu-24.04.iso"
 set bb_serial=1
 ```
 
+Rules for `config.env` (GRUB 2.14 `grub-core/lib/envblk.c`):
+
+- The file must start with the line `# GRUB Environment Block`, exactly,
+  followed by a line feed. Without it GRUB refuses the whole file and the
+  menu says so.
+- One `name=value` per line, every line ending in a line feed (also the
+  last one: GRUB stops reading at a line without one). No quotes: they
+  would become part of the value. Lines that start with `#` are comments.
+  A backslash takes the next character literally.
+- Any size works; `grub-editenv` writes 1024 bytes padded with `#`, and
+  `grub-editenv /path/config.env set name=value` is a safe way to edit it.
+  A Windows line end (CR LF) is accepted: the menu drops the CR.
+- A value of the wrong form (the table says what each setting takes) is
+  ignored, with a notice and `BEAST: error config-env-bad-value <name>`.
+  Names not in the table are ignored without a notice.
+
 | Setting | Effect |
 |---|---|
 | `timeout=N` | standard GRUB menu timeout for the root menu, in seconds. Default: none, the menu waits for you. GRUB then runs the `default` entry (the first one unless `default` is set); if that entry is a folder, GRUB opens it. |
 | `default=N` or `default="title"` | standard GRUB default entry of the root menu |
-| `bb_autoboot=/path/x.iso` | skip the menu and boot that ISO straight away. If that fails, or it is a dry run, you get the menu afterwards. The path is relative to the data partition root; a missing leading `/` is added. |
+| `bb_autoboot=/path/x.iso` | skip the menu and boot that ISO straight away. If that fails, or it is a dry run, you get the menu afterwards. The path is relative to the data partition root; in `config.cfg` a missing leading `/` is added, in `config.env` it must start with `/`. |
 | `bb_serial=1` | also show the menu on serial port 0 (COM1) at 115200 8N1 and accept keys from it. The installer can set this for you with `--serial-console`. |
 | `bb_debug=1` | print machine-readable `BEAST:` lines (for tests and bug reports), see below |
 | `bb_dryrun=1` | do everything except actually starting the kernel or boot loader: print what would be run and return to the menu |
@@ -115,15 +146,42 @@ set bb_serial=1
 | `bb_windows=pe` | for `bb_autoboot` of a Windows installation ISO: start its Windows PE command prompt instead of Windows Setup. From the menu you choose in a small menu instead. Default: `setup` |
 | `bb_beastnet_script=/path/plan.json` | start the network helper in script mode with this JSON plan (a path on the data partition) instead of asking questions; see [BEASTNET.md](BEASTNET.md) §5 |
 
+Allowed in `config.env`: exactly the settings above. Never accepted from
+it: `bb_sb`, `bb_cfg`, `bb_esp`, `bb_data*`, `bb_platform`, `prefix`, `root`,
+`check_signatures` or any other variable that says where the menu's files
+come from or whether they are checked. Value forms there: `0` or `1` for
+`bb_debug`, `bb_dryrun`, `bb_serial`, `bb_gfx`, `bb_fs_addon`; digits for
+`timeout`; `setup` or `pe` for `bb_windows`; a `gfxmode` list of `WxH`,
+`WxHxD`, `auto` or `keep` for `bb_gfxmode`; a path starting with `/` for
+`bb_autoboot` and `bb_theme`; a path of letters, digits and `._/-` (no
+spaces: it goes onto the helper's kernel command line) for
+`bb_beastnet_script`; no `"` in `default`, `bb_autoboot`, `bb_theme` and
+`bb_kargs`; no control characters anywhere.
+
+### With Secure Boot on
+
+The menu takes Secure Boot's state from GRUB's lockdown (`bb_sb`) before it
+reads any user settings, and sets it again after them, so no setting can
+change it. With Secure Boot on it reads only `config.env` and never
+`config.cfg`: GRUB script there would let anyone who can write to the drive
+run GRUB commands and choose what the signed kernels and loaders get. When
+`config.cfg` exists it prints a short notice (`BEAST:
+config-cfg-ignored-sb`) and adds the entry "Settings: config.cfg is not read
+with Secure Boot on - help" at the end of the root menu. Keep your settings
+in `config.env` and they apply in both modes.
+
+`bb_kargs` stays allowed under Secure Boot: kernel parameters are not
+something Secure Boot protects (the menu's own entries can be edited with
+`e` too), and the signed kernel still enforces its own lockdown.
+
 The same `bb_*` settings may also be put in `grub/beast/device.cfg` on the
 boot partition (it is GRUB script too, sourced before the menu starts). That
 is the only way to get `bb_debug` output when the data partition itself is
-missing; values from `config.cfg` win when both set one.
+missing; values from `config.env` and `config.cfg` win when both set one.
 
-The file is GRUB script, so a syntax error there shows up as a GRUB error
-at boot. Anything not listed above is passed through to GRUB unchanged. It is
-your file: BeastBoot's installer and updater never write to the data
-partition.
+A syntax error in `config.cfg` shows up as a GRUB error at boot; anything
+not listed above is passed through to GRUB unchanged. Both files are yours:
+BeastBoot's installer and updater never write to the data partition.
 
 ## Debug output (`bb_debug=1`)
 
@@ -164,7 +222,10 @@ BEAST: error no-recipe /mystery.iso
   `hook-missing`, `no-squashfs`, `squashfs-unreadable <squashfs>` (for example
   zstd-compressed) or `no-exfat-module <squashfs>`. Nothing is printed when the
   data partition is not exFAT or the ISO is not a casper / live-boot ISO.
-- `error <code> <text>` codes: `no-data-partition`, `iso-not-found`,
+- `config-cfg-ignored-sb` is printed before `ready` when Secure Boot is on
+  and `/beast-booter/config.cfg` exists (it is not read).
+- `error <code> <text>` codes: `config-env-bad-value <name>` (a `config.env`
+  value of the wrong form, ignored), `no-data-partition`, `iso-not-found`,
   `loopback-failed`, `no-recipe`, `ntfs-unsupported`, `windows-sb-no-helper` (Secure Boot is on, the Windows ISO is not prepared and the helper is not on the drive; see [WINDOWS_SECURE_BOOT.md](WINDOWS_SECURE_BOOT.md)), `windows-bad-name` (the ISO path has a quote or control character), `windows-no-wimboot`, `grubenv-not-writable`,
   `iso-too-large` (Alpine or Debian installer ISO that does not fit in memory as an initrd), `sb-verify-failed`, `boot-failed`. The text after the code is for people, not parsers. Under
   Secure Boot, any failure of `linux`, `initrd`, `chainloader` or `boot` is
@@ -238,11 +299,11 @@ text mode; the kernel's EFI framebuffer driver takes it over).
 
 If any step fails - theme or font missing, a GRUB module that does not
 load, no usable graphics mode - the menu stays the text menu and nothing
-else changes. To switch graphics off yourself:
+else changes. To switch graphics off yourself, in `/beast-booter/config.env`:
 
 ```sh
-# /beast-booter/config.cfg
-set bb_gfx=0
+# GRUB Environment Block
+bb_gfx=0
 ```
 
 What is on the boot partition, all listed in `manifest.json`:
@@ -276,7 +337,7 @@ What is on the boot partition, all listed in `manifest.json`:
   `light-gray`) and rebuild with `make build`. Sizes and layout are the
   constants below it and `theme_text()`.
 - Your own theme without rebuilding: put a GRUB theme on the data partition
-  and set `bb_theme`, for example `set bb_theme=/beast-booter/mytheme/theme.txt`.
+  and set `bb_theme`, for example `bb_theme=/beast-booter/mytheme/theme.txt` in `config.env`.
   Its images are found relative to the theme file. Fonts available to it:
   `Noto Sans Regular 16`, `Noto Sans Regular 20`, `Noto Sans Bold 20`,
   `Noto Sans Mono Regular 16` (and `GNU Unifont Regular 16` without Secure

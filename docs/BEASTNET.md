@@ -148,7 +148,7 @@ Kernel command line parameters read by the helper:
 | `beastnet.esp=UUID=…` | ESP (mounted read-write at `/mnt/esp`) |
 | `beastnet.sb=0/1` | Secure Boot state reported by the menu |
 | `beastnet.debug=1` | print `BEASTNET:` lines (below) on the console and serial |
-| `beastnet.script=/path` | non-interactive run from a JSON file on the data partition (tests, power users); the menu passes it when `/beast-booter/config.cfg` sets `bb_beastnet_script=/path` |
+| `beastnet.script=/path` | non-interactive run from a JSON file on the data partition (tests, power users); the menu passes it when `/beast-booter/config.env` (or, with Secure Boot off, `config.cfg`) sets `bb_beastnet_script=/path`; in `config.env` the path may hold only letters, digits and `._/-` |
 | `beastnet.ui=plain` | line-based prompts instead of the curses screens (serial consoles) |
 | `beastnet.action=trust-ubuntu` | open "Trust Ubuntu's Secure Boot key" first (§8; set by the Tools menu entry). Other values are ignored. Its "Download an ISO from a link" item then leads to the normal screens |
 | `beastnet.action=disk` | open Disk tools first (recovery and cloning, RAID-aware; set by the "Disk tools: recovery and cloning" Tools menu entry; see [DISK_TOOLS.md](DISK_TOOLS.md)). Every beast-net boot gets `raid=noautodetect md_mod.start_ro=1` on the kernel command line, so no RAID array starts on its own or writes before Disk tools set it read-only |

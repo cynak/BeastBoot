@@ -51,7 +51,9 @@ def win_base(installer_ok, udisks_ok, dist_dir, tmp_path_factory):
     drive = images.Drive.open(path, "msdos", "exfat")
     with drive.data_writer() as w:
         w.put(DEST, WIN_ISO)
-        w.put(images.USER_CONFIG, images.user_config(debug=True, timeout=5))
+        cfg = images.user_config(debug=True, timeout=5)
+        w.put(images.USER_CONFIG, cfg)
+        w.put(images.USER_ENV, images.config_env(cfg))  # what the menu reads under Secure Boot
     yield drive
     path.unlink(missing_ok=True)
 
