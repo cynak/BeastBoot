@@ -95,7 +95,7 @@ jobs:
           test -x "$pkg/BeastBooter.app/Contents/MacOS/BeastBooter"
           test -x "$pkg/beast-boot.command"
           plutil -lint "$pkg/BeastBooter.app/Contents/Info.plist"
-          file "$res/runtime/bin/python3.13"
+          file "$res/runtime/bin/python3.15"
 
       - name: Unpack (Windows, Expand-Archive like Explorer)
         if: runner.os == 'Windows'

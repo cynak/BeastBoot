@@ -14,7 +14,7 @@
 
 linux-image-7.3.0-9-generic=7.3.0-9.9         kernel   suite=stonking
 linux-modules-7.3.0-9-generic=7.3.0-9.9       modules  suite=stonking
-busybox=1:1.37.0-7ubuntu1                      tool  # dynamic: uses the locked libc6 (busybox-static embeds its own glibc copy)
+busybox=1:1.38.0-3ubuntu4                      tool  suite=stonking  # dynamic: uses the locked libc6 (busybox-static embeds its own glibc copy); 1.38.0-3 fixes the ash CVE-2026-38754/38755
 kmod=34.2-2ubuntu2                             tool
 wpasupplicant=2:2.11-0ubuntu5                  tool
 iw=6.17-1                                      tool

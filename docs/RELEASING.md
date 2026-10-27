@@ -132,16 +132,45 @@ certificate must be replaced and users told to delete the old MOK
 ## 4. Cutting a release
 
 1. Make sure `main` is green (ci.yml) and `make vulns` looks as expected.
-2. Bump `VERSION` (for example `0.2.0`, or `0.2.0-rc.1` for a pre-release) and commit.
-3. Tag and push:
+2. Bump `VERSION` (for example `0.2.0`, or `0.2.0-rc.1` for a pre-release).
+3. Run the local pre-release routine on that exact tree (see below), regenerate the
+   README's ISO table from its real-ISO results (`.venv/bin/python scripts/iso_matrix.py
+   --readme`) and commit.
+4. Tag and push:
 
    ```sh
    git tag -a v0.2.0 -m "beast-boot 0.2.0"
    git push origin v0.2.0
    ```
 
-4. Watch *Actions → release*. When it is green, the release is published with
+5. Watch *Actions → release*. When it is green, the release is published with
    all files, notes and attestations.
+
+### Before tagging: `make prerelease`
+
+`scripts/release/prerelease.sh` runs everything a release must pass on this machine,
+including what the CI release cannot (it has no real ISOs and no time for them):
+
+| Step | What |
+|---|---|
+| build, lint, lock | `make build`, `make lint`, `build/beastnet/lock.py --check` |
+| installer, menu, beastnet, devtools, selftest | every unit suite and `scripts/selftest.py` |
+| e2e | the QEMU end-to-end suite (`tests/e2e`, incl. Disk tools) |
+| scan-pre, kernel-vex, scan | `make vulns`, `scripts/kernel_vex.py` (kernel VEX against today's data), `make vulns` again; fails on an incomplete scan (a scanner failed) or VEX problems |
+| real-iso | every real ISO boots (`BB_REAL_ISO=1`, about 25 minutes, tens of GB downloaded once) |
+| verify-dist | `build/verify-dist.sh --rebuild`: GRUB, wimboot and beastmount rebuilt from source, byte-identical |
+| portable | `scripts/build_portable.sh --all` |
+
+Every step runs even after a failure; the summary (`out/prerelease/summary.txt`, one log
+per step beside it) shows them all, and the exit code is the number of failed steps.
+It also fails when the tree changes while it runs (another editor or session), because
+the results would then not describe what gets tagged.
+
+```sh
+make prerelease                          # everything (about an hour)
+make prerelease ARGS=--skip-real-iso     # no real ISOs
+make prerelease ARGS=--quick             # unit tests, lint, lock check only
+```
 
 ## 5. Dry runs
 

@@ -114,7 +114,8 @@ find_dev() {
 	while [ $_i -lt 30 ]; do
 		case "$1" in
 		/dev/*) [ -b "$1" ] && { echo "$1"; return 0; } ;;
-		*) _d=$(findfs "$1" 2>/dev/null) && [ -n "$_d" ] && { echo "$_d"; return 0; } ;;
+		# util-linux blkid, not busybox findfs: the busybox volume-id prober (CVE-2026-88832) is then never run
+		*) for _d in $(blkid -c /dev/null -t "$1" -o device 2>/dev/null); do echo "$_d"; return 0; done ;;
 		esac
 		[ $((_i % 5)) = 4 ] && coldplug
 		sleep 1

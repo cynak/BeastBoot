@@ -202,10 +202,12 @@ def cmd_gate(a) -> int:
                          "version": f["component"].get("version"), "fix": f.get("fix"),
                          "source": f.get("source"), "remediation_key": f.get("remediation_key")})
     not_checked = [f["id"] for f in rep.get("findings", []) if f["id"].endswith("-NOT-CHECKED")]
+    # a scanner that did not run makes every count a lower bound: never release on that
+    incomplete = list(rep.get("summary", {}).get("incomplete") or [])
     res = {"mode": a.mode, "severity": a.severity, "baseline": a.baseline or None,
            "ignore_unfixed": a.ignore_unfixed, "blocking": blocking, "known_in_baseline": known,
-           "ignored_unfixed": unfixed, "boot_chain_not_checked": not_checked,
-           "blocked": bool(blocking) and a.mode == "enforce"}
+           "ignored_unfixed": unfixed, "boot_chain_not_checked": not_checked, "incomplete": incomplete,
+           "blocked": bool(blocking or incomplete) and a.mode == "enforce"}
     Path(a.out).write_text(json.dumps(res, indent=1) + "\n")
     for b in blocking[:20]:
         print(f"release_tool: gate: NEW {b['severity']} {b['id']} in {b['component']} {b['version']} "
@@ -214,7 +216,10 @@ def cmd_gate(a) -> int:
         print(f"release_tool: gate: ... {len(blocking) - 20} more (see {a.out})", file=sys.stderr)
     for n in not_checked:
         print(f"release_tool: gate: warning: boot-chain check {n} did not run (no data)", file=sys.stderr)
-    verdict = "PASS" if not blocking else ("BLOCKED" if a.mode == "enforce" else "WOULD BLOCK (mode warn)")
+    for n in incomplete:
+        print(f"release_tool: gate: scanner {n} failed: the report is incomplete", file=sys.stderr)
+    verdict = "PASS" if not (blocking or incomplete) else \
+        ("BLOCKED" if a.mode == "enforce" else "WOULD BLOCK (mode warn)")
     print(f"release_tool: gate ({a.mode}, >= {a.severity}): {verdict}: {len(blocking)} new finding(s) without "
           f"VEX, {known} known from the baseline, {unfixed} ignored as unfixed")
     return 1 if res["blocked"] else 0

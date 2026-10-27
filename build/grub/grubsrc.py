@@ -449,11 +449,12 @@ def fix_present(src: Path, ev: dict) -> tuple[bool, str]:
     body = "".join(c for _, c in chunks)
     if "\n@@ " not in body:
         return False, "no hunks left to check"
-    r = subprocess.run(["patch", "-p1", "-R", "--dry-run", "-F0", "-t", "-s", "-f"], cwd=src,
+    fuzz = int(ev.get("fuzz", 0))           # context lines a distribution patch moved; the changed lines must still match exactly
+    r = subprocess.run(["patch", "-p1", "-R", "--dry-run", f"-F{fuzz}", "-t", "-s", "-f"], cwd=src,
                        input=body.encode(), capture_output=True)
     out = (r.stdout + r.stderr).decode(errors="replace").strip()
     note = f" ({dropped} hunk(s) matching {ev['skip_hunks_matching']!r} not checked)" if dropped else ""
-    return r.returncode == 0, (out or "reverse-applies cleanly (fuzz 0)") + note
+    return r.returncode == 0, (out or f"reverse-applies cleanly (fuzz {fuzz})") + note
 
 
 def check_fixes(src: Path) -> dict:

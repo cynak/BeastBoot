@@ -13,7 +13,8 @@
       "name": "grub2_2.14-2ubuntu3.dsc",
       "sha256": "2c697a2d159bc2494f32eafbd6fb67cddf2b3a8ae1088f8108f4276c5a600c07",
       "size": 7372,
-      "urls": ["https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/grub2/2.14-2ubuntu3/grub2_2.14-2ubuntu3.dsc"]
+      "urls": ["https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/grub2/2.14-2ubuntu3/grub2_2.14-2ubuntu3.dsc",
+               "http://archive.ubuntu.com/ubuntu/pool/main/g/grub2/grub2_2.14-2ubuntu3.dsc"]
     },
     {
       "name": "grub2_2.14.orig.tar.xz",
@@ -21,13 +22,15 @@
       "size": 7725668,
       "note": "byte-identical to the upstream release tarball https://ftp.gnu.org/gnu/grub/grub-2.14.tar.xz",
       "urls": ["https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/grub2/2.14-2ubuntu3/grub2_2.14.orig.tar.xz",
-               "https://ftp.gnu.org/gnu/grub/grub-2.14.tar.xz"]
+               "https://ftp.gnu.org/gnu/grub/grub-2.14.tar.xz",
+               "http://archive.ubuntu.com/ubuntu/pool/main/g/grub2/grub2_2.14.orig.tar.xz"]
     },
     {
       "name": "grub2_2.14-2ubuntu3.debian.tar.xz",
       "sha256": "5e8cc04300ff891370b9bdfe46f477b17694a97712f36a69c4d33ab19ab3aa91",
       "size": 1140136,
-      "urls": ["https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/grub2/2.14-2ubuntu3/grub2_2.14-2ubuntu3.debian.tar.xz"]
+      "urls": ["https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/grub2/2.14-2ubuntu3/grub2_2.14-2ubuntu3.debian.tar.xz",
+               "http://archive.ubuntu.com/ubuntu/pool/main/g/grub2/grub2_2.14-2ubuntu3.debian.tar.xz"]
     }
   ],
   "minilzo": {

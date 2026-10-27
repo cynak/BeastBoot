@@ -3,7 +3,7 @@
 linux-image-7.3.0-9-generic 7.3.0-9.9 amd64 43bd090d52e8feea538dd8acb0a2405abd20369aa7d2dec0992fb4c0ae8dea6d kernel ubuntu-26.10
 linux-modules-7.3.0-9-generic 7.3.0-9.9 amd64 d7e7924c8e87ad0aacf3dd265b3a53aee51b4ce6c00ffc900d5de799abdbfba8 modules ubuntu-26.10
 btrfs-progs 6.17.1-1build1 amd64 89fb4fe8fce0d2ca42d2f26d626c7f46181ef6c7c8e2656ea1462579ec9b67e8 tool
-busybox 1:1.37.0-7ubuntu1 amd64 700e372b95cd6f648f1f58a92061dd4d538840490d2bd140223bcdb58b26e37d tool
+busybox 1:1.38.0-3ubuntu4 amd64 760fba348a398d9bb6ae56fd42f8b717ec97f263b4145842501575760d0b97b2 tool ubuntu-26.10
 cryptsetup-bin 2:2.8.4-1ubuntu4 amd64 fc946c43ca12dc7230df72503cc1ee69e11ca994172cd8d72b4868cb78a7b6e2 tool
 dmsetup 2:1.02.205-2ubuntu3 amd64 a90c4e24ec00bf166071860671f195b5240b56b9a583813af551a0b68f629a36 tool
 e2fsprogs 1.47.2-3ubuntu4 amd64 a4343a8c026e1ca8e2e76a5d01abb8c2d6381961a1766b2d2363e3e23cc362ca tool
