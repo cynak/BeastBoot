@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 from collections.abc import Callable
 
@@ -33,12 +34,19 @@ class WinbootScreens:
 
         def job(on_progress: Callable[[Progress], None], cancel: Any) -> winboot.WinResult:
             on_progress(Progress("copy", done=0, total=plan.size))
-            return self.wb.run(plan, lambda d, t: on_progress(Progress("copy", done=d, total=t)),
-                               cancel.is_set)
+            start = time.monotonic()
+
+            def step(done: int, total: int) -> None:
+                secs = time.monotonic() - start
+                speed = done / secs if secs > 0.5 else 0.0
+                eta = (total - done) / speed if speed > 0 else None
+                on_progress(Progress("copy", done=done, total=total, speed=speed, eta=eta))
+
+            return self.wb.run(plan, step, cancel.is_set)
 
         try:
             res = self.ui.download(TITLE, [f"ISO: {plan.iso}", "Copying boot.wim to the drive"],
-                                   job, what="copy")
+                                   job, what="boot.wim copy")
             if not res.ok:
                 self.ui.message(TITLE, "Stopped. Nothing was kept; the ISO is unchanged.", kind="warn")
                 return

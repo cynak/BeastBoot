@@ -2,7 +2,7 @@
 
 Goal: prove that real, official ISOs of each supported family **really boot**
 from a BeastBoot drive: the ISO's own system starts, from the ISO file on
-the data partition. Modes: UEFI and BIOS, Secure Boot off (Windows with Secure Boot on: pending e2e, see "Windows"). ESXi is out of
+the data partition. Modes: UEFI and BIOS, Secure Boot off (Windows also with Secure Boot on, see "Windows"). ESXi is out of
 scope.
 
 This file is the contract between the parts built in parallel. Keep it in
@@ -155,8 +155,14 @@ read UDF under Secure Boot, so the recipe boots a prepared copy of `boot.wim`
 from `/beast-booter/winboot/<iso>/` (see docs/WINDOWS_SECURE_BOOT.md); an
 unprepared ISO gets the "Prepare this Windows ISO for Secure Boot" entry, or
 `windows-sb-no-helper` without the helper. The `windows-sb` error was removed.
-Secure Boot results: **pending e2e**. The listing below is the Secure Boot
-off path.
+Secure Boot results (2026-10-27, OVMF Secure Boot with the Microsoft db, BeastBoot
+key in MokList, exFAT data partition, Windows 11 26300 as `/isos/Win 11.iso`):
+prepared with `beast-boot prepare-windows` -> `setup-running` in about 33 s;
+prepared from the menu with the helper (583.7 MiB copy) -> `setup-running` on the
+next boot; a stale copy -> the prepare offer again. Catalog mode `uefi-sb`
+(`BB_REAL_ISO=1`, Windows only, never NTFS) and
+`BB_WIN_ISO=<iso> pytest tests/e2e/test_e2e_windows_sb_real.py`. The listing
+below is the Secure Boot off path.
 
 ### Recipe (grub/beast/lib.cfg `bb_r_windows`, `bb_win_boot`; grub/beast/windows.cfg)
 

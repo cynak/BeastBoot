@@ -530,7 +530,8 @@
       "recipe": "windows",
       "modes": [
         "uefi",
-        "bios"
+        "bios",
+        "uefi-sb"
       ],
       "fs": [
         "exfat",
@@ -558,7 +559,8 @@
       "recipe": "windows",
       "modes": [
         "uefi",
-        "bios"
+        "bios",
+        "uefi-sb"
       ],
       "fs": [
         "exfat"
@@ -587,7 +589,8 @@
       "recipe": "windows",
       "modes": [
         "uefi",
-        "bios"
+        "bios",
+        "uefi-sb"
       ],
       "fs": [
         "exfat",

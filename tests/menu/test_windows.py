@@ -52,7 +52,7 @@ def test_prepared_copy_is_matched_and_read_safely():
     assert 'set bb_wb_dir="$bb_wb_d"' in lines and "set bb_recipe=windows" in lines
     # stale head / missing copy -> offer
     assert "set bb_wb_offer=1" in lines and "set bb_wb_offer=2" in lines
-    assert "if [ -f (loop)/README.TXT ]; then" in lines
+    assert "if [ -f (loop)/readme.txt -o -f (loop)/README.TXT ]; then" in lines
     # never sourced anywhere in the menu scripts
     for f in (ROOT / "grub" / "beast").glob("*.cfg"):
         for ln in code_lines(f.read_text()):

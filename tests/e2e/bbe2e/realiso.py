@@ -45,9 +45,14 @@ RESULTS = OUT_DIR / "results.jsonl"
 LOG_DIR = OUT_DIR / "logs"
 WORK_DIR = OUT_DIR / "work"
 
-MODES = ("uefi", "bios")
+MODES = ("uefi", "bios", "uefi-sb")
+# uefi-sb: OVMF Secure Boot (Microsoft db) with the BeastBoot key in MokList; Windows
+# entries only, booted from a copy prepared with `beast-boot prepare-windows`
+# (docs/WINDOWS_SECURE_BOOT.md). Not on NTFS: GRUB cannot read it in lockdown.
+SB_FAMILIES = ("windows",)
 FILESYSTEMS = ("exfat", "fat32", "ntfs")
-PLATFORM = {"uefi": "efi", "bios": "pc"}
+PLATFORM = {"uefi": "efi", "bios": "pc", "uefi-sb": "efi"}
+SB = {"uefi": "0", "bios": "0", "uefi-sb": "1"}  # the ready record's sb= per mode
 HASH_LEN = {"sha256": 64, "sha512": 128}
 GIB = 1 << 30
 
@@ -130,6 +135,8 @@ def validate(cat: dict) -> list[str]:
             errs.append(f"{where}: sha256 must be 64 lower-case hex digits")
         if not e["modes"] or set(e["modes"]) - set(MODES):
             errs.append(f"{where}: modes must be a subset of {MODES}")
+        if "uefi-sb" in e["modes"] and e["family"] not in SB_FAMILIES:
+            errs.append(f"{where}: uefi-sb is for {', '.join(SB_FAMILIES)} entries only")
         if not e["fs"] or set(e["fs"]) - set(FILESYSTEMS):
             errs.append(f"{where}: fs must be a subset of {FILESYSTEMS}")
         windows = e["family"] == "windows"
@@ -185,7 +192,7 @@ def select(entries: list[dict], ids: str | None = None) -> list[dict]:
 
 def cases(entry: dict) -> list[tuple[str, str]]:
     """(mode, fs) pairs of one entry, in run order."""
-    return [(mode, fs) for fs in entry["fs"] for mode in entry["modes"]]
+    return [(mode, fs) for fs in entry["fs"] for mode in entry["modes"] if not (mode == "uefi-sb" and fs == "ntfs")]
 
 
 # ---------------------------------------------------------------------------
@@ -457,16 +464,33 @@ def build_drive(iso: Iso, fs: str, path: Path) -> images.Drive:
     path.parent.mkdir(parents=True, exist_ok=True)
     images.install(path, layout="msdos", fs=fs, size=drive_size(iso.size), dist=env.DIST, serial=True)
     drive = images.Drive.open(path, "msdos", fs)
-    staged = stage(iso, path.parent / f".stage-{iso.entry['id']}-{fs}.iso")
+    root = path.parent / f".stage-{iso.entry['id']}-{fs}"
+    shutil.rmtree(root, ignore_errors=True)
+    staged = stage(iso, root / iso_dest(iso).lstrip("/"))
     try:
+        prepared = prepare_windows(root, iso_dest(iso)) if "uefi-sb" in iso.entry["modes"] else []
         with drive.data_writer() as w:
             w.put(iso_dest(iso), staged)
             w.mkdir("/beast-booter")
             w.put(images.USER_CONFIG, config_text(iso.entry))
+            for rel in prepared:
+                w.mkdir(rel.rsplit("/", 1)[0])
+                w.put(rel, root / rel.lstrip("/"))
     finally:
-        staged.unlink(missing_ok=True)
+        shutil.rmtree(root, ignore_errors=True)
     bn.write_grubenv(drive, {"bb_oneshot": iso_dest(iso)})
     return drive
+
+
+def prepare_windows(root: Path, dest: str) -> list[str]:
+    """Run `beast-boot prepare-windows` on the staged ISO (root + dest, root standing in
+    for the data partition); returns the files it wrote, as data-partition paths. The
+    stamp is last, as the tool writes it (docs/WINDOWS_SECURE_BOOT.md)."""
+    (root / "beast-booter").mkdir(parents=True, exist_ok=True)
+    env.run([env.python(), "-m", "beastbooter", "prepare-windows", "--quiet", str(root / dest.lstrip("/")),
+             "--data-root", str(root)], timeout=1200)
+    d = root / "beast-booter" / "winboot" / dest.lstrip("/")
+    return [f"/beast-booter/winboot{dest}/{n}" for n in ("boot.wim", "iso-head.bin", "stamp.env") if (d / n).is_file()]
 
 
 BBTEST_OFFSET = 1 << 20
@@ -516,7 +540,7 @@ class Oracle:
     """Pass/fail from the serial log of one boot.
 
     A pass needs, in this order of checks: a `BEAST: ready` record with the
-    case's platform, sb=0 and data filesystem; exactly one `BEAST: boot <iso>`
+    case's platform, sb (1 only for uefi-sb) and data filesystem; exactly one `BEAST: boot <iso>`
     record (the config exports timeout=5, so a failed attempt boots again); a
     `recipe` pinned in the catalog and equal to the boot record's; every
     success regex matched after the boot record, in text with all `BEAST:`
@@ -552,9 +576,9 @@ class Oracle:
             if r.kind == "ready" and not self.ready:
                 self.ready = True
                 f = r.fields
-                want = PLATFORM[self.mode]
-                if f.get("platform") != want or f.get("sb") != "0":
-                    self.mode_error = f"wrong mode: {r.text} (expected platform={want} sb=0)"
+                want, sb = PLATFORM[self.mode], SB[self.mode]
+                if f.get("platform") != want or f.get("sb") != sb:
+                    self.mode_error = f"wrong mode: {r.text} (expected platform={want} sb={sb})"
                 elif self.fs and f.get("fs") != self.fs:
                     self.mode_error = f"wrong data filesystem: {r.text} (expected fs={self.fs})"
             elif r.kind == "boot" and r.matches(self.boot_rx):
@@ -720,8 +744,10 @@ def run_case(iso: Iso, drive: images.Drive, mode: str, fs: str) -> Verdict:
         bbtest = make_bbtest(work / "bbtest.img", cid)
         extra += bbtest_args(bbtest)
     timeout = float(entry["timeout_s"])
+    mok = [env.DIST / "esp" / "ENROLL_THIS_KEY_IN_MOKMANAGER.cer"] if mode == "uefi-sb" else []
     vm = VM(cid, mode=mode, disk=drive.path, workdir=work, log_dir=LOG_DIR, memory=int(entry["ram_mb"]),
-            smp=int(entry.get("smp", 2)), hard_timeout=(env.t(timeout) + 300) / env.t(1), extra_args=extra, snapshot=True)
+            smp=int(entry.get("smp", 2)), hard_timeout=(env.t(timeout) + 300) / env.t(1), extra_args=extra, snapshot=True,
+            mok_certs=mok)
     o = Oracle(entry, mode, iso_dest(iso), fs)
     verdict = None
     timed_out = False

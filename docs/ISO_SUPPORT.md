@@ -150,8 +150,9 @@ Limits:
   `db` and not revoked in `dbx`. Old ISOs on updated PCs, or a `db` without the
   right Microsoft CA, fail exactly as Microsoft's own USB media would. wimboot
   then shows `Could not load ...` and the menu only sees `boot-failed`.
-  Secure Boot with Windows ISOs: **pending e2e** (not yet confirmed on real
-  hardware).
+  Secure Boot with Windows ISOs: tested in the Secure Boot VM (Windows 11 reaches
+  Setup, prepared from the menu or with `beast-boot prepare-windows`); not yet
+  confirmed on real hardware.
 - **Revocation**: wimboot carries the BeastBoot SBAT line, so a vulnerable
   build can be revoked.
 - **Memory**: about twice the size of `boot.wim` plus 1 GB, because wimboot

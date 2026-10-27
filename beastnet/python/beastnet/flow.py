@@ -427,8 +427,12 @@ class Interactive:
         DiskScreens(self).run(entry)
 
     def winboot(self, entry: bool = False) -> None:
-        from .winflow import WinbootScreens
-        WinbootScreens(self).run()
+        from .winflow import TITLE, WinbootScreens
+        old = self.ui.set_mode(f"beast-net: {TITLE}", ())  # not the download steps
+        try:
+            WinbootScreens(self).run()
+        finally:
+            self.ui.set_mode(*old)
 
     def trust_ubuntu(self, entry: bool = False) -> None:
         """The action's screens. ``entry``: opened by the boot menu entry

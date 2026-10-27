@@ -13,6 +13,9 @@ stores (MokList / MokListX entries, pre-seeded in a per-VM variable store).
   and the payload never runs (the same payload does run with Secure Boot
   off, see test_e2e_recipes.py::test_efi_chainload_runs_payload)
 * key enrolled, ISO with an unsigned kernel: refused (sb-verify-failed)
+* Windows: the BeastBoot-signed wimboot starts (also from a prepared copy of
+  boot.wim, docs/WINDOWS_SECURE_BOOT.md); without a matching copy the menu
+  explains how to prepare the ISO; a wimboot signed by another key is refused
 * Ubuntu's own Canonical-signed kernel (the helper's kernel as the linux-image
   .deb ships it): refused while Canonical's CA is not in MokList; boots once
   MokList holds Canonical's CA and MokListX Ubuntu's 8 revoked certificates
@@ -23,16 +26,20 @@ stores (MokList / MokListX entries, pre-seeded in a per-VM variable store).
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 
 from bbe2e import beastnet as bn
-from bbe2e import checks, images, sbtrust, trees
+from bbe2e import checks, env, images, sbtrust, trees
 
 pytestmark = [pytest.mark.secureboot, pytest.mark.slow]
 
 SHIM_REFUSAL = r"Verification failed|Security Violation|Shim UEFI key management|MOK management|MokManager"
 # The helper boots a 35 MB initramfs with Python (test_e2e_beastnet.py).
 HELPER_TIMEOUT = 180
+HEAD_START, HEAD_END = 32768, 98304  # iso-head.bin: the ISO's bytes 32768..98303
 
 
 def error_code(rec) -> str:
@@ -143,31 +150,123 @@ def test_enrolled_unsigned_kernel_refused(secureboot_ok, mok_cert, make_drive, v
     assert error_code(err) == "sb-verify-failed", str(err)
 
 
-def test_enrolled_windows_refused_with_explanation(secureboot_ok, mok_cert, make_drive, vm_factory):
-    """wimboot is unsigned: under Secure Boot the menu does not even try it
-    (windows-sb), and says to turn Secure Boot off."""
+# ---------------------------------------------------------------------------
+# Windows (docs/WINDOWS_SECURE_BOOT.md): wimboot is signed with the BeastBoot key.
+# GRUB cannot read UDF in lockdown, so a Microsoft ISO (a UDF bridge whose
+# ISO9660 view holds only README.TXT) boots from a prepared copy of its boot.wim
+# on the data partition. The stub boot.wim is no real WIM: wimboot starts (its
+# banner) and then stops, which is all these tests need.
+# ---------------------------------------------------------------------------
+
+WIN_ISO = "/isos/Win 11.iso"  # a space, as in real names: the copy's path is quoted through GRUB
+WIMBOOT_BANNER = r"wimboot v[0-9][^ ]* -- Windows Imaging Format bootloader"
+
+
+def bridge_iso(workdir) -> Path:
+    """A stand-in for a Microsoft UDF bridge ISO: its ISO9660 view has only README.TXT,
+    a plain ISO9660 name (no Joliet, no Rock Ridge) that GRUB lists as readme.txt."""
+    root = workdir / "bridge"
+    root.mkdir(exist_ok=True)
+    (root / "README.TXT").write_bytes(b"This disc contains a \"UDF\" file system.\r\n")
+    iso = workdir / "bridge.iso"
+    env.run([env.which("xorriso"), "-as", "mkisofs", "-quiet", "-V", "CCCOMA_X64FRE_EN-US_DV9",
+             "-o", str(iso), str(root)], timeout=60)
+    assert iso.stat().st_size >= HEAD_END, iso.stat().st_size
+    return iso
+
+
+def prepared_copy(iso: Path, iso_path: str, *, kind: str = "setup") -> dict:
+    """The data-partition files of a prepared copy, as prepare-windows writes them."""
+    from beastbooter.winboot import stamp_bytes  # installer/ (on sys.path via dist_dir)
+
+    wim = b"stub boot.wim, not a WIM\n" * 64
+    head = iso.read_bytes()[HEAD_START:HEAD_END]
+    d = f"/beast-booter/winboot{iso_path}"
+    return {f"{d}/boot.wim": wim, f"{d}/iso-head.bin": head,
+            f"{d}/stamp.env": stamp_bytes([("bb_wb_iso", iso_path), ("bb_wb_kind", kind),
+                                           ("bb_wb_size", str(len(wim))), ("bb_wb_by", "host e2e")])}
+
+
+def windows_drive(make_drive, workdir, *, prepared: bool, cfg_extra: str = "", files: dict | None = None):
+    drive = make_drive("main", images.user_config(autoboot=WIN_ISO, extra=cfg_extra))
+    iso = bridge_iso(workdir)
+    tree = {WIN_ISO: iso, **(prepared_copy(iso, WIN_ISO) if prepared else {}), **(files or {})}
+    drive.populate(tree)
+    return drive
+
+
+def test_enrolled_windows_stub_boots_signed_wimboot(secureboot_ok, mok_cert, make_drive, vm_factory):
+    """A Windows ISO whose files GRUB can read (ISO9660): signed wimboot starts under Secure Boot."""
     drive = make_drive("main", images.user_config(autoboot=trees.recipe_path("windows")))
     vm = vm_factory("uefi-sb", drive.path, mok_certs=[mok_cert])
     checks.wait_ready(vm, timeout=120)
-    err = vm.wait_record("error", timeout=120)
-    assert error_code(err) == "windows-sb", str(err)
-    vm.wait_for(r"turn Secure Boot off in the firmware settings", timeout=30)
-    assert not vm.records("windows"), "the Windows boot must not start under Secure Boot"
+    boot = vm.wait_record("boot", timeout=120)
+    assert checks.recipe_of(boot) == "windows", str(boot)
+    vm.wait_record("windows", r"^windows mode=setup$", timeout=60, after=boot.start)
+    vm.wait_for(WIMBOOT_BANNER, timeout=120, after=boot.end)
+    assert not [r for r in vm.records("error") if error_code(r) in ("windows-sb", "sb-verify-failed")]
 
 
-def test_windows_still_refused_by_shim_when_menu_check_is_bypassed(secureboot_ok, mok_cert, make_drive, vm_factory):
-    """Defence in depth: even with the menu's own Secure Boot check off (bb_sb=0 in
-    config.cfg), shim's verifier refuses the unsigned wimboot, so nothing of Windows runs."""
-    cfg = images.user_config(autoboot=trees.recipe_path("windows"),
-                             extra='set bb_sb="0"\nexport bb_sb')
-    drive = make_drive("main", cfg)
+def test_enrolled_windows_prepared_copy_boots_signed_wimboot(secureboot_ok, mok_cert, make_drive, workdir,
+                                                            vm_factory):
+    """A UDF bridge with a matching prepared copy: the menu boots the copy's boot.wim."""
+    drive = windows_drive(make_drive, workdir, prepared=True)
+    vm = vm_factory("uefi-sb", drive.path, mok_certs=[mok_cert])
+    checks.wait_ready(vm, timeout=120)
+    boot = vm.wait_record("boot", timeout=120)
+    assert checks.recipe_of(boot) == "windows", str(boot)
+    rec = vm.wait_record("windows", r"^windows mode=setup copy=", timeout=60, after=boot.start)
+    assert rec.text.endswith(f"/beast-booter/winboot{WIN_ISO}"), str(rec)
+    vm.wait_for(WIMBOOT_BANNER, timeout=120, after=boot.end)
+    assert not vm.records("windows-prepare")
+
+
+@pytest.mark.parametrize("change", ["unprepared", "stale-head", "other-iso"])
+def test_enrolled_windows_unprepared_explains(change, secureboot_ok, mok_cert, make_drive, workdir, vm_factory):
+    """No usable copy (none, iso-head.bin of another ISO, a stamp made for another path):
+    autoboot explains how to prepare it (the menu offers it, test_e2e_beastnet_winboot.py)."""
+    files, prepared = {}, change != "unprepared"
+    if change == "stale-head":
+        files = {f"/beast-booter/winboot{WIN_ISO}/iso-head.bin": b"\x01" * (HEAD_END - HEAD_START)}
+    drive = windows_drive(make_drive, workdir, prepared=prepared, files=files)
+    if change == "other-iso":
+        from beastbooter.winboot import stamp_bytes
+
+        drive.populate({f"/beast-booter/winboot{WIN_ISO}/stamp.env":
+                        stamp_bytes([("bb_wb_iso", "/isos/Other.iso"), ("bb_wb_kind", "setup")])})
+    vm = vm_factory("uefi-sb", drive.path, mok_certs=[mok_cert])
+    checks.wait_ready(vm, timeout=120)
+    vm.wait_record("windows-prepare", rf"^windows-prepare {re.escape(WIN_ISO)}$", timeout=120)
+    vm.wait_for(r"not prepared for Secure Boot yet", timeout=30)
+    assert not vm.records("windows"), "nothing of Windows may start without a matching copy"
+    vm.expect_absent(WIMBOOT_BANNER, within=3)
+
+
+def test_enrolled_windows_unprepared_without_helper(secureboot_ok, mok_cert, make_drive, workdir, vm_factory):
+    drive = windows_drive(make_drive, workdir, prepared=False)
+    bn.esp_writer(drive)._m("mdel", "::/beast-net/vmlinuz")
     vm = vm_factory("uefi-sb", drive.path, mok_certs=[mok_cert])
     checks.wait_ready(vm, timeout=120)
     err = vm.wait_record("error", timeout=120)
-    assert error_code(err) == "boot-failed", str(err)      # the menu believed Secure Boot was off
-    assert "linux failed" in err.text, str(err)            # loading wimboot was refused
-    assert vm.records("windows"), "the menu must have tried the Windows boot"
-    vm.expect_absent(r"initrd failed|Booting Windows|wimboot [0-9]", within=5)
+    assert error_code(err) == "windows-sb-no-helper", str(err)
+    vm.wait_for(r"beast-boot prepare-windows", timeout=30)
+
+
+def test_windows_wimboot_signed_by_other_key_refused(secureboot_ok, mok_cert, make_drive, workdir, vm_factory):
+    """Defence in depth: a wimboot signed by a key that is not enrolled is refused by
+    shim's verifier when GRUB loads it, so nothing of Windows runs."""
+    drive = windows_drive(make_drive, workdir, prepared=True)
+    esp = bn.esp_writer(drive)
+    orig = workdir / "wimboot.orig"
+    orig.write_bytes(esp.read("/beast-booter/wimboot"))
+    ca = sbtrust.make_test_ca(workdir / "ca")
+    esp.put("/beast-booter/wimboot", sbtrust.resign(orig, workdir / "wimboot.other", ca["leaf_key"], ca["leaf_crt"]))
+    vm = vm_factory("uefi-sb", drive.path, mok_certs=[mok_cert])
+    checks.wait_ready(vm, timeout=120)
+    assert vm.wait_record("windows", timeout=120), "the menu must have tried the Windows boot"
+    err = vm.wait_record("error", timeout=120)
+    assert error_code(err) == "sb-verify-failed" and "linux failed" in err.text, str(err)
+    vm.expect_absent(WIMBOOT_BANNER, within=5)
 
 
 # ---------------------------------------------------------------------------
