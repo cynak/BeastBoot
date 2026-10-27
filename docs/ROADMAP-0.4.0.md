@@ -37,7 +37,8 @@ PCA 2011; `bootmgfw_EX.efi` = Windows UEFI CA 2023 (wimboot tries it first).
 | # | Work | Status |
 |---|---|---|
 | 1 | Build signing: sign wimboot in `build/build.sh` (reproducible like GRUB), `verify-dist.sh`, SBOM checks | done in the working tree, needs a full build on this base |
-| 2 | Getting `boot.wim` past the UDF limit (design decision pending, see below) | next |
+| 1 | (verified on the 0.3.0 base: `make build` + `verify-dist.sh` pass) | done (e310ca4) |
+| 2 | Getting `boot.wim` past the UDF limit: option C chosen (helper + host tool), interface in [WINDOWS_SECURE_BOOT.md](WINDOWS_SECURE_BOOT.md); helper action `winboot`, menu, host `prepare-windows` built in parallel | in progress |
 | 3 | Menu: drop the `windows-sb` refusal; Secure Boot path uses the readable copy of the boot files; `boot-failed` explanation when the firmware refuses the boot manager | after 2 |
 | 4 | Tests: replace `windows-sb` e2e tests with "boots under Secure Boot" + "wrong key refused"; real-ISO catalog gains a `uefi-sb` Windows case | after 2 |
 | 5 | Docs: SECURE_BOOT.md §6, ISO_SUPPORT.md Windows limits, ARCHITECTURE.md, build/wimboot/README.md, REAL_ISOS.md, DEVELOPMENT.md error table | after 2 |

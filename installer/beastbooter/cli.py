@@ -20,7 +20,7 @@ from .commands import (
     list_devices,
     update,
 )
-from . import firmware
+from . import firmware, winboot
 from .distsource import ENV_DIST, resolve_dist
 from .errors import BeastError, Cancelled
 from .events import ProgressFile, find_progress_file
@@ -157,6 +157,19 @@ def build_parser(on_error=None) -> argparse.ArgumentParser:
     target(sp, size=False)
     sp.add_argument("--json", action="store_true", help="machine-readable output")
     fw_run(sp, cancel=False)
+
+    sp = sub.add_parser("prepare-windows",
+                        help="copy a Windows ISO's boot.wim to the data partition for Secure Boot "
+                             "(docs/WINDOWS_SECURE_BOOT.md)", on_error=on_error)
+    sp.add_argument("iso", metavar="ISO", help="the Windows ISO, already on a mounted BeastBoot data partition")
+    sp.add_argument("--data-root", metavar="DIR",
+                    help="mount point of the data partition (default: the nearest parent of ISO "
+                         "containing beast-booter/)")
+    sp.add_argument("--force", action="store_true", help="copy again even if a matching stamp exists")
+    sp.add_argument("--quiet", "-q", action="store_true", help="no progress output")
+    sp.add_argument("--progress-file", metavar="PATH", help="append JSON-lines progress events to PATH (for the GUI)")
+    sp.add_argument("--cancel-file", metavar="PATH",
+                    help="stop cleanly once PATH exists (error event 'cancelled', exit 130)")
     return p
 
 
@@ -179,7 +192,7 @@ def main(argv: list[str] | None = None) -> int:
         args = parser.parse_args(argv)
         rep = Reporter(getattr(args, "quiet", False), events=events,
                        cancel_file=getattr(args, "cancel_file", None))
-        stoppable = args.command in ("install", "update") or (
+        stoppable = args.command in ("install", "update", "prepare-windows") or (
             args.command == "firmware" and args.fw_command in ("fetch", "install", "remove"))
         with _StopSignals(stoppable) as stop:
             return _run(parser, args, rep, stop)
@@ -294,6 +307,9 @@ def _dispatch(parser: argparse.ArgumentParser, args: argparse.Namespace, rep: Re
         return 0
     if args.command == "firmware":
         return _firmware(args, rep)
+    if args.command == "prepare-windows":
+        rep.done(winboot.prepare(args.iso, args.data_root, args.force, rep))
+        return 0
     parser.error(f"unknown command {args.command}")
     return 2
 

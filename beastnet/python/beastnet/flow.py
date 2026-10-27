@@ -50,6 +50,8 @@ class Interactive:
             self.trust_ubuntu(entry=True)
         elif action == "disk":
             self.disk_tools(entry=True)
+        elif action == "winboot":
+            self.winboot(entry=True)
         if result is not None:
             self.ui.set_step(3)
             self.done_step(result)
@@ -423,6 +425,10 @@ class Interactive:
         """Disk tools (docs/DISK_TOOLS.md); ``entry`` as for trust_ubuntu."""
         from .diskflow import DiskScreens
         DiskScreens(self).run(entry)
+
+    def winboot(self, entry: bool = False) -> None:
+        from .winflow import WinbootScreens
+        WinbootScreens(self).run()
 
     def trust_ubuntu(self, entry: bool = False) -> None:
         """The action's screens. ``entry``: opened by the boot menu entry

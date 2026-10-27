@@ -38,3 +38,8 @@ def test_split_like_the_kernel():
 
 def test_read_missing_file(tmp_path):
     assert read_cmdline(str(tmp_path / "nope")).data is None
+
+
+def test_winboot_action():
+    assert parse_cmdline("beastnet.action=winboot").action == "winboot"
+    assert parse_cmdline("beastnet.action=bogus").action is None

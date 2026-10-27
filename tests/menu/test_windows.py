@@ -1,7 +1,7 @@
-"""Windows ISOs (wimboot): static checks of the menu recipe, the Windows PE start-up
+"""Windows ISOs (wimboot, also with Secure Boot via a prepared boot.wim copy): static checks of the menu recipe, the Windows PE start-up
 script and beastmount.c against the design in tests/e2e/REAL_ISOS.md "Windows (wimboot)".
 The behaviour in GRUB is checked by tests/e2e/test_e2e_recipes.py (dry runs) and
-test_e2e_secureboot.py (refusal); a real Windows ISO by tests/e2e/test_e2e_real_isos.py."""
+test_e2e_secureboot.py (secure boot); a real Windows ISO by tests/e2e/test_e2e_real_isos.py."""
 
 from __future__ import annotations
 
@@ -30,16 +30,73 @@ def code_lines(text: str) -> list[str]:
     return [ln.strip() for ln in text.splitlines() if ln.strip() and not ln.strip().startswith("#")]
 
 
-def test_secure_boot_refused_before_anything_runs():
-    body = code_lines(function_body(LIB.read_text(), "bb_r_windows"))
-    assert body[0] == 'if [ "$bb_sb" = "1" ]; then', body[:2]
-    assert body[1] == 'bb_err windows-sb "$bb_iso"'
-    refusal = body[:body.index("return 1") + 1]
-    text = " ".join(refusal)
-    assert "turn Secure Boot off in the firmware settings" in text
-    assert "bb_finish" in refusal
-    for cmd in ("linux", "linux16", "initrd", "initrd16", "boot", "save_env", "bb_win_boot", "configfile"):
-        assert not any(ln.split()[0] == cmd for ln in refusal), cmd
+def test_windows_sb_refusal_is_gone():
+    text = LIB.read_text()
+    assert "windows-sb " not in text.replace("windows-sb-no-helper", "")
+    body = function_body(text, "bb_r_windows")
+    assert "bb_sb" not in body and "wimboot is not signed" not in text
+
+
+def test_prepared_copy_is_matched_and_read_safely():
+    """SB on + stamp whose ISO path and iso-head.bin match + boot.wim -> windows recipe
+    on the copy. stamp.env is data: explicit variable list, never sourced."""
+    text = LIB.read_text()
+    body = function_body(text, "bb_wb_probe")
+    lines = code_lines(body)
+    assert 'load_env -f "$bb_wb_d/stamp.env" bb_wb_iso bb_wb_kind' in lines
+    assert 'if cmp "(loop)64+128" "$bb_wb_d/iso-head.bin"; then' in lines
+    assert not any("probe" in ln or "uuid" in ln for ln in lines)
+    assert 'set bb_wb_d="($bb_data)/beast-booter/winboot$bb_iso"' in lines
+    assert 'if [ "$bb_wb_iso" = "$bb_iso" -a -f "$bb_wb_d/boot.wim" ]; then' in lines
+    assert 'if [ -f "$bb_wb_d/stamp.env" ]; then' in lines
+    assert 'set bb_wb_dir="$bb_wb_d"' in lines and "set bb_recipe=windows" in lines
+    # stale head / missing copy -> offer
+    assert "set bb_wb_offer=1" in lines and "set bb_wb_offer=2" in lines
+    assert "if [ -f (loop)/README.TXT ]; then" in lines
+    # never sourced anywhere in the menu scripts
+    for f in (ROOT / "grub" / "beast").glob("*.cfg"):
+        for ln in code_lines(f.read_text()):
+            assert not re.match(r"(source|\.)\s", ln) or "stamp" not in ln, (f, ln)
+            assert "stamp.env" not in ln or ln.startswith(("load_env", "if [ -f", "set bb_wb_d")), (f, ln)
+    # only on Secure Boot, only when nothing else matched (SB off unchanged)
+    det = function_body(text, "bb_detect")
+    assert 'if [ "$bb_recipe" = "none" -a "$bb_sb" = "1" ]; then\n    bb_wb_probe' in det
+
+
+def test_prepare_offer_and_no_helper_error():
+    text = LIB.read_text()
+    none = code_lines(function_body(text, "bb_r_none"))
+    assert 'if [ "$bb_wb_offer" = "1" ]; then' in none and "bb_r_wb_prepare" in none
+    assert 'bb_err windows-sb-no-helper "$bb_iso"' in none
+    assert none.index('bb_err windows-sb-no-helper "$bb_iso"') < none.index('bb_err no-recipe "$bb_iso"')
+    prep = code_lines(function_body(text, "bb_r_wb_prepare"))
+    assert 'bb_dbg "windows-prepare $bb_iso"' in prep
+    cfg = WINCFG.with_name("winprepare.cfg").read_text()
+    assert 'menuentry "Prepare this Windows ISO for Secure Boot"' in cfg and "bb_wb_prepare" in cfg
+    wp = code_lines(function_body(text, "bb_wb_prepare"))
+    assert any(ln.startswith("if save_env --file \"($bb_esp)/grub/grubenv\" bb_wb_iso; then") for ln in wp)
+    assert "bb_beastnet winboot" in wp
+    # the ISO's identity is saved before the helper starts
+    assert wp.index("bb_beastnet winboot") > wp.index('set bb_wb_iso="$bb_iso"')
+
+
+@pytest.mark.skipif(not shutil.which("grub-script-check"), reason="grub-script-check not installed")
+def test_winprepare_cfg_grub_script_check():
+    p = subprocess.run(["grub-script-check", str(WINCFG.with_name("winprepare.cfg"))], capture_output=True, text=True)
+    assert p.returncode == 0, p.stdout + p.stderr
+
+
+def test_prepared_copy_used_by_windows_recipe():
+    text = LIB.read_text()
+    body = function_body(text, "bb_r_windows")
+    assert 'if [ "$bb_wb_kind" = "setup" ]; then' in body
+    assert "export bb_iso bb_wb_dir bb_wb_kind" in body
+    lines = code_lines(function_body(text, "bb_win_boot"))
+    assert 'set bb_w_wim="newc:boot.wim:$bb_wb_dir/boot.wim"' in lines
+    assert 'bb_dbg "windows mode=$1 copy=$bb_wb_dir"' in lines
+    assert 'bb_dbg "windows mode=$1"' in lines
+    # the dry-run initrd line prints bb_w_wim, so it shows the copy path
+    assert 'bb_dry "$bb_w_rd $bb_w_wim $bb_w_inj"' in lines
 
 
 def test_install_media_menu_and_autoboot():

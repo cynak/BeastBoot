@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 # beastnet.action=: open one of the helper's actions directly (the boot menu's tool entries).
-ACTIONS = ("trust-ubuntu", "disk")  # Trust Ubuntu's key (build/trust/README.md); Disk tools
+ACTIONS = ("trust-ubuntu", "disk", "winboot")  # Trust Ubuntu's key (build/trust/README.md); Disk tools; Windows ISO copy
 
 
 def split_cmdline(text: str) -> list[tuple[str, str | None]]:
