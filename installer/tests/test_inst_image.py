@@ -5,7 +5,10 @@ import uuid
 
 import pytest
 
+from beastbooter.blockio import ImageTarget
 from beastbooter.esp import parse_marker, parse_set_lines
+from beastbooter.exfatfs import ExfatVolume
+from beastbooter.fatfs import FatVolume
 from beastbooter.layout import (
     DEVICE_CFG_PATH,
     ESP_SIZE_SECTORS,
@@ -94,6 +97,10 @@ def test_data_fs_and_device_cfg(installed, layout, fs):
     marker = parse_marker(mtype(img, plan.esp.offset, ESP_MARKER_PATH))
     assert marker["install_id"] == cfg["bb_install_id"]
     assert marker["version"] == "0.1.0"
+    if fs != "ntfs":  # prepare-windows finds the drive by its /beast-booter/ folder
+        with ImageTarget(img, writable=False) as t:
+            vol = (ExfatVolume if fs == "exfat" else FatVolume)(t, plan.data.offset)
+            assert [(e.name, e.is_dir) for e in vol.listdir("/")] == [("beast-booter", True)]
 
 
 def test_device_cfg_format(installed):
