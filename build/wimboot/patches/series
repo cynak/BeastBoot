@@ -3,3 +3,7 @@
 0001-efi-initrd-via-LoadFile2.patch
 0002-elf2efi-MajorImageVersion-1.patch
 0003-sbat-beast-boot-vendor-line.patch
+0004-wim-bound-chunk-and-resource-reads.patch
+0005-xca-lzx-huffman-bound-decoding.patch
+0006-cpio-check-name-and-file-sizes.patch
+0007-efi-bound-command-line.patch

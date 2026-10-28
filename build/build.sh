@@ -673,8 +673,10 @@ fi
 # build/wimboot/wimbootsrc.py (+ build/wimboot/patches: on UEFI it takes the
 # files GRUB passes with `initrd newc:...`), and the Windows PE start-up files
 # the menu injects (build/winpe/, shipped with CRLF line endings). One wimboot
-# serves BIOS (linux16) and UEFI (linux). It is not signed: the menu boots
-# Windows only with Secure Boot off. Cached under .tools/cache/wimboot/out/<key>.
+# serves BIOS (linux16) and UEFI (linux). The source build is unsigned; the
+# shipped file is signed with the beast-boot key like GRUB (an appended
+# Authenticode signature, which BIOS linux16 ignores), so shim lets GRUB load it
+# with Secure Boot on. Cached under .tools/cache/wimboot/out/<key>.
 # BB_SKIP_WIMBOOT=1 leaves all of it out (the menu then refuses Windows ISOs).
 # ---------------------------------------------------------------------------
 if [ "${BB_SKIP_WIMBOOT:-0}" != 1 ]; then
@@ -688,8 +690,38 @@ if [ "${BB_SKIP_WIMBOOT:-0}" != 1 ]; then
     < <("${WIMBOOTSRC[@]}" info "$WIM_OUT" version key tag commit)
   [ -n "$WIM_COMMIT" ] || die "cannot read $WIM_OUT/build-info.json"
   WIM_INFO_SHA="$(sha256sum < "$WIM_OUT/build-info.json")"; WIM_INFO_SHA="${WIM_INFO_SHA%% *}"
-  # wimboot-src:<name>=<version>:<path in the build>: gen_sbom.py checks it against build-info.json
-  add_file "$WIM_OUT/wimboot" esp/beast-booter/wimboot "wimboot-src:wimboot=$WIM_VERSION:/wimboot"
+  "${WIMBOOTSRC[@]}" check "$WIM_OUT/wimboot" "$WIM_VERSION" >/dev/null || die "the wimboot build output fails its checks"
+  WIM_UNSIGNED_SHA="$(sha256sum < "$WIM_OUT/wimboot")"; WIM_UNSIGNED_SHA="${WIM_UNSIGNED_SHA%% *}"
+  # Signing, as for GRUB above: an existing dist/ wimboot is reused when it carries exactly one
+  # signature, ours, and is byte-identical to this build with the signature removed.
+  WIM_SIGNED="$WORK/wimboot.signed"
+  PREV="$DIST/esp/beast-booter/wimboot"
+  reused=0
+  if [ "${BB_RESIGN:-0}" != 1 ] && [ -f "$PREV" ]; then
+    cp "$PREV" "$WORK/prev-w"; cp "$PREV" "$WORK/prev-w-stripped"
+    if sbattach --remove "$WORK/prev-w-stripped" >/dev/null 2>&1 \
+       && cmp -s "$WORK/prev-w-stripped" "$WIM_OUT/wimboot" \
+       && efi_inspect require "$WORK/prev-w" --only "beast-boot=$CRT" >/dev/null 2>&1; then
+      cp "$WORK/prev-w" "$WIM_SIGNED"; reused=1
+      log "wimboot: unsigned image unchanged, keeping the existing signature (BB_RESIGN=1 to re-sign)"
+    fi
+  fi
+  if [ "$reused" = 0 ]; then
+    sbsign --key "$KEY" --cert "$CRT" --output "$WIM_SIGNED" "$WIM_OUT/wimboot" >/dev/null 2>"$WORK/sbsign.log" \
+      || { cat "$WORK/sbsign.log" >&2; die "sbsign failed for wimboot"; }
+    log "wimboot: signed with $CERT_SUBJECT"
+  fi
+  sbverify --cert "$CRT" "$WIM_SIGNED" >/dev/null 2>&1 || die "sbverify failed for the signed wimboot"
+  efi_inspect require "$WIM_SIGNED" --only "beast-boot=$CRT" > "$WORK/wim-sigs.log" 2>&1 \
+    || { cat "$WORK/wim-sigs.log" >&2; die "the signed wimboot must carry exactly one signature, ours"; }
+  cp "$WIM_SIGNED" "$WORK/wim-stripped"
+  { sbattach --remove "$WORK/wim-stripped" >/dev/null 2>&1 && cmp -s "$WORK/wim-stripped" "$WIM_OUT/wimboot"; } \
+    || die "the signed wimboot without its signature is not the wimboot build output"
+  # wimboot-src:<name>=<version>:<path in the build>: gen_sbom.py checks the file with its
+  # signature removed against build-info.json
+  add_file "$WIM_SIGNED" esp/beast-booter/wimboot "wimboot-src:wimboot=$WIM_VERSION:/wimboot, signed:beast-boot"
+  extra secure_boot.wimboot_unsigned_sha256 "$WIM_UNSIGNED_SHA"
+  BUILD_ID_EXTRA+=(--unsigned "esp/beast-booter/wimboot=$WIM_UNSIGNED_SHA")
   extra build.wimboot_version "$WIM_VERSION"
   extra build.wimboot_build_key "$WIM_KEY"
   extra build.wimboot_build_info_sha256 "$WIM_INFO_SHA"
@@ -717,7 +749,7 @@ if [ "${BB_SKIP_WIMBOOT:-0}" != 1 ]; then
   extra build.beastmount_build_key "$BM_KEY"
   extra build.beastmount_build_info_sha256 "$BM_INFO_SHA"
   extra build.beastmount_toolchain "$BM_GCC; $(python3 -I -c 'import json,sys; print(", ".join(p["name"] + " " + p["version"] for p in json.load(open(sys.argv[1]))["packages"]))' "$HERE/winpe/mingw-w64.lock.json") (build/winpe/mingw-w64.lock.json)"
-  log "wimboot $WIM_VERSION (key $WIM_KEY, unsigned) + Windows PE start-up files + beastmount $BM_VERSION (key $BM_KEY)"
+  log "wimboot $WIM_VERSION (key $WIM_KEY, signed) + Windows PE start-up files + beastmount $BM_VERSION (key $BM_KEY)"
 fi
 
 # version.cfg last: its build id covers everything else, the beast-net helper included

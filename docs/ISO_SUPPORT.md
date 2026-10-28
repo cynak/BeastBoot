@@ -42,7 +42,7 @@ it in `/dev/disk/by-uuid/`, `<label>` the ISO's volume label as GRUB reads it.
 | `suse` | `/boot/x86_64/loader/linux` (the dracut cases above win first) | `isofrom_device=/dev/disk/by-uuid/<uuid> isofrom_system=<path> splash=silent` | linuxrc installers such as Tumbleweed NET (the installation source comes from the network; the VM needs a NIC); openSUSE/SLE DVD ISOs are unverified |
 | `debian-installer` | `/install.amd/vmlinuz` + `.disk/info` | the whole ISO and its loop-modules udeb are added to the initrd, `hooks/d-i-iso.sh` mounts it on `/cdrom` (needs RAM for the ISO twice; netinst only, not DVD sets: see [Size limit](#size-limit-of-alpine-and-debian-installer-isos)); when `bb_kargs` preseeds answers (`priority=`, `locale=`, `a/b=`...) the installer runs on the preferred console only, as d-i does for a preseed file | Debian netinst / CD installers |
 | `alpine` | `/.alpine-release` + `/apks/.boot_repository` | the whole ISO is added to the initramfs, `rdinit=/beast-init` (`hooks/alpine-init.sh`) attaches it to `/dev/loop0` | Alpine standard / extended (RAM for the ISO) |
-| `windows` | `/sources/boot.wim` and (`/bootmgr` or `/efi/microsoft/boot/bcd`) | no kernel: wimboot starts the ISO's `sources/boot.wim` from memory. Installation ISOs: **Windows Setup** from the ISO (default) or a Windows PE command prompt; other `boot.wim` ISOs (Windows PE, WinRE) as they are. **Secure Boot off only** ([below](#windows)) | Windows 11: **tested (real ISO)**, see below. Windows 10 and Windows Server installation ISOs: expected. Windows PE / WinRE ISOs: unverified |
+| `windows` | `/sources/boot.wim` and (`/bootmgr` or `/efi/microsoft/boot/bcd`) | no kernel: wimboot starts the ISO's `sources/boot.wim` from memory. Installation ISOs: **Windows Setup** from the ISO (default) or a Windows PE command prompt; other `boot.wim` ISOs (Windows PE, WinRE) as they are. Secure Boot on needs a one-time preparation ([below](#windows)) | Windows 11: **tested (real ISO)**, see below. Windows 10 and Windows Server installation ISOs: expected. Windows PE / WinRE ISOs: unverified |
 | `efi-chainload` | UEFI only: `/EFI/BOOT/BOOTX64.EFI` in any letter case | `chainloader` the ISO's own UEFI boot loader | self-contained EFI programs (for example memtest86+ or netboot.xyz, unverified); most other ISOs fail, see below |
 | `none` | nothing matched | the menu explains that the ISO is unknown | |
 
@@ -131,12 +131,30 @@ is not in the test catalog; it uses the same code path as Windows 11.
 
 Limits:
 
-- **Secure Boot must be off.** wimboot is not signed (and Microsoft's signed
-  wimboot cannot start from GRUB on UEFI), so with Secure Boot on the menu
-  stops with `BEAST: error windows-sb` and says to turn Secure Boot off.
-  BeastBoot never works around Secure Boot. Turn it off for the
-  installation; the installed Windows starts normally with Secure Boot on
-  again.
+- **Secure Boot on (0.4.0)**: wimboot is signed with the BeastBoot key, the
+  key you already enrolled for GRUB (Microsoft's signed wimboot cannot start
+  from GRUB on UEFI, so BeastBoot signs its own). With Secure Boot on, GRUB
+  cannot read UDF, the format of Microsoft's ISOs. So `boot.wim` (about 600 MB
+  for Windows 11) is copied once to `/beast-booter/winboot/<iso path>/` on the
+  data partition. Either choose **Prepare this Windows ISO for Secure Boot** in
+  the menu (the helper copies it once, then the PC restarts into Windows), or
+  run `beast-boot prepare-windows ISO` on the computer. The data partition
+  must be exFAT or FAT32 (NTFS cannot be read under Secure Boot), and on FAT32
+  `boot.wim` must be under 4 GiB. If you replace the ISO the copy is stale and
+  the menu offers to prepare it again. Without the helper on the drive the
+  menu stops with `BEAST: error windows-sb-no-helper`. The copy needs no
+  trust: the firmware verifies Windows' own boot manager and Windows verifies
+  the rest. With Secure Boot off nothing changes. Design:
+  [WINDOWS_SECURE_BOOT.md](WINDOWS_SECURE_BOOT.md).
+- **Firmware limits**: Windows' own boot manager must be trusted by the PC's
+  `db` and not revoked in `dbx`. Old ISOs on updated PCs, or a `db` without the
+  right Microsoft CA, fail exactly as Microsoft's own USB media would. wimboot
+  then shows `Could not load ...` and the menu only sees `boot-failed`.
+  Secure Boot with Windows ISOs: tested in the Secure Boot VM (Windows 11 reaches
+  Setup, prepared from the menu or with `beast-boot prepare-windows`); not yet
+  confirmed on real hardware.
+- **Revocation**: wimboot carries the BeastBoot SBAT line, so a vulnerable
+  build can be revoked.
 - **Memory**: about twice the size of `boot.wim` plus 1 GB, because wimboot
   keeps `boot.wim` in memory and Windows copies it into its own RAM disk.
   With Windows 11 26H2 (`boot.wim` 610 MB) Setup started with 2.5 GB

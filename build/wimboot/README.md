@@ -33,9 +33,15 @@ compares it byte for byte.
      only for such images; otherwise it uses its legacy loader, which wimboot
      cannot run under.
   3. `0003` an SBAT vendor line for our modified build.
+  4. `0004`-`0007` memory-safety fixes for input from the boot medium
+     (signing wimboot makes them Secure Boot relevant): WIM chunk table
+     and resource bounds (a crafted `boot.wim` could write over the stack),
+     the XCA/LZX/Huffman decoders, the CPIO initrd parser and the EFI
+     command line. Found by review and fuzzing, see [fuzz/](fuzz/README.md).
 
   Without a LoadFile2 initrd, the patched wimboot behaves exactly like
-  upstream. 0001 and 0002 are candidates for upstream.
+  upstream on valid input. 0001, 0002 and 0004-0007 are candidates for
+  upstream.
 
 ## One binary for BIOS and UEFI
 
@@ -43,14 +49,20 @@ The x86_64 image is a hybrid: a bzImage header, so GRUB's `linux16` loads it
 on BIOS (wimboot then reads the `initrd16 newc:` files from memory), and a
 PE32+ EFI entry point, so GRUB's `linux` starts it on 64-bit UEFI.
 `wimbootsrc.py` checks both headers, the image version, the SBAT lines and
-that the image is unsigned.
+that the unsigned build is unsigned (the dist copy is signed by build.sh).
 
 ## Secure Boot
 
-Our wimboot is not signed. With Secure Boot on, shim and GRUB refuse it, and
-the menu tells the user to turn Secure Boot off to boot a Windows ISO.
-(Upstream's release binary is Microsoft-signed, but it is unpatched and
-cannot boot from GRUB on UEFI, so it would not help.)
+Since 0.4.0 `build/build.sh` signs our wimboot with the BeastBoot key, the key
+that signs GRUB and that users already enroll, so shim accepts it and no new
+trust is needed. (Upstream's release binary is Microsoft-signed, but it is
+unpatched and cannot boot from GRUB on UEFI, so it would not help.) The
+manifest records `secure_boot.wimboot_unsigned_sha256`, the hash of the image
+without its signature; `build/verify-dist.sh` checks the signature and that
+hash. The SBAT vendor line (patch 0003) lets a vulnerable build be revoked.
+Windows' own boot manager is verified by the firmware (`db`/`dbx`). With
+Secure Boot on, the menu boots a copy of `boot.wim` on the data partition,
+see [docs/WINDOWS_SECURE_BOOT.md](../../docs/WINDOWS_SECURE_BOOT.md).
 
 ## Updating
 

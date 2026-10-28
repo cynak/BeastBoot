@@ -117,8 +117,11 @@ class LineUI(UI):
         self._header(title)
         for line in lines:
             self._p(line)
-        kept = "file" if what == "download" else what
-        self._p(f"(Ctrl-C cancels; the partial {kept} is kept for resuming.)")
+        if what in ("download", "copy"):
+            kept = "file" if what == "download" else what
+            self._p(f"(Ctrl-C cancels; the partial {kept} is kept for resuming.)")
+        else:  # e.g. the winboot action's "boot.wim copy": deleted on cancel
+            self._p(f"(Ctrl-C cancels; the partial {what} is deleted.)")
         state: dict[str, Progress | None] = {"p": None}
         cancel = threading.Event()
         w = Worker(lambda: job(lambda p: state.__setitem__("p", p), cancel))

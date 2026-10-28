@@ -20,13 +20,17 @@ from bbe2e import checks, env, images, realiso, trees
 ENABLED = os.environ.get("BB_REAL_ISO") == "1"
 
 
+MODE_MARK = {"uefi-sb": "secureboot"}
+
+
 def _real_params():
     try:
         entries = realiso.select(realiso.load())
     except ValueError as e:
         raise pytest.UsageError(str(e)) from None
     return [pytest.param(e, mode, fs, id=realiso.case_id(e, mode, fs),
-                         marks=[pytest.mark.slow, pytest.mark.live, getattr(pytest.mark, mode), getattr(pytest.mark, fs)])
+                         marks=[pytest.mark.slow, pytest.mark.live, getattr(pytest.mark, MODE_MARK.get(mode, mode)),
+                                getattr(pytest.mark, fs)])
             for e in entries for mode, fs in realiso.cases(e)]
 
 
@@ -109,7 +113,7 @@ def test_validate_rejects():
             "sha256_url": "https://e.org/SUMS", "size": 1, "recipe": "anaconda", "modes": ["uefi"],
             "fs": ["exfat"], "ram_mb": 1024, "timeout_s": 60, "kargs": "console=ttyS0", "success": ["a"]}
     assert realiso.validate({"v": 1, "isos": [good]}) == []
-    bad = [dict(good, url="http://e.org/x.iso"), dict(good, sha256_url=None), dict(good, modes=["uefi-sb"]),
+    bad = [dict(good, url="http://e.org/x.iso"), dict(good, sha256_url=None), dict(good, modes=["uefi-sb"]), dict(good, modes=["uefi-tpm"]),
            dict(good, success=[]), dict(good, success=["("]), dict(good, kargs='a="b"'),
            dict(good, family="windows"), dict(good, sha256="ABC")]
     for b in bad:

@@ -415,7 +415,8 @@ class TUI(UI):
         w = Worker(lambda: job(lambda p: state.__setitem__("p", p), cancel))
         confirm = False
         while not w.done():
-            area = self._frame(title, f"Esc cancel (the partial {what} is kept for resuming)")
+            fate = "is kept for resuming" if what in ("download", "copy") else "is deleted"
+            area = self._frame(title, f"Esc cancel (the partial {what} {fate})")
             if area is not None:
                 self._draw_progress(area, lines, state["p"], confirm, cancel.is_set(), what)
             self.scr.refresh()
@@ -470,7 +471,8 @@ class TUI(UI):
         if cancelling:
             self._put(y + 5, x0, "Cancelling...", self.a["warn"])
         elif confirm:
-            kept = "The partial file is kept." if what == "download" else "It can be resumed later."
+            kept = {"download": "The partial file is kept.", "copy": "It can be resumed later."}.get(
+                what, "The partial copy is deleted.")
             self._put(y + 5, x0, f"Cancel the {what}? {kept}  y = yes, n = no",
                       self.a["warn"])
 

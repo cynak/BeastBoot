@@ -154,9 +154,10 @@ including what the CI release cannot (it has no real ISOs and no time for them):
 | Step | What |
 |---|---|
 | build, lint, lock | `make build`, `make lint`, `build/beastnet/lock.py --check` |
-| installer, menu, beastnet, devtools, selftest | every unit suite and `scripts/selftest.py` |
+| installer, menu, beastnet, devtools | every unit suite |
 | e2e | the QEMU end-to-end suite (`tests/e2e`, incl. Disk tools) |
 | scan-pre, kernel-vex, scan | `make vulns`, `scripts/kernel_vex.py` (kernel VEX against today's data), `make vulns` again; fails on an incomplete scan (a scanner failed) or VEX problems |
+| selftest | `scripts/selftest.py` against the SBOM the scan just wrote (with `--quick`: right after the unit suites, against the SBOM already there) |
 | real-iso | every real ISO boots (`BB_REAL_ISO=1`, about 25 minutes, tens of GB downloaded once) |
 | verify-dist | `build/verify-dist.sh --rebuild`: GRUB, wimboot and beastmount rebuilt from source, byte-identical |
 | portable | `scripts/build_portable.sh --all` |
@@ -165,6 +166,17 @@ Every step runs even after a failure; the summary (`out/prerelease/summary.txt`,
 per step beside it) shows them all, and the exit code is the number of failed steps.
 It also fails when the tree changes while it runs (another editor or session), because
 the results would then not describe what gets tagged.
+
+Each step prints a start line and, every 30 seconds, its elapsed time and the last line
+of its log (`ARGS="--progress 10"`, or `--progress 0` for start and end lines only). Each
+step has a time limit (in its `step` line in the script, e.g. 15 minutes for the
+beast-net unit tests, 3 hours for e2e): a step that runs past it is stopped with all its
+child processes and counted as `TIMEOUT`, so one hung test cannot block the run. Ctrl+C
+(or SIGTERM) stops the running step the same way.
+
+The build signs with the key in `keys/`; in a git worktree, which has no `keys/`, point
+`BB_KEY_DIR` at the main checkout's keys (`BB_KEY_DIR=/path/to/beast-booter/keys make
+prerelease`), or the build step fails at once.
 
 ```sh
 make prerelease                          # everything (about an hour)

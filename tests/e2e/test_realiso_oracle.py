@@ -85,8 +85,8 @@ def test_5_recipe_not_pinned_fails():
 
 
 def test_failures_misc():
-    v = _judge(_log(READY, f"BEAST: boot {ISO} recipe=windows", "BEAST: error windows-sb /x.iso", ""))
-    assert v.status == "fail" and v.reason.startswith("menu: error windows-sb")
+    v = _judge(_log(READY, f"BEAST: boot {ISO} recipe=windows", "BEAST: error sb-verify-failed /x.iso linux failed", ""))
+    assert v.status == "fail" and v.reason.startswith("menu: error sb-verify-failed")
     v = _judge(_log(READY, BOOT, "Entering emergency mode. Exit the shell to continue."))
     assert v.status == "fail" and "emergency" in v.reason
     v = _judge(_log(READY), exited=True)
@@ -183,3 +183,20 @@ def test_settings_and_cache_id():
     errs = realiso.validate(bad)
     assert any("cache_id must name another entry" in e for e in errs)
     assert any("settings must map" in e for e in errs)
+
+
+def test_uefi_sb_mode():
+    """uefi-sb (Windows only): the ready record must say sb=1, never NTFS (lockdown)."""
+    win = {"id": "w", "family": "windows", "recipe": "windows", "result": ["^winpe-ok\\s*$"]}
+    ready_sb = READY.replace("sb=0", "sb=1")
+    boot = f"BEAST: boot {ISO} recipe=windows"
+
+    def j(ready, mode):
+        return realiso.judge_windows(realiso.Oracle(win, mode, ISO, "exfat"), _log(ready, boot), "winpe-ok\r\n",
+                                     timed_out=False)
+    assert j(ready_sb, "uefi-sb").status == "pass"
+    assert j(READY, "uefi-sb").reason.startswith("wrong mode")
+    assert j(ready_sb, "uefi").reason.startswith("wrong mode")
+    assert realiso.cases(dict(win, modes=["uefi", "uefi-sb"], fs=["exfat", "ntfs"])) == [
+        ("uefi", "exfat"), ("uefi-sb", "exfat"), ("uefi", "ntfs")]
+    assert any(e["family"] == "windows" and "uefi-sb" in e["modes"] for e in realiso.load())

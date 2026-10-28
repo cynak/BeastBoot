@@ -19,6 +19,7 @@ loadenv
 minicmd
 help
 cat
+cmp
 ls
 sleep
 halt

@@ -184,6 +184,22 @@ def resigned_origin(path: Path, p: deb.DebPkg, member: str | None) -> str:
     return f"authenticode sha256 matches {where} (signature replaced by the beast-boot key)"
 
 
+def unsigned_sha256(path: Path) -> str:
+    """SHA-256 of a PE image we signed (signed:beast-boot) with its signatures removed, as
+    `sbattach --remove` does: the certificate table (at the end of the file) cut off, its data
+    directory entry and the PE checksum (which sbsign sets) zeroed. Raises efi.PEError if the table is
+    not at the end."""
+    data = bytearray(path.read_bytes())
+    pe = efi.parse_pe(bytes(data))
+    if pe.cert_size:
+        if pe.certdir_off is None or pe.cert_off + pe.cert_size != len(data):
+            raise efi.PEError("the certificate table is not at the end of the file")
+        del data[pe.cert_off:]
+        data[pe.certdir_off:pe.certdir_off + 8] = bytes(8)
+        data[pe.checksum_off:pe.checksum_off + 4] = bytes(4)
+    return hashlib.sha256(data).hexdigest()
+
+
 def parse_origin(origin: str) -> dict:
     kind = origin.split(":", 1)[0] if ":" in origin else "unknown"
     debs = [{"name": m.group(1), "version": m.group(2), "path": m.group(3)}
@@ -770,7 +786,7 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
                "license": "GPL-2.0-or-later", "license_source": "wimboot LICENSE.txt and source headers",
                "description": (f"iPXE wimboot {wup_ver} built by beast-boot (build/wimboot/wimbootsrc.py) from "
                                f"the {tag} source archive plus {len(wpatches)} beast-boot patch(es); x86_64 "
-                               "hybrid image (BIOS via GRUB linux16, UEFI via GRUB linux), unsigned"),
+                               "hybrid image (BIOS via GRUB linux16, UEFI via GRUB linux), signed with the beast-boot key"),
                "pedigree": {"patches": [{"type": "unofficial",
                                          "diff": {"url": f"build/wimboot/patches/{p_['name']}"}}
                                         for p_ in wpatches],
@@ -787,7 +803,8 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
                                                 if k in winfo.get("toolchain", {})) or None,
                          "beast-boot-patches": [f"{p_['name']} sha256:{p_['sha256']}" for p_ in wpatches],
                          "sbat": (winfo.get("sbat") or "").strip().replace("\n", " ") or None,
-                         "secure-boot": "not signed: the menu boots Windows only with Secure Boot off",
+                         "secure-boot": ("signed with the beast-boot key (MOK), like GRUB; the build output "
+                                         "is unsigned (secure_boot.wimboot_unsigned_sha256)"),
                          "vulnerability-tracking": (f"CPE on upstream:ipxe-wimboot@{wup_ver} (NVD vendor ipxe, "
                                                     f"product wimboot); the purl names the upstream tag {tag}")}})
         m.dep(root_ref, wim_ref, "CONTAINS")
@@ -961,9 +978,15 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
                 item["props"]["origin-verified"] = f"UNVERIFIED: {wim['note']}"
             else:
                 want = wim["info"]["files"].get(w["path"].lstrip("/"))
+                have, how = f["sha256"], "sha256"
+                if o["signed_by_bb"]:
+                    try:
+                        have, how = unsigned_sha256(dist / rel), "sha256 without its signature"
+                    except efi.PEError as e:
+                        have, how = f"({e})", "sha256 without its signature"
                 item["props"]["origin-verified"] = (
-                    f"sha256 matches build-info.json of wimboot build {wim['key']} ({w['path'].lstrip('/')})"
-                    if want == f["sha256"] else
+                    f"{how} matches build-info.json of wimboot build {wim['key']} ({w['path'].lstrip('/')})"
+                    if want == have else
                     f"MISMATCH: differs from {w['path'].lstrip('/')} of wimboot build {wim['key']}")
                 item["props"]["package-path"] = w["path"]
             if wim_ref:
@@ -1012,7 +1035,7 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
                 or (o["kind"] == "beastmount-src" and bm_ref is None):
             m.dep(root_ref, fref, "CONTAINS")
         # EFI binaries: SBAT, Authenticode, signers
-        if rel.lower().endswith(".efi"):
+        if rel.lower().endswith(".efi") or "signed:" in o["raw"]:
             info = efi.inspect_efi(dist / rel)
             efi_facts[rel] = efi.public_view(info)
             item["props"].update({

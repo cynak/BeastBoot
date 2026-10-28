@@ -1,0 +1,149 @@
+Subject: xca, lzx, huffman: keep decoding inside the input and output
+
+Found by fuzzing the decompressors (build/wimboot/fuzz) with inputs as a
+crafted boot.wim can deliver them:
+
+- xca: the bit and byte readers did not check the end of the input, so
+  a chunk read up to a few bytes past it (they now read zeroes there, and
+  the existing end-of-stream checks still reject such a chunk), and a
+  match could copy from before the start of the output buffer (rejected).
+- lzx: a pretree "same length" run (code 19) took its delta code without
+  checking it, giving a code length of up to 255; huffman_alphabet() then
+  incremented a counter up to 255 entries past its 16-entry table, a
+  write outside the decoder state on the stack. Such a code is rejected,
+  and huffman_alphabet() rejects lengths over HUFFMAN_BITS.
+- huffman: an empty alphabet decoded its two placeholder symbols from
+  before the raw symbol table; they now decode as symbol 0 explicitly.
+
+Valid streams decode exactly as before. beast-boot (build/wimboot/); to
+be offered upstream.
+
+---
+--- a/src/xca.h
++++ b/src/xca.h
+@@ -66,16 +66,24 @@
+ }
+ 
+ /** Get word from source data stream */
+-#define XCA_GET16( src ) ( {			\
+-	const uint16_t *src16 = src;		\
+-	src += sizeof ( *src16 );		\
+-	*src16; } )
++#define XCA_GET16( src, end ) ( {				\
++	const uint8_t *src16 = src;				\
++	uint16_t val16 = 0;					\
++	if ( ( src16 + 1 ) < ( const uint8_t * ) (end) )	\
++		val16 = ( src16[0] | ( src16[1] << 8 ) );	\
++	else if ( src16 < ( const uint8_t * ) (end) )		\
++		val16 = src16[0];				\
++	src += sizeof ( val16 );				\
++	val16; } )
+ 
+ /** Get byte from source data stream */
+-#define XCA_GET8( src ) ( {			\
+-	const uint8_t *src8 = src;		\
+-	src += sizeof ( *src8 );		\
+-	*src8; } )
++#define XCA_GET8( src, end ) ( {				\
++	const uint8_t *src8 = src;				\
++	uint8_t val8 = 0;					\
++	if ( src8 < ( const uint8_t * ) (end) )			\
++		val8 = *src8;					\
++	src += sizeof ( val8 );					\
++	val8; } )
+ 
+ /** XCA source data stream end marker */
+ #define XCA_END_MARKER 256
+--- a/src/xca.c
++++ b/src/xca.c
+@@ -84,9 +84,9 @@
+ 				return rc;
+ 
+ 			/* Initialise state */
+-			accum = XCA_GET16 ( src );
++			accum = XCA_GET16 ( src, end );
+ 			accum <<= 16;
+-			accum |= XCA_GET16 ( src );
++			accum |= XCA_GET16 ( src, end );
+ 			extra_bits = 16;
+ 
+ 			/* Determine next threshold */
+@@ -100,7 +100,7 @@
+ 		accum <<= huffman_len ( sym );
+ 		extra_bits -= huffman_len ( sym );
+ 		if ( extra_bits < 0 ) {
+-			accum |= ( XCA_GET16 ( src ) << ( -extra_bits ) );
++			accum |= ( XCA_GET16 ( src, end ) << ( -extra_bits ) );
+ 			extra_bits += 16;
+ 		}
+ 
+@@ -125,9 +125,9 @@
+ 			match_offset_bits = ( raw >> 4 );
+ 			match_len = ( raw & 0x0f );
+ 			if ( match_len == 0x0f ) {
+-				match_len = XCA_GET8 ( src );
++				match_len = XCA_GET8 ( src, end );
+ 				if ( match_len == 0xff ) {
+-					match_len = XCA_GET16 ( src );
++					match_len = XCA_GET16 ( src, end );
+ 				} else {
+ 					match_len += 0x0f;
+ 				}
+@@ -143,11 +143,16 @@
+ 			accum <<= match_offset_bits;
+ 			extra_bits -= match_offset_bits;
+ 			if ( extra_bits < 0 ) {
+-				accum |= ( XCA_GET16 ( src ) << (-extra_bits) );
++				accum |= ( XCA_GET16 ( src, end ) << (-extra_bits) );
+ 				extra_bits += 16;
+ 			}
+ 
+ 			/* Copy data */
++			if ( match_offset > out_len ) {
++				DBG ( "XCA match offset %#x before start of "
++				      "output at %#zx\n", match_offset, out_len );
++				return -1;
++			}
+ 			out_len += match_len;
+ 			if ( buf ) {
+ 				copy = ( out - match_offset );
+--- a/src/lzx.c
++++ b/src/lzx.c
+@@ -279,6 +279,11 @@
+ 				code = lzx_decode ( lzx, &lzx->pretree );
+ 				if ( code < 0 )
+ 					return code;
++				if ( code > 16 ) {
++					DBG ( "LZX invalid pretree code %d after "
++					      "same-length run\n", code );
++					return -1;
++				}
+ 				length = ( ( lengths[i] - code + 17 ) % 17 );
+ 			} else {
+ 				DBG ( "Unrecognised pretree code %d\n", code );
+--- a/src/huffman.c
++++ b/src/huffman.c
+@@ -116,6 +116,10 @@
+ 	empty = 1;
+ 	for ( raw = 0 ; raw < count ; raw++ ) {
+ 		bits = lengths[raw];
++		if ( bits > HUFFMAN_BITS ) {
++			DBG ( "Huffman length %d too long\n", bits );
++			return -1;
++		}
+ 		if ( bits ) {
+ 			alphabet->huf[ bits - 1 ].freq++;
+ 			empty = 0;
+@@ -159,6 +163,12 @@
+ 			*(sym->raw++) = raw;
+ 		}
+ 	}
++	if ( empty ) {
++		/* The two placeholder symbols decode as raw symbol 0,
++		 * rather than reading before the raw symbol table */
++		alphabet->raw[0] = alphabet->raw[1] = 0;
++		alphabet->huf[0].raw += 2;
++	}
+ 
+ 	/* Adjust Huffman-coded symbol table raw pointers and populate
+ 	 * quick lookup table.

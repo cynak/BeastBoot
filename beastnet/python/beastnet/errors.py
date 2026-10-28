@@ -25,11 +25,12 @@ DISK_IO = "disk-io"            # read/write error beyond what ddrescue records
 ASSEMBLE = "assemble"          # a stack could not start read-only
 RECONSTRUCT = "reconstruct"    # no reconstruction candidate validated
 COPY = "copy"                  # a clone/image/restore failed
+WINBOOT = "winboot"            # preparing a Windows ISO for Secure Boot refused or failed (winboot.py)
 
 CODES = frozenset({
     NO_NETWORK, WIFI_AUTH, DHCP, TLS, HTTP, REFUSED_PLAIN_HTTP, CHECKSUM_MISMATCH,
     NO_SPACE, MOUNT, GRUBENV, SCRIPT, EXISTS, INTERNAL, TRUST,
-    DISK_REFUSED, DISK_CHANGED, DISK_IO, ASSEMBLE, RECONSTRUCT, COPY,
+    DISK_REFUSED, DISK_CHANGED, DISK_IO, ASSEMBLE, RECONSTRUCT, COPY, WINBOOT,
 })
 
 

@@ -148,10 +148,11 @@ Kernel command line parameters read by the helper:
 | `beastnet.esp=UUID=…` | ESP (mounted read-write at `/mnt/esp`) |
 | `beastnet.sb=0/1` | Secure Boot state reported by the menu |
 | `beastnet.debug=1` | print `BEASTNET:` lines (below) on the console and serial |
-| `beastnet.script=/path` | non-interactive run from a JSON file on the data partition (tests, power users); the menu passes it when `/beast-booter/config.cfg` sets `bb_beastnet_script=/path` |
+| `beastnet.script=/path` | non-interactive run from a JSON file on the data partition (tests, power users); the menu passes it when `/beast-booter/config.env` (or, with Secure Boot off, `config.cfg`) sets `bb_beastnet_script=/path`; in `config.env` the path may hold only letters, digits and `._/-` |
 | `beastnet.ui=plain` | line-based prompts instead of the curses screens (serial consoles) |
 | `beastnet.action=trust-ubuntu` | open "Trust Ubuntu's Secure Boot key" first (§8; set by the Tools menu entry). Other values are ignored. Its "Download an ISO from a link" item then leads to the normal screens |
 | `beastnet.action=disk` | open Disk tools first (recovery and cloning, RAID-aware; set by the "Disk tools: recovery and cloning" Tools menu entry; see [DISK_TOOLS.md](DISK_TOOLS.md)). Every beast-net boot gets `raid=noautodetect md_mod.start_ro=1` on the kernel command line, so no RAID array starts on its own or writes before Disk tools set it read-only |
+| `beastnet.action=winboot` | prepare a Windows ISO for Secure Boot (set by the menu's "Prepare this Windows ISO for Secure Boot" entry, which first saves `bb_wb_iso` to the ESP `grub/grubenv`). Copies the ISO's `sources/boot.wim` to `/beast-booter/winboot/<iso>/` on the data partition (exFAT or FAT32 only), shows progress, then sets `bb_oneshot` to the ISO and reboots. Error code `winboot`. Spec: [WINDOWS_SECURE_BOOT.md](WINDOWS_SECURE_BOOT.md) |
 
 Script file (`beastnet.script`):
 ```json
@@ -344,8 +345,8 @@ Windows 11 Enterprise); `BB_LIVE_SOURCE=id,id` picks others. The links name
 exact releases, so they go stale: a `gone (404)` result means the link in
 the catalog needs updating, not that beast-net is broken.
 
-Windows ISOs download fine and boot with Secure Boot off
-([ISO_SUPPORT.md](ISO_SUPPORT.md#windows)); they are larger than 4 GiB, so
+Windows ISOs download fine and boot with Secure Boot off or on
+([ISO_SUPPORT.md](ISO_SUPPORT.md#windows); with it on, they need the one-time `winboot` preparation); they are larger than 4 GiB, so
 the drive needs exFAT or NTFS for them.
 
 ## 8. Trust Ubuntu's Secure Boot key

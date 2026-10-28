@@ -1,0 +1,217 @@
+Subject: wim: bound chunk and resource reads from the WIM
+
+The offsets in a compressed resource's chunk table come from boot.wim and
+were only checked to lie within the resource. A chunk whose next offset
+is lower than its own gave a wrapped, huge length; any length became a
+stack VLA (uint8_t zbuf[len]) that the read then filled with data from
+the WIM. On UEFI the stack is small and unguarded, so a crafted boot.wim
+could write its own bytes over the stack or over memory below it, before
+any signature check of what wimboot loads next (a Secure Boot bypass for
+any signed wimboot). Found by review (docs/SECURITY_REVIEW-0.4.0.md W1)
+and confirmed by fuzzing (build/wimboot/fuzz).
+
+Now:
+- chunk offsets must not decrease and a stored chunk is at most
+  WIM_CHUNK_LEN bytes (no writer stores a chunk longer than its data);
+  it is read into a static WIM_CHUNK_LEN buffer, not a VLA;
+- the resource and file bounds checks cannot overflow;
+- an uncompressed resource must not claim more data than it stores
+  (reads past the end of the WIM file otherwise);
+- a compressed resource's chunk count must fit in an unsigned int;
+- directory entry lengths must not wrap the walk back to an earlier
+  entry (a loop: wimboot would hang);
+- wimpatch.c: the lengths it builds the patched WIM from (lookup table,
+  boot metadata, injection directory) must each end within the patched
+  WIM's limit before they are placed, and the patched length must stay
+  within it, so no region offset can wrap. The limit is one virtual
+  disk file (4 GiB) where size_t is 64-bit, and 1 MiB less than 4 GiB
+  where it is 32-bit: the hybrid image's BIOS path runs the i386 build,
+  where 4 GiB does not fit in a size_t (2.9.0+bb2 computed the limit
+  as 0 there and so refused every file injection on BIOS).
+
+A valid WIM reads exactly as before. beast-boot (build/wimboot/); to be
+reported to and offered upstream.
+---
+--- a/src/wim.c
++++ b/src/wim.c
+@@ -38,6 +38,9 @@
+ /** WIM chunk buffer */
+ static struct wim_chunk_buffer wim_chunk_buffer;
+ 
++/** Compressed chunk buffer (a stored chunk is never longer than this) */
++static uint8_t wim_zbuf[WIM_CHUNK_LEN];
++
+ /**
+  * Get WIM header
+  *
+@@ -156,6 +159,12 @@
+ 	if ( ( rc = wim_chunk_offset ( file, resource, ( chunk + 1 ),
+ 				       &next_offset ) ) != 0 )
+ 		return rc;
++	if ( ( next_offset < offset ) ||
++	     ( ( next_offset - offset ) > sizeof ( wim_zbuf ) ) ) {
++		DBG ( "Chunk %d has invalid length [%#zx,%#zx)\n",
++		      chunk, offset, next_offset );
++		return -1;
++	}
+ 	len = ( next_offset - offset );
+ 
+ 	/* Calculate uncompressed length */
+@@ -173,7 +182,7 @@
+ 			     len );
+ 
+ 	} else {
+-		uint8_t zbuf[len];
++		uint8_t *zbuf = wim_zbuf;
+ 
+ 		/* Read compressed data into a temporary buffer */
+ 		file->read ( file, zbuf, ( resource->offset + offset ), len );
+@@ -230,12 +239,13 @@
+ 	size_t frag_len;
+ 	int rc;
+ 
+-	/* Sanity checks */
+-	if ( ( offset + len ) > resource->len ) {
++	/* Sanity checks (written so that no sum can overflow) */
++	if ( ( len > resource->len ) || ( offset > ( resource->len - len ) ) ) {
+ 		DBG ( "Resource too short (%#llx bytes)\n", resource->len );
+ 		return -1;
+ 	}
+-	if ( ( resource->offset + zlen ) > file->len ) {
++	if ( ( zlen > file->len ) ||
++	     ( resource->offset > ( file->len - zlen ) ) ) {
+ 		DBG ( "Resource exceeds length of file\n" );
+ 		return -1;
+ 	}
+@@ -243,10 +253,20 @@
+ 	/* If resource is uncompressed, just read the raw data */
+ 	if ( ! ( resource->zlen__flags & ( WIM_RESHDR_COMPRESSED |
+ 					   WIM_RESHDR_PACKED_STREAMS ) ) ) {
++		if ( resource->len > zlen ) {
++			DBG ( "Uncompressed resource longer than its data\n" );
++			return -1;
++		}
+ 		file->read ( file, data, ( resource->offset + offset ), len );
+ 		return 0;
+ 	}
+ 
++	/* Chunk numbers must fit in an unsigned int */
++	if ( resource->len > ( ( ( uint64_t ) ~0U ) * WIM_CHUNK_LEN ) ) {
++		DBG ( "Resource too long (%#llx bytes)\n", resource->len );
++		return -1;
++	}
++
+ 	/* Read from each chunk overlapping the target region */
+ 	while ( len ) {
+ 
+@@ -401,6 +421,13 @@
+ 			return -1;
+ 		}
+ 
++		/* Entries must move forward (a wrapping length could
++		 * make the directory a loop) */
++		if ( direntry->len > ( ~( ( size_t ) 0 ) - *offset ) ) {
++			DBG ( "...directory entry length wraps\n" );
++			return -1;
++		}
++
+ 		/* Read fixed-length portion of directory entry */
+ 		if ( ( rc = wim_read ( file, header, meta, direntry, *offset,
+ 				       sizeof ( *direntry ) ) ) != 0 )
+@@ -544,5 +571,11 @@
+ 		/* Check for end of this directory */
+ 		if ( ! direntry.len )
+ 			return 0;
++
++		/* Entries must move forward (see wim_direntry()) */
++		if ( direntry.len > ( ~( ( size_t ) 0 ) - offset - *len ) ) {
++			DBG ( "...directory entry length wraps\n" );
++			return -1;
++		}
+ 	}
+ }
+--- a/src/wimpatch.c
++++ b/src/wimpatch.c
+@@ -39,6 +39,23 @@
+ /** Directory into which files are injected */
+ #define WIM_INJECT_DIR "\\Windows\\System32"
+ 
++/** Longest patched WIM when injecting files: one virtual disk file */
++#define WIM_PATCH_MAX_LEN ( ( uint64_t ) VDISK_FILE_COUNT * VDISK_SECTOR_SIZE )
++
++/** Room kept below the top of a 32-bit address space for the small
++ * fixed-size structures (lookup and directory entries, alignment)
++ * placed between the length checks */
++#define WIM_PATCH_SLACK 0x100000
++
++/** Longest patched WIM this build can describe without wrapping a
++ * size_t offset: WIM_PATCH_MAX_LEN where size_t is 64-bit (UEFI), a
++ * little less than 4 GiB where it is 32-bit (BIOS) */
++#define WIM_PATCH_LIMIT							\
++	( ( WIM_PATCH_MAX_LEN < ( ( uint64_t ) ~( ( size_t ) 0 ) -	\
++				  WIM_PATCH_SLACK ) ) ?			\
++	  WIM_PATCH_MAX_LEN :						\
++	  ( ( uint64_t ) ~( ( size_t ) 0 ) - WIM_PATCH_SLACK ) )
++
+ struct wim_patch;
+ 
+ /** A region of a patched WIM file */
+@@ -238,6 +255,18 @@
+ }
+ 
+ /**
++ * Check that a structure from the WIM fits in the patched WIM
++ *
++ * @v offset		Offset at which the structure would start
++ * @v len		Length of the structure (from the WIM)
++ * @ret fits		Structure ends within WIM_PATCH_LIMIT
++ */
++static int wim_patch_fits ( size_t offset, uint64_t len ) {
++	return ( ( len <= WIM_PATCH_LIMIT ) &&
++		 ( offset <= ( WIM_PATCH_LIMIT - len ) ) );
++}
++
++/**
+  * Patch WIM header
+  *
+  * @v patch		WIM patch
+@@ -717,6 +746,15 @@
+ 	if ( injected == 0 )
+ 		return 0;
+ 
++	/* The lookup table, boot metadata and injection directory
++	 * lengths below come from the WIM: each must end within the
++	 * patched WIM's limit before it is placed, so that no region
++	 * offset can wrap (whatever the width of size_t) */
++	if ( ! wim_patch_fits ( offset, patch->lookup.len ) ) {
++		DBG ( "WIM lookup table too long\n" );
++		return -1;
++	}
++
+ 	/* Calculate boot index for injected image */
+ 	if ( ( rc = wim_count ( file, &patch->header, &boot_index ) ) != 0 )
+ 		return rc;
+@@ -754,6 +792,12 @@
+ 	if ( ( rc = wim_dir_len ( file, &patch->header, &patch->boot,
+ 				  patch->dir.offset, &patch->dir.len ) ) != 0 )
+ 		return rc;
++	if ( ( ! wim_patch_fits ( offset, patch->boot.len ) ) ||
++	     ( ! wim_patch_fits ( ( offset + patch->boot.len ),
++				  patch->dir.len ) ) ) {
++		DBG ( "WIM boot metadata or directory too long\n" );
++		return -1;
++	}
+ 
+ 	/* Construct injected boot image metadata */
+ 	boot->offset = offset = wim_align ( offset );
+@@ -766,6 +810,10 @@
+ 	boot->zlen__flags = ( boot->len | WIM_RESHDR_METADATA );
+ 
+ 	/* Record patched length */
++	if ( offset > WIM_PATCH_LIMIT ) {
++		DBG ( "Patched WIM too long (%#zx bytes)\n", offset );
++		return -1;
++	}
+ 	file->xlen = offset;
+ 	DBG ( "...patching WIM length %#zx->%#zx\n", file->len, file->xlen );
+ 

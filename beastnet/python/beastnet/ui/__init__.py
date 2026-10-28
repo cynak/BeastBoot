@@ -128,7 +128,8 @@ class UI:
     def download(self, title: str, lines: list[str], job: Callable[..., Any], *,
                  what: str = "download") -> Any:
         """Progress screen for ``job(on_progress, cancel_event)``; ``what`` names
-        the job in the cancel texts ("download" or "copy")."""
+        the job in the cancel texts ("download" or "copy": resumable; anything else,
+        e.g. "boot.wim copy", is deleted when cancelled)."""
         raise NotImplementedError
 
     def document(self, title: str, text: str, items: list[Item], *, kind: str = "") -> Any:

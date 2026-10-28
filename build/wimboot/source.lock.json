@@ -5,7 +5,7 @@
   "upstream_version": "2.9.0",
   "tag": "v2.9.0",
   "commit": "e5875648bd52a3b915ae54933d9adf8ac763baca",
-  "patch_level": 1,
+  "patch_level": 2,
   "license": "GPL-2.0-or-later",
   "homepage": "https://ipxe.org/wimboot",
   "vcs": "https://github.com/ipxe/wimboot",

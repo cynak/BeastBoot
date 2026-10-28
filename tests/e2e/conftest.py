@@ -222,12 +222,14 @@ def base_drives(installer_ok, dist_dir, fixture_isos):
 
 @pytest.fixture
 def make_drive(base_drives, workdir):
-    """make_drive(kind, config_text) -> per-test copy of a base image with config.cfg written."""
+    """make_drive(kind, config_text, env_text="") -> per-test copy of a base image with
+    config.cfg and config.env written (Drive.write_config: config_text None writes no
+    config.cfg; env_text "" derives config.env from config_text, None writes none)."""
 
-    def make(kind: str, config: str) -> images.Drive:
+    def make(kind: str, config: str | None, env_text: str | bytes | None = "") -> images.Drive:
         base = base_drives(kind)
         drive = base.copy(workdir / f"{kind}.img")
-        drive.write_config(config)
+        drive.write_config(config, env_text)
         return drive
 
     return make

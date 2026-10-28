@@ -28,6 +28,7 @@ from . import env
 
 SECTOR = 512
 USER_CONFIG = "/beast-booter/config.cfg"
+USER_ENV = "/beast-booter/config.env"  # read instead of config.cfg under Secure Boot
 
 
 # ---------------------------------------------------------------------------
@@ -400,10 +401,19 @@ class Drive:
         with self.data_writer() as w:
             w.populate(tree)
 
-    def write_config(self, text: str) -> None:
+    def write_config(self, text: str | None, env_text: str | bytes | None = "") -> None:
+        """Write config.cfg (GRUB script) and config.env (GRUB environment block).
+        env_text "" (default) derives config.env from the plain `set` lines of
+        text, so the same settings apply with Secure Boot on (where the menu
+        ignores config.cfg); None writes no config.env. text None: no config.cfg."""
+        if env_text == "":
+            env_text = config_env(text or "")
         with self.data_writer() as w:
             w.mkdir("/beast-booter")
-            w.put(USER_CONFIG, text)
+            if text is not None:
+                w.put(USER_CONFIG, text)
+            if env_text is not None:
+                w.put(USER_ENV, env_text)
 
 
 def user_config(*, debug: bool = True, dryrun: bool = False, autoboot: str | None = None,
@@ -428,3 +438,36 @@ def user_config(*, debug: bool = True, dryrun: bool = False, autoboot: str | Non
     if extra:
         lines.append(extra)
     return "\n".join(lines) + "\n"
+
+
+_SET_LINE = re.compile(r'^set ([A-Za-z_][A-Za-z0-9_]*)="((?:[^"\\]|\\.)*)"$')
+
+
+def env_block(values: dict[str, str], *, size: int = 1024) -> bytes:
+    """A GRUB environment block as grub-editenv writes it: the header, one
+    name=value line each (backslash and newline escaped), '#' padding to size."""
+    body = "# GRUB Environment Block\n"
+    for k, v in values.items():
+        body += f"{k}=" + v.replace("\\", "\\\\").replace("\n", "\\\n") + "\n"
+    data = body.encode()
+    assert len(data) <= size, f"environment block too long: {len(data)} > {size}"
+    return data + b"#" * (size - len(data))
+
+
+def config_env(text: str) -> bytes:
+    """config.env for the plain `set NAME="VALUE"` lines of a user_config() text
+    (later lines win, as in GRUB). Anything else in it (GRUB script) is not
+    carried over; the menu reads only its allow-list from config.env anyway. Values
+    config.env refuses (a quote or a control character) are left out: with Secure Boot
+    off, config.cfg alone then sets them, as before 0.4.0 (e.g. an ISO name with a quote,
+    which the recipes refuse themselves)."""
+    values: dict[str, str] = {}
+    for ln in text.splitlines():
+        m = _SET_LINE.match(ln.strip())
+        if m:
+            v = re.sub(r"\\(.)", r"\1", m.group(2))
+            if '"' in v or re.search(r"[\x00-\x1f\x7f]", v):
+                values.pop(m.group(1), None)
+                continue
+            values[m.group(1)] = v
+    return env_block(values)

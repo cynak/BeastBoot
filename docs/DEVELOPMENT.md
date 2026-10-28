@@ -594,6 +594,9 @@ bin/bb-dev debug-config --set bb_debug=1 bb_serial=1 --print > config.cfg   # fo
   Booleans accept `1/0`, `on/off`, `yes/no`; `timeout` must be a number.
   Other names are written as given (with a warning) and GRUB gets them
   unchanged.
+- With Secure Boot on (`sb-enrolled` VMs) the menu ignores config.cfg and
+  reads only `/beast-booter/config.env` (MENU.md); make that with
+  `grub-editenv FILE set bb_debug=1` and copy it in, or use `device.cfg`.
 - The menu reads config.cfg at boot: after a change, reboot the VM
   (monitor `system_reset`). bb-dev reminds you when a VM is running on the
   image.
@@ -680,7 +683,8 @@ explained in [MENU.md](MENU.md#debug-output-bb_debug1). A dry run is the
 fastest way to check a recipe: the `BEAST: dryrun linux ...` line shows the
 exact kernel and command line the ISO would get.
 
-`config.cfg` is read after the data partition was found. To get `bb_debug`
+`config.env` and `config.cfg` are read after the data partition was found
+(with Secure Boot on only `config.env`, see MENU.md). To get `bb_debug`
 output when the data partition itself is the problem, the same settings can
 go in `grub/beast/device.cfg` on the ESP (see MENU.md). bb-dev leaves
 `device.cfg` to the installer: `bb-dev image --serial-console` puts
@@ -708,7 +712,8 @@ bin/bb-dev debug-config --set debug=linux,loader pager=1
   when the output only needs to reach the serial log.
 - Like the `bb_*` settings, this takes effect when config.cfg is sourced,
   so messages from before that point (finding the ESP and data partition)
-  are not shown.
+  are not shown. `debug` and `pager` are not accepted from `config.env`,
+  so with Secure Boot on put them in `device.cfg` on the ESP.
 
 ### 7.5 gdb on BIOS
 
@@ -820,6 +825,9 @@ pre-enrolled), never the signed binaries or the verification in them.
    cp config.cfg /media/$USER/BEASTBOOTER/beast-booter/config.cfg
    ```
 
+   With Secure Boot on, config.cfg is not read: write
+   `beast-booter/config.env` instead (`grub-editenv config.env set
+   bb_debug=1 bb_serial=1`; MENU.md).
    Add `--set bb_dryrun=1` to see what an ISO would be booted with
    without booting it, or `--set debug=linux,loader` for GRUB's own messages.
 3. Read the output: on screen (`pager=1` stops it scrolling away; a phone
@@ -837,10 +845,14 @@ Common failures:
 | shim "SBAT data failed: Security Policy Violation" | the machine's SBAT revocation level is newer than our GRUB | rebuild with a newer GRUB; the sbom-vuln skill checks SBAT |
 | `grub rescue>` or "error: file '/grub/...' not found" | GRUB found no usable ESP / menu files (damaged ESP, or BIOS core.img could not find partition 2) | `beast-boot update --device /dev/sdX` |
 | `BEAST: error no-data-partition`, menu empty | partition 1 not found or not readable; with Secure Boot on an NTFS data partition is invisible | check the partition table (`beast-boot info`); use exFAT/FAT32 |
+| `BEAST: config-cfg-ignored-sb` | Secure Boot is on and `/beast-booter/config.cfg` exists: it is not read | put the settings in `/beast-booter/config.env` (MENU.md) |
+| `BEAST: error config-env-bad-value <name>` | a `config.env` value has the wrong form; the setting is ignored | fix it (value forms in MENU.md) |
 | `BEAST: error iso-not-found` | `bb_autoboot` (or a menu path) points to a file that is not there | fix the path; it is relative to the data partition root |
 | `BEAST: error loopback-failed` | GRUB could not open the ISO as a loop device | check the file (checksum); try copying it again |
 | `BEAST: error no-recipe` | the ISO layout is not recognised | [ISO_SUPPORT.md](ISO_SUPPORT.md#recipes); report it with the `BEAST:` output |
-| `BEAST: error windows-sb` | Windows ISO with Secure Boot on (wimboot is unsigned) | turn Secure Boot off for that boot |
+| `BEAST: error windows-sb-no-helper` | Windows ISO with Secure Boot on, not prepared, and the beast-net helper is not on the drive | `beast-boot prepare-windows ISO` on the computer, or update the drive to get the helper (`windows-sb` was removed in 0.4.0) |
+| `BEAST: windows-prepare <iso>` (record) | the menu offers "Prepare this Windows ISO for Secure Boot" | choose it; it runs the helper action `winboot` |
+| helper error `winboot` (`errors.py` `WINBOOT`) | preparing the ISO was refused or failed (data partition NTFS, not enough space, `boot.wim` over 4 GiB on FAT32, not a Windows ISO) | read the helper screen; fix and retry. Spec: [WINDOWS_SECURE_BOOT.md](WINDOWS_SECURE_BOOT.md) |
 | `BEAST: error grubenv-not-writable` | `save_env` to `($esp)/grub/grubenv` failed (Windows setup/pe mode) | the drive's grubenv is missing or damaged: `beast-boot update` recreates it |
 | `BEAST: error sb-verify-failed` | shim refused the ISO's kernel (unsigned, or signed by a key this machine does not trust) | enroll that distribution's key via "Enroll a key (MokManager)", or turn Secure Boot off for that boot |
 | `BEAST: error boot-failed` | GRUB's `linux`, `initrd`, `chainloader` or `boot` failed without Secure Boot | read the GRUB error just above; `debug=linux,loader` |

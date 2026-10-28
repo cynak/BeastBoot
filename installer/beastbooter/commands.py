@@ -67,7 +67,7 @@ from .esp import (
     render_marker,
 )
 from .exfatfs import check_label as check_exfat_label
-from .exfatfs import format_exfat
+from .exfatfs import ExfatVolume, format_exfat
 from .fatfs import FatVolume, build_esp, format_fat, label_bytes
 from .fs import (
     NTFS_TOOL,
@@ -242,14 +242,20 @@ def _build_esp(plan: DiskPlan, dist: Dist, cfg: DeviceConfig, volume_id: int,
     return mem
 
 
+# The data partition's own folder (config.cfg/config.env, Windows boot.wim copies).
+DATA_DIR = "/beast-booter"
+
 def _format_data(t, plan: DiskPlan, fs: str, label: str, serial: int, timestamp: int | None) -> None:
-    """exFAT / FAT32 on partition 1. The serial is ours (device.cfg knows it already);
+    """exFAT / FAT32 on partition 1, with an empty /beast-booter/ (how `prepare-windows`
+    recognises the drive). The serial is ours (device.cfg knows it already);
     FAT32's label entry is dated `timestamp` (format_exfat writes no timestamps)."""
     if fs == "exfat":
         format_exfat(t, plan.data.offset, plan.data.size_bytes, label=label, volume_serial=serial)
+        ExfatVolume(t, plan.data.offset).mkdir(DATA_DIR)
     elif fs == "fat32":
         format_fat(t, plan.data.offset, plan.data.size_bytes, fat_bits=32, label=label,
                    volume_id=serial, hidden_sectors=plan.data.start, timestamp=timestamp)
+        FatVolume(t, plan.data.offset, timestamp=timestamp).mkdir(DATA_DIR)
     else:
         raise BeastError(f"internal error: {fs} is not formatted in place")
 
