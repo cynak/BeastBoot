@@ -38,12 +38,12 @@ PCA 2011; `bootmgfw_EX.efi` = Windows UEFI CA 2023 (wimboot tries it first).
 |---|---|---|
 | 1 | Build signing: sign wimboot in `build/build.sh` (reproducible like GRUB), `verify-dist.sh`, SBOM checks | done in the working tree, needs a full build on this base |
 | 1 | (verified on the 0.3.0 base: `make build` + `verify-dist.sh` pass) | done (e310ca4) |
-| 2 | Getting `boot.wim` past the UDF limit: option C chosen (helper + host tool), interface in [WINDOWS_SECURE_BOOT.md](WINDOWS_SECURE_BOOT.md); helper action `winboot`, menu, host `prepare-windows`; identity = `iso-head.bin` + GRUB `cmp` (Microsoft ISOs have no ISO9660 modification date, so `probe --fs-uuid` is empty) | done (0e2cf63), unit/menu tests pass |
-| 3 | Menu: drop the `windows-sb` refusal; Secure Boot path uses the readable copy of the boot files; `boot-failed` explanation when the firmware refuses the boot manager | done (0e2cf63) |
+| 2 | Getting `boot.wim` past the UDF limit: option C chosen (helper + host tool), interface in [WINDOWS_SECURE_BOOT.md](WINDOWS_SECURE_BOOT.md); helper action `winboot`, menu, host `prepare-windows`; identity = `iso-head.bin` + GRUB `cmp` (Microsoft ISOs have no ISO9660 modification date, so `probe --fs-uuid` is empty) | done (0cc8b63), unit/menu tests pass |
+| 3 | Menu: drop the `windows-sb` refusal; Secure Boot path uses the readable copy of the boot files; `boot-failed` explanation when the firmware refuses the boot manager | done (0cc8b63) |
 | 4 | Tests: replace `windows-sb` e2e tests with "boots under Secure Boot" + "wrong key refused"; real-ISO catalog gains a `uefi-sb` Windows case | done: 15 Secure Boot e2e + 3 real-ISO (Windows 11 to Setup) pass |
-| 5 | Docs: SECURE_BOOT.md §6, ISO_SUPPORT.md Windows limits, ARCHITECTURE.md, build/wimboot/README.md, REAL_ISOS.md, DEVELOPMENT.md error table | done (4bbc5b3) |
-| 6 | Security review of the signed surface; SBAT generation plan for revoking a bad wimboot; `make vulns` | done: 12 findings fixed (929df86, c30e0eb); wimboot fuzzing before the fixes crashed every parser, after: none so far |
-| 7 | Release: VERSION 0.4.0, full e2e + real-ISO run | `make prerelease` on 2124368: all 15 steps passed (2026-10-27; 114/114 real ISOs incl. Windows on BIOS, UEFI and UEFI Secure Boot); tag and merge pending the maintainer |
+| 5 | Docs: SECURE_BOOT.md §6, ISO_SUPPORT.md Windows limits, ARCHITECTURE.md, build/wimboot/README.md, REAL_ISOS.md, DEVELOPMENT.md error table | done (151f668) |
+| 6 | Security review of the signed surface; SBAT generation plan for revoking a bad wimboot; `make vulns` | done: 12 findings fixed (00090ac, a20eed0); wimboot fuzzing before the fixes crashed every parser, after: none so far |
+| 7 | Release: VERSION 0.4.0, full e2e + real-ISO run | `make prerelease` on 69f8203: all 15 steps passed (2026-10-27; 114/114 real ISOs incl. Windows on BIOS, UEFI and UEFI Secure Boot); tag and merge pending the maintainer |
 
 ## Phase 2 options: boot files GRUB can read in lockdown
 

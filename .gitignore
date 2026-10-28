@@ -36,6 +36,9 @@ __pycache__/
 
 # Top-level hidden folders are local only, except the CI and release workflows
 /.*/
+# ...and .tools also as a symlink (a worktree linking the main checkout's .tools):
+# /.*/ matches folders only, and a committed .tools link replaces the real folder
+/.tools
 !/.github/
 /.github/*
 !/.github/workflows/
