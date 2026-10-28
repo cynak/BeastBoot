@@ -336,6 +336,10 @@ def test_safedir_unit(tmp_path):
 def test_vendored_modules_identical():
     """The helper ships byte-identical copies of the UDF reader and the safe writer."""
     repo = Path(__file__).resolve().parents[2]
+    if not (repo / "beastnet/python/beastnet").is_dir():
+        # a copied test layout (portable smoke runs these tests with the bundled
+        # runtime, without the repo); beastnet/tests checks the same in the repo
+        pytest.skip("not run from the repository")
     for name in ("udf.py", "safedir.py"):
         assert (repo / "installer/beastbooter" / name).read_bytes() == \
             (repo / "beastnet/python/beastnet" / name).read_bytes(), f"{name} diverged; copy it over"
