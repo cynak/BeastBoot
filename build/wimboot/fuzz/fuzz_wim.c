@@ -29,6 +29,21 @@
 
 static const uint8_t inject_data[100] = "injected file";
 
+/* The read buffer in use: patch_wim() die()s on a bad WIM and the longjmp
+ * skips free(), so fuzz_one() frees it after the jump (otherwise every
+ * rejected input leaks a PIECE-sized buffer; a 2026-10-27 run grew to
+ * 33 GB this way). */
+static uint8_t *pending;
+
+static uint8_t * get_buf ( size_t len ) {
+	return ( pending = malloc ( len ) );
+}
+
+static void put_buf ( void ) {
+	free ( pending );
+	pending = NULL;
+}
+
 static void read_wim ( struct vdisk_file *file, void *data, size_t offset,
 		       size_t len ) {
 	if ( ( offset > file->len ) || ( len > ( file->len - offset ) ) )
@@ -76,13 +91,13 @@ static void read_resource ( struct vdisk_file *file,
 		frag = ( len - offset );
 		if ( frag > PIECE )
 			frag = PIECE;
-		buf = malloc ( frag );
+		buf = get_buf ( frag );
 		if ( wim_read ( file, header, resource, buf, offset,
 				frag ) != 0 ) {
-			free ( buf );
+			put_buf();
 			return;
 		}
-		free ( buf );
+		put_buf();
 	}
 }
 
@@ -98,10 +113,10 @@ static void read_patched ( struct vdisk_file *file ) {
 		frag = ( len - offset );
 		if ( frag > PIECE )
 			frag = PIECE;
-		buf = malloc ( frag );
+		buf = get_buf ( frag );
 		memset ( buf, 0, frag );
 		patch_wim ( file, buf, offset, frag );
-		free ( buf );
+		put_buf();
 	}
 }
 
@@ -148,6 +163,7 @@ int fuzz_one ( const uint8_t *data, size_t len ) {
 					      direntry.subdir, &dir_len );
 		}
 	}
+	put_buf();
 
 	/* wimpatch.c: construct and read the patched WIM */
 	for ( i = 0 ; i < ( sizeof ( configs ) / sizeof ( configs[0] ) ) ;
@@ -157,6 +173,7 @@ int fuzz_one ( const uint8_t *data, size_t len ) {
 		file = new_wim ( data, len );
 		if ( __builtin_setjmp ( fuzz_jmp ) == 0 )
 			read_patched ( file );
+		put_buf();
 	}
 	return 0;
 }

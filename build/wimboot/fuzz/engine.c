@@ -10,14 +10,20 @@
  * that triggered them.
  *
  * Usage:
- *   fuzz_X -time SECONDS -corpus DIR -crashes DIR [-max_len N] [-seed N] [SEEDDIR...]
+ *   fuzz_X -time SECONDS -corpus DIR -crashes DIR [-max_len N] [-seed N]
+ *          [-current FILE] [SEEDDIR...]
  *   fuzz_X FILE...          replay files once each (reproduce a crash)
+ *
+ * -current FILE holds a copy of the input being run, so that run.sh can save
+ * it when the process dies without the death callback (SIGKILL from the
+ * cgroup memory cap, or an ASan RSS-limit abort between inputs).
  *
  * The harness provides: int fuzz_one ( const uint8_t *data, size_t len );
  */
 #define _GNU_SOURCE
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -76,6 +82,7 @@ static uint64_t rng_state = 0x9e3779b97f4a7c15ULL;
 static const uint8_t *cur_data;
 static size_t cur_len;
 static const char *cur_kind = "crash";
+static int cur_fd = -1;
 
 static uint64_t rnd ( void ) {
 	uint64_t x = rng_state;
@@ -151,6 +158,11 @@ static int run ( const uint8_t *d, size_t n ) {
 	size_t i;
 
 	memcpy ( copy, d, n );
+	if ( cur_fd >= 0 && ( pwrite ( cur_fd, d, n, 0 ) != ( ssize_t ) n ||
+			      ftruncate ( cur_fd, n ) != 0 ) ) {
+		perror ( "-current" );
+		exit ( 2 );
+	}
 	memset ( cov_map, 0, sizeof ( cov_map ) );
 	cov_prev = 0;
 	cur_data = copy;
@@ -337,6 +349,11 @@ int main ( int argc, char **argv ) {
 			max_len = strtoul ( argv[++i], NULL, 0 );
 		else if ( ! strcmp ( argv[i], "-seed" ) && i + 1 < argc )
 			rng_state = strtoull ( argv[++i], NULL, 0 ) | 1;
+		else if ( ! strcmp ( argv[i], "-current" ) && i + 1 < argc ) {
+			cur_fd = open ( argv[++i], O_RDWR | O_CREAT | O_TRUNC,
+					0644 );
+			if ( cur_fd < 0 ) { perror ( argv[i] ); return 2; }
+		}
 		else if ( argv[i][0] == '-' ) {
 			fprintf ( stderr, "unknown option %s\n", argv[i] );
 			return 2;

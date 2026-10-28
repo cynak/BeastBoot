@@ -27,11 +27,35 @@ build/wimboot/fuzz/run.sh [--patches N|all] [--time SECONDS] [--workers N] \
 It unpacks the pinned source from the wimboot build cache (run `make build`
 once), applies the first N patches of `../patches/series` (default all;
 `--patches 3` is the code before the memory-safety patches), builds one
-binary per target, makes seeds (`mkseeds.py`) and runs N workers per target
-for SECONDS each, restarting a worker after each crash. Results:
+binary per target, makes seeds (`mkseeds.py`) and fuzzes the targets one
+after another, N workers (default 2) for SECONDS each, so at most N fuzz
+processes run at once; a worker restarts after each crash. Results:
 `OUTDIR/summary.txt` (crashes per target, grouped by kind and first wimboot
 frame, by `triage.awk`), crash inputs in `OUTDIR/<target>/crashes/`, logs in
 `OUTDIR/<target>/log.*`. Replay one input: `OUTDIR/bin/fuzz_wim FILE`.
+
+### Memory caps
+
+Every worker is capped, so neither a harness leak nor an input that makes
+wimboot allocate a lot can take the machine down:
+
+| cap | default | override | on hit |
+|---|---|---|---|
+| ASan `hard_rss_limit_mb` | 2048 | `BB_FUZZ_RSS_MB` | ASan aborts the process |
+| ASan `max_allocation_size_mb` (with `allocator_may_return_null=0`) | 1024 | `BB_FUZZ_ALLOC_MB` | ASan reports the allocation and aborts |
+| systemd user scope `MemoryMax` (`MemorySwapMax=0`), when `systemd-run --user` works | 4G | `BB_FUZZ_SCOPE_MAX` | kernel kills the worker (SIGKILL) |
+
+The ASan limits act first, inside the process; the scope is only a
+backstop for memory ASan does not track (a cgroup kill also shows a desktop
+notification). Each hit is a finding, not a silent restart: the input is
+saved in `crashes/` (by the death callback, or by run.sh from the
+`-current` copy the engine keeps of the running input, `killed-*` for a
+scope kill) and `summary.txt` lists it as `memory limit: ...`.
+
+A 2026-10-27 run without these caps grew one `fuzz_wim` worker to 33 GB:
+`fuzz_wim.c` leaked its read buffer whenever `patch_wim()` rejected the
+WIM, because `die()` longjmps past `free()`. Fixed in the harness (the
+buffer is freed after the jump); wimboot's parsers allocate nothing.
 
 `--from-wim` takes LZX chunks from a real WIM (e.g. `sources/boot.wim` of a
 Windows ISO, `7z e ISO sources/boot.wim`) as seeds, for the `lzx` target and

@@ -31,6 +31,7 @@ scan). Status: **fixed** (W1-W3: wimboot patches 0004-0007, fuzzed; H1-H5, N1-N3
 - UDF reader: bounds-checked reads, capped extents/depth/sizes; 7.07 M fuzz cases, no crash, hang or memory blow-up.
 - Signature reuse in `build.sh` is sound (strip, compare with the fresh build, one signer, sbverify).
 - No new high/critical CVEs; the `cmp` module adds none.
+- wimboot fuzzing (build/wimboot/fuzz, ASan+UBSan): before 0004-0007 every target crashed (W1 stack overflow in wim.c, heap overflows and use-after-free in xca.c, out-of-bounds Huffman/LZX tables, cpio overreads); after, 2 workers x 10 min per target, 54 M executions (wim 7.9 M, lzx 11.8 M, xca 15.8 M, cpio 18.7 M): no crash, no memory-limit abort (2026-10-27). wimboot's parsers allocate no memory; the only input-sized allocations are EFI AllocatePages, which halt cleanly on failure. The harness builds 64-bit only (BIOS runs the i386 half): a -m32 build is a 0.5.0 follow-up.
 
 ## By design / documented
 
