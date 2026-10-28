@@ -59,8 +59,8 @@ plan), `exists` (destination exists), `internal` (a bug).
 
 BeastServer boots the same `vmlinuz` (Canonical-signed, unmodified) and
 `initrd.img` over HTTP for its "Disk cloning" / "System recovery" menu entries,
-with `beastnet.netboot=1 beastnet.action=disk` (and `beastnet.server=<url>`,
-shown only) instead of `beastnet.data=` / `beastnet.esp=`. Then:
+with `beastnet.netboot=1 beastnet.action=disk` (and `beastnet.server=<url>`, kept
+for images on the server later) instead of `beastnet.data=` / `beastnet.esp=`. Then:
 
 - `/init` mounts RAM filesystems (tmpfs, 64 MiB and 1 MiB) at `/mnt/data` and
   `/mnt/esp` and copies files the boot loader added under `/netboot`

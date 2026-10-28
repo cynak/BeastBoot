@@ -60,7 +60,7 @@ class BootParams:
     # beastnet.netboot=1: started over the network (BeastServer), not from a stick: no data
     # partition and no ESP; /init mounts small RAM filesystems in their place.
     netboot: bool = False
-    server: str | None = None  # beastnet.server=http://host:port (the BeastServer, for display)
+    server: str | None = None  # beastnet.server=http://host:port (the BeastServer; not used yet)
     consoles: list[str] = field(default_factory=list)  # console= values, in order
     raw: dict[str, str] = field(default_factory=dict)  # every beastnet.* parameter
 
