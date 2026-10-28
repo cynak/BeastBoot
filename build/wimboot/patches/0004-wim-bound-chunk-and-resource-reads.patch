@@ -21,8 +21,13 @@ Now:
 - directory entry lengths must not wrap the walk back to an earlier
   entry (a loop: wimboot would hang);
 - wimpatch.c: the lengths it builds the patched WIM from (lookup table,
-  boot metadata, injection directory) and the patched length are kept
-  within one virtual disk file (4 GiB), so no region offset can wrap.
+  boot metadata, injection directory) must each end within the patched
+  WIM's limit before they are placed, and the patched length must stay
+  within it, so no region offset can wrap. The limit is one virtual
+  disk file (4 GiB) where size_t is 64-bit, and 1 MiB less than 4 GiB
+  where it is 32-bit: the hybrid image's BIOS path runs the i386 build,
+  where 4 GiB does not fit in a size_t (2.9.0+bb2 computed the limit
+  as 0 there and so refused every file injection on BIOS).
 
 A valid WIM reads exactly as before. beast-boot (build/wimboot/); to be
 reported to and offered upstream.
@@ -127,48 +132,83 @@ reported to and offered upstream.
  }
 --- a/src/wimpatch.c
 +++ b/src/wimpatch.c
-@@ -39,6 +39,10 @@
+@@ -39,6 +39,23 @@
  /** Directory into which files are injected */
  #define WIM_INJECT_DIR "\\Windows\\System32"
  
-+/** Longest WIM structure length accepted when injecting files (one
-+ * virtual disk file) */
-+#define WIM_PATCH_MAX_LEN ( ( size_t ) VDISK_FILE_COUNT * VDISK_SECTOR_SIZE )
++/** Longest patched WIM when injecting files: one virtual disk file */
++#define WIM_PATCH_MAX_LEN ( ( uint64_t ) VDISK_FILE_COUNT * VDISK_SECTOR_SIZE )
++
++/** Room kept below the top of a 32-bit address space for the small
++ * fixed-size structures (lookup and directory entries, alignment)
++ * placed between the length checks */
++#define WIM_PATCH_SLACK 0x100000
++
++/** Longest patched WIM this build can describe without wrapping a
++ * size_t offset: WIM_PATCH_MAX_LEN where size_t is 64-bit (UEFI), a
++ * little less than 4 GiB where it is 32-bit (BIOS) */
++#define WIM_PATCH_LIMIT							\
++	( ( WIM_PATCH_MAX_LEN < ( ( uint64_t ) ~( ( size_t ) 0 ) -	\
++				  WIM_PATCH_SLACK ) ) ?			\
++	  WIM_PATCH_MAX_LEN :						\
++	  ( ( uint64_t ) ~( ( size_t ) 0 ) - WIM_PATCH_SLACK ) )
 +
  struct wim_patch;
  
  /** A region of a patched WIM file */
-@@ -717,6 +721,14 @@
+@@ -238,6 +255,18 @@
+ }
+ 
+ /**
++ * Check that a structure from the WIM fits in the patched WIM
++ *
++ * @v offset		Offset at which the structure would start
++ * @v len		Length of the structure (from the WIM)
++ * @ret fits		Structure ends within WIM_PATCH_LIMIT
++ */
++static int wim_patch_fits ( size_t offset, uint64_t len ) {
++	return ( ( len <= WIM_PATCH_LIMIT ) &&
++		 ( offset <= ( WIM_PATCH_LIMIT - len ) ) );
++}
++
++/**
+  * Patch WIM header
+  *
+  * @v patch		WIM patch
+@@ -717,6 +746,15 @@
  	if ( injected == 0 )
  		return 0;
  
-+	/* Every length used below comes from the WIM: keep each within
-+	 * one virtual disk file, so that no region offset can wrap */
-+	if ( ( patch->lookup.len > WIM_PATCH_MAX_LEN ) ||
-+	     ( patch->boot.len > WIM_PATCH_MAX_LEN ) ) {
-+		DBG ( "WIM lookup table or boot metadata too long\n" );
++	/* The lookup table, boot metadata and injection directory
++	 * lengths below come from the WIM: each must end within the
++	 * patched WIM's limit before it is placed, so that no region
++	 * offset can wrap (whatever the width of size_t) */
++	if ( ! wim_patch_fits ( offset, patch->lookup.len ) ) {
++		DBG ( "WIM lookup table too long\n" );
 +		return -1;
 +	}
 +
  	/* Calculate boot index for injected image */
  	if ( ( rc = wim_count ( file, &patch->header, &boot_index ) ) != 0 )
  		return rc;
-@@ -754,6 +766,10 @@
+@@ -754,6 +792,12 @@
  	if ( ( rc = wim_dir_len ( file, &patch->header, &patch->boot,
  				  patch->dir.offset, &patch->dir.len ) ) != 0 )
  		return rc;
-+	if ( patch->dir.len > WIM_PATCH_MAX_LEN ) {
-+		DBG ( "WIM directory too long\n" );
++	if ( ( ! wim_patch_fits ( offset, patch->boot.len ) ) ||
++	     ( ! wim_patch_fits ( ( offset + patch->boot.len ),
++				  patch->dir.len ) ) ) {
++		DBG ( "WIM boot metadata or directory too long\n" );
 +		return -1;
 +	}
  
  	/* Construct injected boot image metadata */
  	boot->offset = offset = wim_align ( offset );
-@@ -766,6 +782,10 @@
+@@ -766,6 +810,10 @@
  	boot->zlen__flags = ( boot->len | WIM_RESHDR_METADATA );
  
  	/* Record patched length */
-+	if ( offset > WIM_PATCH_MAX_LEN ) {
++	if ( offset > WIM_PATCH_LIMIT ) {
 +		DBG ( "Patched WIM too long (%#zx bytes)\n", offset );
 +		return -1;
 +	}
