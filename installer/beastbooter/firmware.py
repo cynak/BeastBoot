@@ -56,7 +56,7 @@ from .layout import (
     FIRMWARE_INSTALLED_PATH,
     MIB,
 )
-from .util import Reporter, human_size
+from .util import Reporter, human_size, printable
 
 PACK_ID_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,63}\Z")
 TAG_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,63}\Z")
@@ -383,9 +383,18 @@ def _download(opener, url: str, f: FwFile, dest: str, rep: Reporter, on_bytes) -
 
 
 def _replace_atomically(path: str, write) -> None:
+    """Write `path` through `path`.part and a rename. The .part file is made new
+    (O_EXCL | O_NOFOLLOW): a leftover one, or a link planted in its place, is
+    removed first (unlink never follows a link), never written through."""
     tmp = path + ".part"
     try:
-        with open(tmp, "wb") as out:
+        os.unlink(tmp)
+    except FileNotFoundError:
+        pass
+    flags = (os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+             | getattr(os, "O_BINARY", 0))
+    try:
+        with os.fdopen(os.open(tmp, flags, 0o644), "wb") as out:
             write(out)
             out.flush()
             os.fsync(out.fileno())
@@ -826,4 +835,4 @@ def format_installed(d: dict) -> str:
            for p in d["packs"]):
         lines.append("  Reinstall a stale pack with `firmware fetch --pack ID` and `firmware install` (or "
                      "Download and install... on the app's Firmware packs page); that replaces it.")
-    return "\n".join(lines)
+    return "\n".join(printable(line) for line in lines)  # ids and tags come from the drive's installed.json

@@ -85,7 +85,9 @@ CODE_HINTS = {
             "Close it, then try again. Nothing was changed.",
     "device-vanished": "The drive stopped responding (the drive did this, not beast-boot). Unplug it, plug it "
                        "back in and try again.",
-    "download-failed": "Check the internet connection, then try again. Nothing was installed.",
+    "access-blocked": "macOS blocked access to the drive although the administrator password was accepted. "
+                      "See the message above for how to allow it, then try again. Nothing was changed.",
+    "download-failed":"Check the internet connection, then try again. Nothing was installed.",
     "checksum-mismatch": "A downloaded file did not match the catalog, so it was discarded. Nothing was installed.",
     "insecure-url": "The catalog names a download that is not https://, so it was refused.",
     "catalog-missing": "These boot files have no firmware catalog.",

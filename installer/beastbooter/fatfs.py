@@ -51,7 +51,7 @@ import math
 import struct
 import sys
 import time
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 
@@ -1289,6 +1289,32 @@ class FatVolume:
         d = self._walk(_split(path))
         return [DirEntry(e.name, e.is_dir, 0 if e.is_dir else e.size)
                 for e in sorted(d.entries, key=lambda e: e.slot)]
+
+    def walk_files(self, path: str) -> Iterator[tuple[str, DirEntry]]:
+        """(path, DirEntry) of every file below the directory `path`, without
+        recursion. The volume may be crafted: a directory reached twice (an entry
+        pointing back at an ancestor or itself) or a file starting in a cluster
+        another file or directory uses (cross-linked) is an error, not an endless
+        loop or the same clusters read again and again."""
+        parts = _split(path)
+        start = self._walk(parts)
+        used = {start.key}
+        todo = [("/".join(parts), start)]
+        while todo:
+            prefix, d = todo.pop()
+            for e in sorted(d.entries, key=lambda e: e.slot):
+                where = f"{prefix}/{e.name}" if prefix else e.name
+                if e.cluster and e.cluster in used:
+                    what = "directory loop" if e.is_dir else "cross-linked file"
+                    raise BeastError(f"corrupt FAT filesystem: {what} at /{where}")
+                if e.cluster:
+                    used.add(e.cluster)
+                if e.is_dir:
+                    if not e.cluster:
+                        raise BeastError(f"corrupt FAT filesystem: directory /{where} has no cluster")
+                    todo.append((where, self._dir(e.cluster)))
+                else:
+                    yield where, DirEntry(e.name, False, e.size)
 
     def exists(self, path: str) -> bool:
         parts = _split(path)

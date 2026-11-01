@@ -77,24 +77,43 @@ def _base(name: str) -> str:
     return posixpath.basename(name.replace("\\", "/").lstrip("*"))
 
 
-def pick_checksum(entries: list[tuple[str, str | None]], names: list[str]) -> str | None:
-    """Pick the hash for our file. ``names`` are the candidate file names
-    (from the URL, the redirect target, Content-Disposition, the destination).
-
-    Exact match first, then case-insensitive. A file holding a single
-    nameless hash applies to whatever was downloaded. Never guesses between
-    entries for other files.
-    """
-    wanted = [n for n in (_base(x) for x in names if x) if n]
-    named = [(h, _base(n)) for h, n in entries if n]
-    for w in wanted:
+def _match(named: list[tuple[str, str]], names: list[str]) -> str | None:
+    """Exact match first, then case-insensitive."""
+    for w in names:
         for h, n in named:
             if n == w:
                 return h
-    lw = [w.lower() for w in wanted]
+    lw = [w.lower() for w in names]
     for h, n in named:
         if n.lower() in lw:
             return h
+    return None
+
+
+def pick_checksum(entries: list[tuple[str, str | None]], names: list[str],
+                  server_names: list[str] | tuple[str, ...] = ()) -> str | None:
+    """Pick the hash for our file. ``names`` are the file names the user
+    controls (the link's file name, the destination they chose);
+    ``server_names`` the ones the server sent (redirect target,
+    Content-Disposition).
+
+    The user's names decide (exact match first, then case-insensitive).
+    Server names count only when the file lists a single hash: otherwise the
+    server (or whoever answers a plain http:// download) could name another
+    genuine file in the list and have that one accepted. A file holding a
+    single nameless hash applies to whatever was downloaded. Never guesses
+    between entries for other files.
+    """
+    wanted = [n for n in (_base(x) for x in names if x) if n]
+    named = [(h, _base(n)) for h, n in entries if n]
+    found = _match(named, wanted)
+    if found:
+        return found
+    if len({h for h, _ in entries}) == 1:
+        server = [n for n in (_base(x) for x in server_names if x) if n]
+        found = _match(named, server)
+        if found:
+            return found
     nameless = {h for h, n in entries if not n}
     if nameless and not named and len(nameless) == 1:
         return nameless.pop()

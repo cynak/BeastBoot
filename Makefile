@@ -1,6 +1,12 @@
 SHELL := /bin/bash
 ROOT  := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 ENV   := source $(ROOT)/scripts/dev-env.sh &&
+# Targets that need Ubuntu: on macOS they run in the build container (scripts/container.sh).
+ifeq ($(shell uname -s),Darwin)
+LINUX := $(ROOT)/scripts/container.sh
+else
+LINUX := $(ENV)
+endif
 
 IMAGE  ?= out/beast-boot.img
 SIZE   ?= 2G
@@ -38,10 +44,10 @@ tools:
 	./scripts/bootstrap-tools.sh
 
 keys:
-	$(ENV) ./build/keygen.sh
+	$(LINUX) ./build/keygen.sh
 
 build:
-	$(ENV) ./build/build.sh
+	$(LINUX) ./build/build.sh
 
 test:
 	$(ENV) pytest -q installer/tests
@@ -49,11 +55,11 @@ test:
 
 image:
 	@mkdir -p $(dir $(IMAGE))
-	$(ENV) python3 -m beastbooter install --image $(IMAGE) --size $(SIZE) \
+	$(LINUX) python3 -m beastbooter install --image $(IMAGE) --size $(SIZE) \
 		--layout $(LAYOUT) --fs $(FS) --yes
 
 e2e:
-	$(ENV) pytest -q tests/e2e
+	$(LINUX) pytest -q tests/e2e
 
 # Uses the internet: can beast-net download from the official ISO links
 # (tests/e2e/live_sources.json)? net-sources: headers, redirects, TLS, Range
@@ -62,7 +68,7 @@ net-sources:
 	$(ENV) python3 -I scripts/check_iso_sources.py $(ARGS)
 
 e2e-live:
-	$(ENV) BB_LIVE_NET=1 pytest -q -rs tests/e2e/test_e2e_beastnet_live.py $(ARGS)
+	BB_LIVE_NET=1 $(LINUX) pytest -q -rs tests/e2e/test_e2e_beastnet_live.py $(ARGS)
 
 MODE ?= uefi
 
@@ -86,10 +92,10 @@ menu-sync:
 
 
 sbom:
-	$(ENV) bash ./scripts/sbom-vuln.sh sbom
+	$(LINUX) bash ./scripts/sbom-vuln.sh sbom
 
 vulns: sbom
-	$(ENV) bash ./scripts/sbom-vuln.sh scan
+	$(LINUX) bash ./scripts/sbom-vuln.sh scan
 
 portable:
 	scripts/build_portable.sh $(ARGS)

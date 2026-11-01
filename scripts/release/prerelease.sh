@@ -17,12 +17,18 @@
 # Each step has a time limit (in its `step` line below); a step that runs past it is
 # stopped with its child processes and counted as TIMEOUT, so a hung test cannot block
 # the run. Ctrl+C stops the running step and its children too.
+# On macOS the steps that need Ubuntu (build, scan, lock check, verify-dist) run in the Linux
+# container (scripts/container.sh); the QEMU steps (e2e, real-iso) are skipped there.
 # Every step runs even after a failure (so one run shows everything); the exit code is the
 # number of failed steps (0 = ready to tag). Fails if the tree changes while it runs.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT" || exit 1
+# shellcheck source=../lib/platform.sh
+source "$ROOT/scripts/lib/platform.sh"
+bb_require_bash4 "$0" "$@"
+MACOS=0; [ "$(bb_os)" = macos ] && MACOS=1
 QUICK=0 REAL_ISO=1 PORTABLE=1 OUT="$ROOT/out/prerelease" PROGRESS="${BB_PRERELEASE_PROGRESS:-30}"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -31,7 +37,7 @@ while [ $# -gt 0 ]; do
     --skip-portable) PORTABLE=0 ;;
     --out) OUT="$2"; shift ;;
     --progress) PROGRESS="$2"; shift ;;
-    -h|--help) sed -n '2,23p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
     *) echo "prerelease: unknown option $1" >&2; exit 64 ;;
   esac
   shift
@@ -40,12 +46,14 @@ mkdir -p "$OUT"
 # shellcheck source=scripts/dev-env.sh
 . "$ROOT/scripts/dev-env.sh" >/dev/null 2>&1
 PY="$ROOT/.venv/bin/python"
-[ -x "$PY" ] || PY=python3
+[ -x "$PY" ] || PY="$(bb_python)" || exit 1
+PY3="$(bb_python)" || exit 1
+SHA256=(sha256sum); command -v sha256sum >/dev/null 2>&1 || SHA256=(shasum -a 256)
 
 fingerprint() {  # tracked changes + untracked (not ignored) files: detects edits during the run
   # (sbom/ is left out: the scan and kernel_vex.py rewrite it on purpose)
-  { git diff -- . ':!sbom'; git ls-files -o --exclude-standard -- . ':!sbom' | sort | xargs -r sha256sum; } \
-    | sha256sum | cut -c1-16
+  { git diff -- . ':!sbom'; git ls-files -o --exclude-standard -- . ':!sbom' | sort | xargs -r "${SHA256[@]}"; } \
+    | "${SHA256[@]}" | cut -c1-16
 }
 
 FAILED=0
@@ -59,7 +67,7 @@ fmt_dur() {  # fmt_dur SECONDS -> 45s, 3m05s, 1h02m
   else printf '%ds' "$t"; fi
 }
 last_line() {  # last_line LOG: its last non-empty line, without colours, at most 100 characters
-  tail -c 4000 "$1" 2>/dev/null | tr '\r' '\n' | sed 's/\x1b\[[0-9;]*[A-Za-z]//g' \
+  tail -c 4000 "$1" 2>/dev/null | tr '\r' '\n' | sed "s/$(printf '\033')\[[0-9;]*[A-Za-z]//g" \
     | grep -v '^[[:space:]]*$' | tail -n 1 | cut -c1-100
 }
 kill_tree() {  # kill_tree PID SIGNAL: the process and every descendant
@@ -111,6 +119,13 @@ step() {  # step NAME LIMIT_SECONDS CMD...: run with progress and a time limit, 
   return 0
 }
 # shellcheck disable=SC2329  # called through step
+lx() {  # lx CMD...: where the Ubuntu tools are (the Linux container on macOS, here on Linux)
+  if [ "$MACOS" = 1 ]; then "$ROOT/scripts/container.sh" "$@"; else "$@"; fi
+}
+skip_step() {  # skip_step NAME REASON: a summary line, not a failure
+  printf '%-12s %-7s %6s  %s\n' "$1" skipped - "$2" | tee -a "$OUT/summary.txt"
+}
+# shellcheck disable=SC2329  # called through step
 pytest_q() { "$PY" -m pytest -q -p no:cacheprovider "$@"; }
 
 # The scan must be complete (scan_vulns exits 4 when a scanner failed) and show no VEX problems.
@@ -126,23 +141,26 @@ echo "prerelease: started $(date '+%Y-%m-%d %H:%M'); progress every ${PROGRESS}s
 
 [ $QUICK = 1 ] || step build 7200 make build
 step lint 900 make -s lint
-step lock 600 python3 -I build/beastnet/lock.py --check
+step lock 600 lx python3 -I build/beastnet/lock.py --check
 step installer 1800 pytest_q installer/tests
 step menu 600 pytest_q tests/menu
 step beastnet 900 env PYTHONPATH=beastnet/python "$PY" -m pytest -q -p no:cacheprovider beastnet/tests
 step devtools 900 pytest_q devtools/tests
 # selftest checks the SBOM: on a full run it goes after the scan, which rewrites sbom/
-[ $QUICK = 0 ] || step selftest 1800 python3 -I scripts/selftest.py
+[ $QUICK = 0 ] || step selftest 1800 lx python3 -I scripts/selftest.py
 if [ $QUICK = 0 ]; then
-  step e2e 10800 pytest_q -rs tests/e2e
+  if [ $MACOS = 1 ]; then skip_step e2e "macOS: needs Linux with KVM"
+  else step e2e 10800 pytest_q -rs tests/e2e; fi
   # kernel_vex needs a fresh scan first, then the scan again with its statements
   step scan-pre 3600 make vulns
-  step kernel-vex 3600 python3 -I scripts/kernel_vex.py
+  step kernel-vex 3600 "$PY3" -I scripts/kernel_vex.py
   step scan 3600 scan
-  step selftest 1800 python3 -I scripts/selftest.py
-  [ $REAL_ISO = 0 ] || step real-iso 22200 env BB_REAL_ISO=1 timeout 21600 "$PY" -m pytest -q -p no:cacheprovider \
-    -rs --tb=short tests/e2e/test_e2e_real_isos.py
-  step verify-dist 7200 build/verify-dist.sh --rebuild
+  step selftest 1800 lx python3 -I scripts/selftest.py
+  if [ $REAL_ISO = 0 ]; then :
+  elif [ $MACOS = 1 ]; then skip_step real-iso "macOS: needs Linux with KVM"
+  else step real-iso 22200 env BB_REAL_ISO=1 timeout 21600 "$PY" -m pytest -q -p no:cacheprovider \
+    -rs --tb=short tests/e2e/test_e2e_real_isos.py; fi
+  step verify-dist 7200 lx build/verify-dist.sh --rebuild
   [ $PORTABLE = 0 ] || step portable 7200 scripts/build_portable.sh --all
 fi
 

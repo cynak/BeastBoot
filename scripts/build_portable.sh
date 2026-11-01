@@ -18,12 +18,18 @@
 #   --offline           use only cached runtimes (no downloads)
 #   --out DIR           output directory (default: out/portable)
 #   -h, --help          show this help
+#
+# On macOS `make build` and `make sbom` run in the Linux build container
+# (scripts/container.sh, set up by scripts/bootstrap-tools.sh); packaging runs natively.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib/platform.sh
+source "$ROOT/scripts/lib/platform.sh"
+bb_require_bash4 "$0" "$@"
 cd "$ROOT"
 
-usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; }
 die() { echo "build_portable: error: $*" >&2; exit 1; }
 step() { echo; echo "==> $*"; }
 
@@ -63,6 +69,7 @@ fi
 
 # shellcheck source-path=SCRIPTDIR source=dev-env.sh
 source "$ROOT/scripts/dev-env.sh"
+PY="$(bb_python)" || exit 1
 
 if [ "$SKIP_BUILD" = 0 ]; then
   step "Refreshing boot files (make build)"
@@ -83,15 +90,16 @@ if [ "$ALL" = 1 ]; then ARGS+=(--all); else for t in "${TARGETS[@]}"; do ARGS+=(
 [ "$NO_SBOM" = 1 ] && ARGS+=(--no-sbom)
 [ "$OFFLINE" = 1 ] && ARGS+=(--offline)
 
+bb_drop_finder_files "$ROOT/dist"
 step "Building packages: ${ARGS[*]}"
-python3 -I "$ROOT/packaging/portable/build.py" "${ARGS[@]}"
+"$PY" -I "$ROOT/packaging/portable/build.py" "${ARGS[@]}"
 
 shopt -s nullglob
 ARCHIVES=("$OUT"/beast-boot-*.tar.gz "$OUT"/beast-boot-*.zip)
 [ "${#ARCHIVES[@]}" -gt 0 ] || die "no archives found in $OUT"
 
 step "Verifying archives against their manifests"
-python3 -I "$ROOT/packaging/portable/build.py" --verify "${ARCHIVES[@]}"
+"$PY" -I "$ROOT/packaging/portable/build.py" --verify "${ARCHIVES[@]}"
 
 step "Done"
 for a in "${ARCHIVES[@]}"; do

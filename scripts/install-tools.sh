@@ -23,9 +23,16 @@ BIN="$ROOT/.tools/bin"
 CACHE="$ROOT/.tools/cache"
 DL="$CACHE/downloads"
 SCHEMAS="$CACHE/schemas"
+# shellcheck source=lib/platform.sh
+source "$HERE/lib/platform.sh"
 FORCE=0
 [ "${1:-}" = "--force" ] && FORCE=1
 
+if [ "$(bb_os)" = macos ]; then
+  echo "install-tools: only linux/amd64 tools are pinned, so this runs in the Linux container, not on macOS." >&2
+  echo "  'make vulns' and 'make sbom' do that automatically; by hand: scripts/container.sh scripts/install-tools.sh" >&2
+  exit 1
+fi
 case "$(uname -s)/$(uname -m)" in
   Linux/x86_64) ;;
   *) echo "install-tools: only linux/amd64 is pinned here (got $(uname -s)/$(uname -m))" >&2; exit 1 ;;
@@ -72,7 +79,7 @@ SPDX_SHA256=239208b7ac287b3cf5d9a9af23f9d69863971102a5e1587a27a398b43490b89b
 # --- helpers -----------------------------------------------------------------
 log() { echo "install-tools: $*"; }
 die() { echo "install-tools: error: $*" >&2; exit 1; }
-sha() { sha256sum "$1" | cut -d' ' -f1; }
+sha() { bb_sha256 "$1"; }
 
 # fetch URL DEST SHA256: download unless DEST already has that hash.
 fetch() {

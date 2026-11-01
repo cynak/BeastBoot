@@ -25,7 +25,7 @@ from .distsource import ENV_DIST, resolve_dist
 from .errors import BeastError, Cancelled
 from .events import ProgressFile, find_progress_file
 from .layout import DATA_LABEL_DEFAULT, DEFAULT_FS, DEFAULT_LAYOUT, FILESYSTEMS, LAYOUTS
-from .util import Reporter
+from .util import Reporter, printable_lines
 
 
 class _Parser(argparse.ArgumentParser):
@@ -173,6 +173,11 @@ def build_parser(on_error=None) -> argparse.ArgumentParser:
     return p
 
 
+def _print_error(line: str) -> None:
+    """An error line on stderr; messages may quote the drive's strings (util.printable)."""
+    print(printable_lines(line), file=sys.stderr)
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     events = None
@@ -181,7 +186,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             events = ProgressFile(progress_path)
         except BeastError as e:
-            print(f"beast-boot: error: {e}", file=sys.stderr)
+            _print_error(f"beast-boot: error: {e}")
             return 1
     try:
         def usage_error(message: str) -> None:
@@ -247,11 +252,11 @@ def _run(parser: argparse.ArgumentParser, args: argparse.Namespace, rep: Reporte
     try:
         return _dispatch(parser, args, rep)
     except Cancelled as e:
-        print(f"beast-boot: {e}", file=sys.stderr)
+        _print_error(f"beast-boot: {e}")
         rep.error("cancelled", str(e))
         return 130
     except BeastError as e:
-        print(f"beast-boot: error: {e}", file=sys.stderr)
+        _print_error(f"beast-boot: error: {e}")
         rep.error(code_for(e), str(e))
         return 1
     except KeyboardInterrupt:
@@ -262,7 +267,7 @@ def _run(parser: argparse.ArgumentParser, args: argparse.Namespace, rep: Reporte
     except OSError as e:
         where = f": {e.filename}" if e.filename else ""
         msg = f"{e.strerror or e}{where}"
-        print(f"beast-boot: error: {msg}", file=sys.stderr)
+        _print_error(f"beast-boot: error: {msg}")
         rep.error(STEP_ERROR_CODES.get(rep.current_step or "", "error"), msg)
         return 1
     except Exception as e:  # a bug: keep the traceback, but tell the GUI too

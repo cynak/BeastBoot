@@ -194,15 +194,18 @@ def read_kept_files(vol, rep=None) -> dict[str, bytes]:
             keep[GRUBENV_PATH] = data
         elif rep is not None:
             rep.warn(f"{GRUBENV_PATH} on the drive is not a GRUB environment block; it is replaced by an empty one")
-    todo = [FIRMWARE_DIR] if vol.exists(FIRMWARE_DIR) else []
-    while todo:
-        d = todo.pop()
-        for e in vol.listdir(d):
-            path = f"{d}/{e.name}"
-            if e.is_dir:
-                todo.append(path)
-            else:
-                keep[path] = vol.read_file(path)
+    if not vol.exists(FIRMWARE_DIR):
+        return keep
+    # A crafted ESP may claim more than it holds (files sharing clusters): never
+    # keep more bytes than the whole volume has room for.
+    room = vol.cluster_count * vol.cluster_size
+    total = 0
+    for path, e in vol.walk_files(FIRMWARE_DIR):  # refuses directory loops and cross-linked files
+        total += e.size
+        if total > room:
+            raise BeastError(f"corrupt ESP: the files in /{FIRMWARE_DIR} claim more than the "
+                             f"{room} bytes the partition holds")
+        keep[path] = vol.read_file(path)
     return keep
 
 

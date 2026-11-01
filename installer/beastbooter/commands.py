@@ -49,7 +49,7 @@ import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 
-from .blockio import ImageTarget
+from .blockio import ImageTarget, refuse_link
 from .bootcode import boot_writes, read_core_lba
 from .disk import PartTable, read_partition_table
 from .dist import Dist, load_dist
@@ -104,7 +104,7 @@ from .plan import DiskPlan, make_plan
 from .platforms import get_backend
 from .platforms.common import check_common, describe
 from .target import GuardedTarget, MemoryTarget, copy_written
-from .util import Reporter, confirm, copy_file_to_target, human_size, parse_size
+from .util import Reporter, confirm, copy_file_to_target, human_size, parse_size, printable
 
 VERSION_CFG_PATH = "grub/beast/version.cfg"
 
@@ -393,8 +393,9 @@ def read_drive_esp(t, where: str) -> tuple[PartTable, DiskPlan, FatVolume, dict[
 
 
 def _image_path_check(path: str, yes: bool) -> None:
+    refuse_link(path)  # root would truncate whatever a planted link points to
     try:
-        st = os.stat(path)
+        st = os.lstat(path)
     except FileNotFoundError:
         return
     if not stat.S_ISREG(st.st_mode):
@@ -406,9 +407,10 @@ def _image_path_check(path: str, yes: bool) -> None:
 
 
 def _existing_image(path: str) -> None:
-    if not os.path.exists(path):
+    refuse_link(path)
+    if not os.path.lexists(path):
         raise BeastError(f"{path} does not exist")
-    if not stat.S_ISREG(os.stat(path).st_mode):
+    if not stat.S_ISREG(os.lstat(path).st_mode):
         raise BeastError(f"{path} is not a regular file; use --device for block devices")
 
 
@@ -417,7 +419,7 @@ def _short_name(disk) -> str:
 
 
 def _confirm_device(disk, action: str) -> None:
-    print(f"Target: {describe(disk)}")
+    print(printable(f"Target: {describe(disk)}"))
     print(action)
     short = _short_name(disk)
     answer = confirm(f"Type the device name ({short}) to continue: ").strip()
@@ -993,7 +995,7 @@ def _warn_firmware_tag(keep: dict[str, bytes], dist: Dist, rep: Reporter) -> lis
     try:
         packs = json.loads(raw).get("packs") or []
         cat = firmware.load_catalog(catalog)
-        stale = {p["id"]: r for p in packs
+        stale = {printable(p["id"]): printable(r) for p in packs
                  if isinstance(p, dict) and isinstance(p.get("id"), str) and (r := firmware.stale_reason(p, cat))}
     except (ValueError, TypeError, KeyError, AttributeError, OSError, BeastError):
         return []
@@ -1179,16 +1181,17 @@ def info(image: str | None, device: str | None) -> dict:
         where, t = disk.id, backend.open_raw(disk, writable=False)
     else:
         assert image is not None
-        if os.path.exists(image) and not stat.S_ISREG(os.stat(image).st_mode):
-            raise BeastError(f"{image} is not a regular file; use --device for block devices")
+        _existing_image(image)
         where, t = image, ImageTarget(image, writable=False)
     with t:
         return _read_info(t, where)
 
 
 def format_info(d: dict, where: str) -> str:
+    """`info` for people. Version, ids, file system and label come from the drive:
+    control characters in them are replaced (util.printable), also newlines."""
     data, esp = d["data"], d["esp"]
-    return "\n".join([
+    return "\n".join(printable(line) for line in [
         f"beast-boot drive: {where}",
         f"  version:     {d['version']}",
         f"  build:       {d.get('build_id') or 'unknown'}",
@@ -1277,4 +1280,4 @@ def format_devices(d: dict, include_all: bool) -> str:
     if not d["elevated"]:
         lines.append("(writing a drive needs administrator rights: run install as root / Administrator, "
                      "or use the beast-boot window)")
-    return "\n".join(line.rstrip() for line in lines)
+    return "\n".join(printable(line.rstrip()) for line in lines)  # models and markers come from the drive

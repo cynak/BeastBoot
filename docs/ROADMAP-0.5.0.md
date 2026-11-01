@@ -34,3 +34,13 @@ only be revoked by its hash (`mokutil --mokx --import-hash`), one build at a tim
   component without touching the others.
 - Existing users re-enroll once (MokManager); the menu and docs explain it.
 - Key rotation procedure documented with it.
+
+## Sign in a separate release job
+
+Today the release key is on the runner's disk for the whole release job: the
+GRUB build, the test suite, the QEMU e2e tests and the third-party scanners run
+next to it (security review 2026-10-28, CI-1). Split the job: build and test
+unsigned in the existing job, then sign in a small job that downloads the
+unsigned files, runs only `sbsign`/`sbverify` (and the signature-reuse check)
+inside the protected `release` environment, and uploads the signed files.
+`build/build.sh` needs a "sign only" entry point for that.

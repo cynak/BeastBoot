@@ -28,6 +28,7 @@ import stat
 
 from .errors import BeastError
 from .layout import MIB, SECTOR_SIZE
+from .safedir import is_link
 
 # Largest single transfer handed to an aligned device (a multiple of any sector size).
 MAX_IO = 1 * MIB
@@ -123,20 +124,56 @@ class _TargetBase:
 # ---------------------------------------------------------------------------
 
 
-def _open_fd(path: str, writable: bool, *, create: bool = False, device_hint: str = "") -> int:
+_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)  # 0 on Windows: links are checked with lstat first
+_NONBLOCK = getattr(os, "O_NONBLOCK", 0)
+
+
+def _open_fd(path: str, writable: bool, *, create: bool = False, device_hint: str = "",
+             blocked_hint: str = "", no_links: bool = False) -> int:
+    """os.open with BeastErrors. `no_links` (image files, which root may be asked to
+    write in a folder others can write to): refuse a symlink (or Windows reparse
+    point) at `path` instead of following it, and do not block on a FIFO.
+    `blocked_hint` replaces the message for EPERM (an OS policy, not file modes)."""
     flags = (os.O_RDWR if writable else os.O_RDONLY) | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_BINARY", 0)
     if create:
         flags |= os.O_CREAT
+    if no_links:
+        flags |= _NOFOLLOW | _NONBLOCK
+        if not _NOFOLLOW:
+            refuse_link(path)
     try:
-        return os.open(path, flags, 0o644)
-    except PermissionError:
+        fd = os.open(path, flags, 0o644)
+        if no_links and _NONBLOCK:
+            os.set_blocking(fd, True)
+        return fd
+    except PermissionError as e:
+        if blocked_hint and e.errno == errno.EPERM:
+            raise BeastError(f"{path}: {blocked_hint}", code="access-blocked") from None
         raise BeastError(f"permission denied opening {path}{device_hint}") from None
     except FileNotFoundError:
         raise BeastError(f"{path} does not exist") from None
     except OSError as e:
         if e.errno == errno.EBUSY:
             raise BeastError(f"{path} is busy (in use by the system or another program)") from None
+        if no_links and e.errno in (errno.ELOOP, getattr(errno, "EMLINK", -1)):
+            raise BeastError(_LINK_MSG.format(path=path)) from None
         raise BeastError(f"cannot open {path}: {e.strerror}") from None
+
+
+_LINK_MSG = "{path} is a link; refusing to follow it (give the path of the file itself)"
+
+
+def refuse_link(path: str) -> None:
+    """BeastError if `path` is a symlink (or on Windows any reparse point); a
+    missing path is fine. For paths opened without O_NOFOLLOW, or before it."""
+    try:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        return
+    except OSError as e:
+        raise BeastError(f"cannot check {path}: {e.strerror}") from None
+    if is_link(st):
+        raise BeastError(_LINK_MSG.format(path=path))
 
 
 class FdTarget(_TargetBase):
@@ -194,7 +231,7 @@ class ImageTarget(FdTarget):
     """
 
     def __init__(self, path: str, *, writable: bool, sector_size: int = SECTOR_SIZE, _fd: int | None = None):
-        fd = _fd if _fd is not None else _open_fd(path, writable)
+        fd = _fd if _fd is not None else _open_fd(path, writable, no_links=True)
         try:
             mode = os.fstat(fd).st_mode
         except OSError as e:
@@ -209,10 +246,13 @@ class ImageTarget(FdTarget):
     def create(cls, path: str, size: int, *, sector_size: int = SECTOR_SIZE) -> ImageTarget:
         if size <= 0:
             raise BeastError(f"invalid image size {size}")
-        fd = _open_fd(path, True, create=True)
+        fd = _open_fd(path, True, create=True, no_links=True)
         try:
-            if not stat.S_ISREG(os.fstat(fd).st_mode):
+            st = os.fstat(fd)
+            if not stat.S_ISREG(st.st_mode):
                 raise BeastError(f"{path} exists and is not a regular file")
+            if st.st_nlink > 1:  # emptying it would empty the file's other names too
+                raise BeastError(f"{path} is a hard link to another file; refusing to overwrite it")
             os.ftruncate(fd, 0)  # drop old contents: the new image reads as all zeros
             _make_sparse(fd)  # Windows only (see there)
             _set_size(fd, size)  # sparse: no blocks allocated until written

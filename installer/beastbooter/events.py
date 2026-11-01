@@ -17,8 +17,12 @@ full, removed), the install carries on and reports on stderr as always.
 
 from __future__ import annotations
 
+import errno
 import json
+import os
+import stat
 
+from .blockio import refuse_link
 from .errors import BeastError
 from .interfaces import PROGRESS_SCHEMA_VERSION, PROGRESS_STEPS
 
@@ -35,12 +39,32 @@ FIRMWARE_STEPS = ("download", "verify-packs", "write-firmware")
 STEPS = PROGRESS_STEPS + FIRMWARE_STEPS
 
 
+_APPEND = (os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+           | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_BINARY", 0))
+
+
 class ProgressFile:
     def __init__(self, path: str):
+        """Open (or create) `path` for appending. The CLI runs elevated and the path
+        is in a folder the user can write to: a symlink there is refused, not
+        followed (O_NOFOLLOW; an lstat check where that does not exist), and so
+        is anything but a regular file."""
         self.path = path
         try:
-            self._f = open(path, "a", encoding="utf-8")
+            refuse_link(path)
+            fd = os.open(path, _APPEND, 0o644)
+            try:
+                if not stat.S_ISREG(os.fstat(fd).st_mode):
+                    raise BeastError(f"the progress file {path} is not a regular file")
+                if getattr(os, "O_NONBLOCK", 0):
+                    os.set_blocking(fd, True)
+                self._f = os.fdopen(fd, "a", encoding="utf-8")
+            except BaseException:
+                os.close(fd)
+                raise
         except OSError as e:
+            if e.errno in (errno.ELOOP, getattr(errno, "EMLINK", -1)):
+                raise BeastError(f"the progress file {path} is a link; refusing to follow it") from None
             raise BeastError(f"cannot open the progress file {path}: {e.strerror or e}") from None
         self.broken = False
 

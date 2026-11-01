@@ -1,0 +1,10 @@
+# Keep private keys, local toolchains and build output out of the docker build
+# context (build/Containerfile mounts keys/ read-only at run time instead).
+keys/
+.tools/
+.venv/
+.agent/
+.claude/
+out/
+dist/
+.git/

@@ -22,13 +22,22 @@ The password sits in plain text on the stick: use this for tests only.
 
 Disk tools run as ``{"action": "disk", "steps": [...], "then": "poweroff"}``
 (docs/DISK_TOOLS.md section 6; steps checked by disks.session.parse_steps).
+
+Under Secure Boot (``beastnet.sb=1``) the plan comes from a stick anyone may
+have had in their hands, so nothing runs before the user confirms a summary of
+it on the console (``confirm_plan``); no answer, no terminal or anything but
+Enter/y refuses it.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import sys
+import unicodedata
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import IO
 
 from . import grubenv, trust
 from .checksums import normalize_sha256
@@ -42,6 +51,11 @@ ON_ERROR = ("stay", "reboot", "poweroff", "shell")
 
 
 TRUST_STEPS = ("next", "delete")
+YES = ("", "y", "yes")
+# Disk step keys worth showing in the summary (what is read and what is written).
+SUMMARY_KEYS = ("disk", "stack", "members", "source", "on", "image", "dest", "target", "partition")
+
+Ask = Callable[[str], str]  # shows the text, returns the answer; EOFError/OSError: nobody there
 
 
 @dataclass
@@ -152,14 +166,106 @@ def load_plan(data_root: str, script_path: str) -> ScriptPlan:
     return parse_plan(data)
 
 
-def run_script(ctx: Context, script_path: str) -> tuple[str, DownloadResult | None]:
+def shown(value: object, limit: int = 160) -> str:
+    """``value`` safe to print on a terminal: no control or format characters
+    (escape sequences, carriage returns, bidi overrides), one line, shortened."""
+    text = "".join(ch for ch in str(value) if unicodedata.category(ch)[0] != "C")
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[:limit - 3] + "..."
+
+
+def plan_summary(plan: ScriptPlan) -> list[str]:
+    """One line per thing the plan does (kind and target), for the confirmation."""
+    if plan.action == "trust-ubuntu":
+        lines = [f"trust-ubuntu step={shown(plan.step)} (asks shim to change the Secure Boot keys)"]
+    elif plan.action == "disk":
+        lines = []
+        for s in plan.steps:
+            words = [f"{k}={shown(','.join(s[k]) if isinstance(s[k], list) else s[k])}"
+                     for k in SUMMARY_KEYS if k in s]
+            lines.append(" ".join([shown(s["op"]), *words]))
+    else:
+        assert plan.request is not None
+        req = plan.request
+        dest = req.dest or f"{DOWNLOADS}/(name from the link)"
+        lines = [f"download {shown(req.url)}", f"  to {shown(dest)}"
+                 + (" (replacing an existing file)" if req.overwrite else "")]
+        if plan.network.get("type") == "wifi":
+            lines.insert(0, f"network wifi ssid={shown(plan.network.get('ssid', ''))}")
+    return [*lines, f"then {shown(plan.then)}"]
+
+
+def console_ask(text: str, inp: IO[str] | None = None, out: IO[str] | None = None) -> str:
+    """Ask on the console (stdin/stdout: /init gives the app the console)."""
+    inp = inp or sys.stdin
+    out = out or sys.stdout
+    if not inp.isatty():
+        raise EOFError("no terminal to ask on")
+    out.write(text)
+    out.flush()
+    line = inp.readline()
+    if not line:
+        raise EOFError("end of input")
+    return line
+
+
+def _drop_typeahead(inp: IO[str]) -> None:
+    """Forget keys pressed before the question (an Enter while booting is no answer)."""
+    try:
+        import termios
+    except ImportError:
+        return
+    try:
+        termios.tcflush(inp.fileno(), termios.TCIFLUSH)
+    except (termios.error, OSError, ValueError, AttributeError):
+        pass
+
+
+def confirm_plan(ctx: Context, plan: ScriptPlan, script_path: str, ask: Ask | None = None) -> None:
+    """Show what the plan does and wait for Enter/y. Raises BeastNetError(SCRIPT)
+    for any other answer, no answer or no terminal."""
+    if ask is None:
+        _drop_typeahead(sys.stdin)
+        ask = console_ask
+    body, n = [], 0
+    for line in plan_summary(plan):
+        if line.startswith("  "):  # continues the item above
+            body.append(f"     {line.strip()}")
+        else:
+            n += 1
+            body.append(f"  {n}. {line}")
+    text = "\n".join(["", f"Secure Boot is on, and the stick asks to run the plan {shown(script_path)}:",
+                      *body, "Run it? Press Enter or type y to run it; anything else cancels: "])
+    # The event line comes after the type-ahead flush: tests answer when they see it.
+    ctx.reporter.emit("script confirm", f"path={script_path}", f"steps={n}")
+    try:
+        answer = ask(text)
+    except (EOFError, OSError):
+        answer = None
+    if answer is None or answer.strip().lower() not in YES:
+        why = "no answer" if answer is None else "cancelled"
+        raise _bad(f"the plan {script_path} was not run: {why} on the console (Secure Boot is on, "
+                   "a plan must be confirmed)")
+
+
+def run_script(ctx: Context, script_path: str,
+               ask: Ask | None = None) -> tuple[str, DownloadResult | None]:
     """Run the plan. Returns (outcome, result): outcome "stay" means: go on
     interactively (with the result, if any); "done" means the then/on_error
-    action ran (only returns in a dry run); "shell" means: exit to the shell."""
+    action ran (only returns in a dry run); "shell" means: exit to the shell;
+    "refused" means: under Secure Boot the user did not confirm it (nothing
+    ran, the plan's on_error is not followed). ``ask`` replaces the console
+    question (tests)."""
     rep = ctx.reporter
     on_error = "stay"
     try:
         plan = load_plan(ctx.paths.data, script_path)
+        if ctx.params.sb:
+            try:
+                confirm_plan(ctx, plan, script_path, ask)
+            except BeastNetError as e:
+                rep.error(e.code, e.text)
+                return "refused", None
         on_error = plan.on_error
         if plan.action == "trust-ubuntu":
             _run_trust(ctx, plan)

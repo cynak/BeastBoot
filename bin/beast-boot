@@ -1,4 +1,8 @@
 #!/usr/bin/env sh
 # Run the beast-boot installer from a source checkout.
+# Often run as root (sudo) from any folder, e.g. a mounted USB data partition:
+# -I (isolated mode) keeps the current directory, PYTHONPATH and the user's
+# site-packages off sys.path, so no planted json.py there is imported.
+# beast_booter_launch.py puts installer/ on sys.path itself.
 here="$(cd "$(dirname "$0")/.." && pwd)"
-PYTHONPATH="$here/installer${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m beastbooter "$@"
+exec python3 -I -B "$here/installer/beast_booter_launch.py" "$@"

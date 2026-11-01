@@ -12,14 +12,21 @@
 #         with the QEMU monitor's screendump and the keys are sent with sendkey.
 #
 # Needs dist/ (make build), and for "menu" the bb-dev toolchain (make tools).
+# On macOS only "app" runs (docker or podman); "menu" needs the Linux toolchain.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib/platform.sh
+source "$ROOT/scripts/lib/platform.sh"
 OUT="$ROOT/docs/assets/screenshots"
 WORK="$ROOT/out/screenshots"
 what="${1:-all}"
 case "$what" in app|menu|all) ;; *) echo "usage: $0 [app|menu|all]" >&2; exit 2 ;; esac
 log() { echo "screenshots: $*"; }
 die() { echo "screenshots: error: $*" >&2; exit 1; }
+if [ "$(bb_os)" = macos ]; then
+  [ "$what" != menu ] || die "the boot-menu screenshots need the Linux bb-dev toolchain (mkfs, QEMU) and do not run on macOS; run them on a Linux host"
+  [ "$what" != all ] || { log "macOS: taking the app screenshots only (the menu ones need Linux)"; what=app; }
+fi
 [ -f "$ROOT/dist/manifest.json" ] || die "dist/ is missing: run make build first"
 mkdir -p "$OUT" "$WORK"
 
@@ -33,7 +40,7 @@ example_dist() {
   openssl req -x509 -newkey rsa:2048 -nodes -keyout /dev/null -days 3650 -outform DER -out "$cer" \
     -subj "/CN=beast-boot Secure Boot key (example)" 2>/dev/null
   cp "$ROOT/dist/esp/beast-net/catalog.json" "$d/esp/beast-net/"
-  python3 -I - "$ROOT/dist/manifest.json" "$d/manifest.json" "$cer" <<'PY2'
+  "$(bb_python)" -I - "$ROOT/dist/manifest.json" "$d/manifest.json" "$cer" <<'PY2'
 import hashlib, json, sys
 m = json.load(open(sys.argv[1]))
 der = open(sys.argv[3], "rb").read()
@@ -88,7 +95,7 @@ grab() { sleep "${2:-2}"; hmp "screendump $OUT/$1.png -f png"; sleep 1; log "$1.
 menu_shots() {
   local fixtures="$ROOT/out/e2e/fixtures" isos="$WORK/isos" img="$WORK/screenshots.img" entry
   log "building the fixture ISOs"
-  python3 -I "$ROOT/tests/e2e/fixtures/build_fixtures.py" --out "$fixtures" >/dev/null
+  "$(bb_python)" -I "$ROOT/tests/e2e/fixtures/build_fixtures.py" --out "$fixtures" >/dev/null
   rm -rf "$isos"; mkdir -p "$isos"
   for entry in "${MENU_TREE[@]}"; do
     mkdir -p "$isos/$(dirname "${entry%%:*}")"
@@ -119,4 +126,4 @@ case "$what" in
   menu) menu_shots ;;
   all) app_shots; menu_shots ;;
 esac
-log "done: $(find "$OUT" -maxdepth 1 -name '*.png' -printf '%f\n' | sort | tr '\n' ' ')"
+log "done: $(cd "$OUT" && printf '%s\n' ./*.png | sed 's|^\./||' | sort | tr '\n' ' ')"

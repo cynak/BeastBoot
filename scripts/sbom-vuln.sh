@@ -11,6 +11,8 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${BB_ROOT:-$(cd "$HERE/.." && pwd)}"
+# shellcheck source=lib/platform.sh
+source "$HERE/lib/platform.sh"
 
 step_tools() { bash "$HERE/install-tools.sh"; }
 step_gen() {
@@ -23,7 +25,7 @@ step_gen() {
 # has them: PATH's, then the system's (python3-jsonschema on Debian/Ubuntu).
 validate_python() {
   local py
-  for py in python3 /usr/bin/python3 /usr/local/bin/python3; do
+  for py in python3 /usr/bin/python3 /usr/local/bin/python3 /opt/homebrew/bin/python3; do
     command -v "$py" >/dev/null 2>&1 || continue
     if "$py" -I -c 'import jsonschema, referencing' 2>/dev/null; then
       command -v "$py"
@@ -37,7 +39,11 @@ step_validate() {
   if ! py="$(validate_python)"; then
     echo "sbom-vuln: validating the SBOM needs the Python packages jsonschema and referencing," >&2
     echo "  and no python3 here has them (checked: $(command -v python3 || echo 'no python3'), /usr/bin/python3)." >&2
-    echo "  Install them: sudo apt install python3-jsonschema   (Fedora: sudo dnf install python3-jsonschema)" >&2
+    if [ "$(bb_os)" = macos ]; then
+      echo "  Install them: python3 -m pip install jsonschema referencing   (or run in the Linux container: make sbom)" >&2
+    else
+      echo "  Install them: sudo apt install python3-jsonschema   (Fedora: sudo dnf install python3-jsonschema)" >&2
+    fi
     return 2
   fi
   "$py" -I "$HERE/validate_sbom.py" --root "$ROOT"

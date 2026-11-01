@@ -266,7 +266,8 @@ class DarwinRawTarget(AlignedTarget):
     """/dev/rdiskN: aligned pread/pwrite through a page-aligned bounce buffer."""
 
     def __init__(self, path: str, *, writable: bool, sector_size: int, size: int):
-        fd = _open_fd(path, writable, device_hint=" (administrator rights are needed)")
+        fd = _open_fd(path, writable, device_hint=" (administrator rights are needed)",
+                      blocked_hint=blocked_hint())
         try:
             geometry = _ioctl_geometry(fd)
             if geometry:
@@ -344,6 +345,17 @@ def _ioctl_geometry(fd: int) -> tuple[int, int] | None:
     except OSError:
         return None
     return block, count
+
+
+def blocked_hint() -> str:
+    """The message for EPERM on /dev/rdiskN: TCC ("Removable Volumes") refused even root.
+
+    A command started by `do shell script ... with administrator privileges` is its
+    own responsible process, so macOS cannot show it the consent prompt and denies."""
+    return ("macOS blocked access to the drive (Privacy & Security: Removable Volumes), even with "
+            "administrator rights. Either run the same command in Terminal with sudo and allow "
+            "Terminal to access removable volumes, or add this program to System Settings > "
+            f"Privacy & Security > Full Disk Access and try again: {sys.executable}")
 
 
 # ---------------------------------------------------------------------------

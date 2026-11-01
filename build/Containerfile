@@ -27,9 +27,8 @@
 # normally.
 # shim and MokManager are Debian's: build/shim/fetch.py downloads the .debs
 # pinned (by SHA-256) in build/shim/debian-shim.lock into /src/.tools/debian.
-# For a fully pinned base image, replace the tag by a digest:
-#   FROM docker.io/library/ubuntu:26.04@sha256:<digest>
-FROM docker.io/library/ubuntu:26.04
+# The base image is pinned by digest (the same one as build/grub/source.lock.json, "docker"); update both together.
+FROM docker.io/library/ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
 
 # Toolchain of the GRUB source build (build/grub/grubsrc.py; part of its cache key).
 ARG GCC_VERSION=4:15.2.0-5ubuntu1

@@ -9,12 +9,15 @@ grubsyms.py "verifies" without looking. Nothing is downloaded.
 from __future__ import annotations
 
 import os
+import sys
 import shutil
 import subprocess
 import tarfile
 from pathlib import Path
 
 import pytest
+
+linux_path = pytest.mark.skipif(sys.platform == "darwin", reason="the Debian path; macOS runs scripts/lib/bootstrap-macos.sh")
 
 ROOT = Path(__file__).resolve().parents[2]
 SYSTEM_BIOS_DIR = Path("/usr/lib/grub/i386-pc")
@@ -59,6 +62,7 @@ class FakeRepo:
         (self.root / "scripts").mkdir(parents=True)
         for s in ("bootstrap-tools.sh", "dev-env.sh"):
             shutil.copy2(ROOT / "scripts" / s, self.root / "scripts" / s)
+        shutil.copytree(ROOT / "scripts" / "lib", self.root / "scripts" / "lib")
         gdbdir = self.root / "devtools" / "gdb"
         gdbdir.mkdir(parents=True)
         (gdbdir / "grubsyms.py").write_text("import sys\nsys.exit(0)\n")
@@ -118,6 +122,7 @@ def repo(tmp_path):
     return FakeRepo(tmp_path)
 
 
+@linux_path
 def test_stale_system_dir_from_before_bootstrap_is_picked_again(repo):
     """Fresh clone: the env was resolved while .tools/ was empty, so it says
     BB_GRUB_BIOS_DIR=.tools/cache/grub-src/current/i386-pc (the first candidate,
@@ -142,6 +147,7 @@ def test_stale_system_dir_from_before_bootstrap_is_picked_again(repo):
     assert after == str(tools_mods)
 
 
+@linux_path
 def test_a_directory_the_user_chose_wins_and_a_wrong_one_is_an_error(repo, tmp_path):
     """BB_GRUB_BIOS_DIR set by the user is never replaced; when it holds no
     modules although grub-pc-bin was unpacked, bootstrap exits 3 (debug

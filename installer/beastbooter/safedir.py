@@ -153,6 +153,34 @@ class SafeDir:
             fd = os.open(self.join(name), flags, 0o644)
         return os.fdopen(fd, "wb")
 
+    def open_file(self, name: str, write: bool = False) -> BinaryIO:
+        """The existing regular file ``name``, read-only or read-write; FileNotFoundError if
+        missing, UnsafePath for a link or anything that is not a regular file."""
+        flags = (os.O_RDWR if write else os.O_RDONLY) | _NOFOLLOW | _NONBLOCK | _CLOEXEC
+        if self.fd is not None:
+            try:
+                fd = os.open(check_name(name), flags, dir_fd=self.fd)
+            except OSError as e:
+                if e.errno == errno.ELOOP:
+                    raise UnsafePath(f"{self.join(name)} is a link; refusing to follow it") from None
+                raise
+        else:
+            st = self.lstat(name)
+            if st is None:
+                raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.join(name))
+            if is_link(st) or not stat.S_ISREG(st.st_mode):
+                raise UnsafePath(f"{self.join(name)} is not a regular file; refusing to touch it")
+            fd = os.open(self.join(name), flags)
+        try:
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise UnsafePath(f"{self.join(name)} is not a regular file; refusing to touch it")
+            if _NONBLOCK:
+                os.set_blocking(fd, True)
+        except BaseException:
+            os.close(fd)
+            raise
+        return os.fdopen(fd, "r+b" if write else "rb")
+
     def read(self, name: str, limit: int) -> bytes | None:
         """Up to ``limit`` bytes of the regular file ``name``; None if missing, a link,
         not a regular file (FIFOs are not waited on) or unreadable."""

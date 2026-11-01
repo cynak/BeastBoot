@@ -572,6 +572,10 @@ theme (`bb_theme`) and debug output: [MENU.md](MENU.md).
 `beast-booter/config.cfg` (GRUB script with `set` lines) is then ignored;
 the menu says so and adds a help entry at the end. Anyone who can write to
 the stick could otherwise use it to change what Secure Boot lets start.
+Your own theme (`bb_theme`) is not used either (the built-in one is), and
+the same help entry says so. Extra kernel parameters (`bb_kargs`) still
+apply; whenever they are set, in both modes, the menu shows them in an
+entry "Extra kernel parameters: ..." at the end.
 With Secure Boot off both files are read, `config.cfg` last, so its values
 win.
 
@@ -589,6 +593,7 @@ With `bb_debug=1` in `config.env`, the menu also prints a `BEAST: error
 | `no-recipe` | BeastBoot does not recognise how this ISO boots | check [ISO_SUPPORT.md](ISO_SUPPORT.md#recipes); report the ISO |
 | `windows-sb-no-helper` | a Windows ISO, Secure Boot is on, it is not prepared and the drive has no helper | run `beast-boot prepare-windows <ISO>` on the computer, or update the boot files ([section 7](#7-update-the-boot-files)); or turn Secure Boot off ([Install Windows](#install-windows-from-the-stick)) |
 | `windows-bad-name` | a Windows ISO whose path contains a quote (") or a control character (possible on NTFS) | rename the file or folder without those characters |
+| `iso-bad-name` | a Linux ISO whose path contains a quote (" or '), a backslash or a control character such as a tab | rename the file or folder without those characters (the path goes onto the kernel command line) |
 | `iso-too-large` | an Alpine or Debian installer ISO that is too big to load into memory (Debian DVD, Alpine extended) | use the netinst / standard ISO of the same release, or another install method |
 | `windows-no-wimboot` | the drive's boot files have no Windows support | update the boot files with a full release ([section 7](#7-update-the-boot-files)) |
 | `grubenv-not-writable` | the menu could not write its settings file `grub/grubenv` | update the boot files ([section 7](#7-update-the-boot-files)); that recreates it |
@@ -685,6 +690,7 @@ More: [PORTABLE.md](PORTABLE.md#run-it).
 | `cancelled` | you stopped it (Cancel, Ctrl+C); after a cancelled `install`, run it again before using the drive |
 | `busy` | a program still uses the drive; on Linux the message names it (an open file, a terminal in a folder on it, an ISO attached as a disk image). Close it and try again |
 | `device-vanished` | the drive stopped responding while it was prepared or written (it reported "no medium" or was unplugged). Unplug it, plug it back in and run the same command again ([section 7](#7-update-the-boot-files)) |
+| `access-blocked` | macOS: the privacy setting for removable volumes refused access, even after the administrator password. Run the command in Terminal with `sudo` (allow Terminal when macOS asks), or add the program named in the message (`BeastBooter.app/Contents/Resources/runtime/bin/python3.15`) under **System Settings** > **Privacy & Security** > **Full Disk Access** (press Cmd+Shift+G in the file dialog to type the path), then try again |
 
 Still stuck? [Open an issue](https://github.com/cynak/BeastBoot/issues) with the BeastBoot version (`bb_version` on the
 System information page), the computer model, the boot mode and the
