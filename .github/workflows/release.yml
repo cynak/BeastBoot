@@ -55,12 +55,16 @@ jobs:
     timeout-minutes: 180
     permissions:
       contents: read
+    # Official runs use the protected environment "release" that holds the signing
+    # secrets (allowed for v* tags only, with a required reviewer: docs/RELEASING.md).
+    # Dry runs use "dry-run", which has no secrets.
+    environment: ${{ (github.event_name == 'push' || inputs.dry_run == false) && 'release' || 'dry-run' }}
     # Container jobs default to `sh` (dash); the steps use bash.
     defaults:
       run:
         shell: bash
     container:
-      image: ubuntu:26.04
+      image: docker.io/library/ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
       options: ${{ needs.probe.outputs.container-options }}
     outputs:
       official: ${{ steps.meta.outputs.official }}
@@ -121,6 +125,12 @@ jobs:
           KEY_PEM: ${{ secrets.BB_SB_KEY_PEM }}
           CERT_PEM: ${{ secrets.BB_SB_CERT_PEM }}
         run: |
+          # The release key is only ever written for a version tag: a manual run with
+          # dry_run=false on a branch stops here, before the key touches the disk.
+          if [ "$GITHUB_REF_TYPE" != tag ] || ! [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::the release key is only used for v*.*.* tags (this run: $GITHUB_REF_TYPE $GITHUB_REF_NAME); use dry_run for other refs"
+            exit 1
+          fi
           if [ -z "$KEY_PEM" ] || [ -z "$CERT_PEM" ]; then
             echo "::error::the secrets BB_SB_KEY_PEM and BB_SB_CERT_PEM are not set; an official release must be signed with the project's release key (docs/RELEASING.md)"
             exit 1

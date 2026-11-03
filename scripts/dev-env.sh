@@ -12,12 +12,16 @@ BB_ROOT="$(cd "$(dirname "$_bb_src")/.." && pwd)"
 export BB_ROOT
 unset _bb_src
 
-if [ -d "$BB_ROOT/.tools/bin" ]; then
+# .tools/ holds Linux binaries; on macOS the dev tools (pytest, ruff) come from .venv
+# and the Linux toolchain runs in the build container (scripts/container.sh).
+if [ "$(uname -s)" = Darwin ]; then _bb_bin="$BB_ROOT/.venv/bin"; else _bb_bin="$BB_ROOT/.tools/bin"; fi
+if [ -d "$_bb_bin" ]; then
   case ":$PATH:" in
-    *":$BB_ROOT/.tools/bin:"*) ;;
-    *) export PATH="$BB_ROOT/.tools/bin:$PATH" ;;
+    *":$_bb_bin:"*) ;;
+    *) export PATH="$_bb_bin:$PATH" ;;
   esac
 fi
+unset _bb_bin
 
 case ":${PYTHONPATH:-}:" in
   *":$BB_ROOT/installer:"*) ;;

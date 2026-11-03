@@ -148,7 +148,7 @@ Kernel command line parameters read by the helper:
 | `beastnet.esp=UUID=…` | ESP (mounted read-write at `/mnt/esp`) |
 | `beastnet.sb=0/1` | Secure Boot state reported by the menu |
 | `beastnet.debug=1` | print `BEASTNET:` lines (below) on the console and serial |
-| `beastnet.script=/path` | non-interactive run from a JSON file on the data partition (tests, power users); the menu passes it when `/beast-booter/config.env` (or, with Secure Boot off, `config.cfg`) sets `bb_beastnet_script=/path`; in `config.env` the path may hold only letters, digits and `._/-` |
+| `beastnet.script=/path` | non-interactive run from a JSON file on the data partition (tests, power users); the menu passes it when `/beast-booter/config.env` (or, with Secure Boot off, `config.cfg`) sets `bb_beastnet_script=/path`; in `config.env` the path may hold only letters, digits and `._/-`. With `beastnet.sb=1` nothing runs before the user confirms the plan on the console: the app prints `BEASTNET: script confirm path=<path> steps=<n>` and a summary (each step's kind and target), then waits for Enter or `y`; any other answer, end of input or no terminal refuses it (`error script ...`, exit code 2, the plan's `on_error` is not followed) |
 | `beastnet.ui=plain` | line-based prompts instead of the curses screens (serial consoles) |
 | `beastnet.action=trust-ubuntu` | open "Trust Ubuntu's Secure Boot key" first (§8; set by the Tools menu entry). Other values are ignored. Its "Download an ISO from a link" item then leads to the normal screens |
 | `beastnet.action=disk` | open Disk tools first (recovery and cloning, RAID-aware; set by the "Disk tools: recovery and cloning" Tools menu entry; see [DISK_TOOLS.md](DISK_TOOLS.md)). Every beast-net boot gets `raid=noautodetect md_mod.start_ro=1` on the kernel command line, so no RAID array starts on its own or writes before Disk tools set it read-only |
@@ -164,6 +164,10 @@ Script file (`beastnet.script`):
 `then` is `reboot`, `poweroff` or `stay` (the one-shot hand-off is written only
 for `reboot`); optional `"on_error"`: `stay` (default), `reboot`, `poweroff` or
 `shell`; optional `"overwrite": true` to replace an existing file at `dest`.
+Under Secure Boot (`beastnet.sb=1`) a plan is never unattended: the stick is
+not trusted (whoever had it could leave a plan for the owner's next boot), so
+the helper shows what the plan will do and asks on the console first (see the
+`beastnet.script` row above). With Secure Boot off it runs without questions.
 
 Machine-readable output with `beastnet.debug=1` (prefix exactly `BEASTNET: `):
 ```
@@ -177,6 +181,7 @@ BEASTNET: download done path=<path> bytes=<n> sha256=<hex>
 BEASTNET: verify ok sha256=<hex>
 BEASTNET: verify fail expected=<hex> got=<hex>
 BEASTNET: handoff oneshot=<path>
+BEASTNET: script confirm path=<plan> steps=<n>
 BEASTNET: trust state=<state> sb=<0|1|unknown> ca=<0|1> revoked=<n>/<total> pending=<vars or none>
 BEASTNET: trust request step=<revocations|ca|delete> var=<MokXNew|MokNew|MokDel> certs=<n> hashes=<n>
 BEASTNET: trust requested step=<step> var=<var>
@@ -313,6 +318,12 @@ followed (at most 10, never from HTTPS back to plain HTTP), certificates are
 checked against the CA bundle in the helper (Ubuntu's `ca-certificates`), and
 checksum files in the usual formats are understood: `SHA256SUMS` (Ubuntu,
 Debian) and the BSD style `SHA256 (file) = ...` (Fedora `CHECKSUM`).
+The entry of a checksum file is picked by the names the user chose: the file
+name in the link and the destination's name. Names the server sends (a
+redirect target, `Content-Disposition`) count only when the checksum file
+lists a single file, so a server cannot point at another file in the list.
+A `user:password@` in a link is sent (HTTP Basic) only over `https://`;
+over `http://` the download is refused (`refused-plain-http`).
 
 ### Checked sources
 

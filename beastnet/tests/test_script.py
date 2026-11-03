@@ -15,7 +15,8 @@ from beastnet.events import Reporter
 from beastnet.firmware import load_catalog
 from beastnet.net import LinuxNetwork, NetworkService
 from beastnet.paths import Paths
-from beastnet.script import parse_plan, run_script
+from beastnet.script import parse_plan
+from beastnet.script import run_script as _run_script
 from beastnet.system import System
 from bn_helpers import FakeRunner, FakeSys, have
 from test_net import Clock
@@ -44,6 +45,12 @@ def make_root(tmp_path):
     (root / "mnt/esp/beast-net/firmware/installed.json").write_text(json.dumps(
         {"v": 1, "packs": [{"id": "intel-wifi", "catalog_tag": "20260918", "cpio_sha256": "00", "files": []}]}))
     return root
+
+
+def run_script(ctx, path):
+    """CMDLINE has beastnet.sb=1: answer the confirmation with Enter
+    (test_security_script_confirm.py covers the question itself)."""
+    return _run_script(ctx, path, ask=lambda text: "\n")
 
 
 def write_plan(root, **plan):
@@ -86,6 +93,7 @@ def test_script_end_to_end_with_fake_network(tmp_path, https, site, certs):
     assert outcome == "done" and result.verified
     lines = [x for x in rep.lines if "progress" not in x]
     assert lines == [
+        "BEASTNET: script confirm path=/plan.json steps=2",
         "BEASTNET: nic eth0 type=ethernet driver=e1000 state=up",
         "BEASTNET: net up iface=eth0 type=ethernet ip=10.0.2.15",
         f"BEASTNET: download start url={https.url('/isos/distro.iso')} dest=/downloads/distro.iso",
@@ -198,14 +206,17 @@ def test_host_dry_run_subprocess(tmp_path, https, site, certs):
     write_plan(root, network={"type": "ethernet"}, url=https.url("/isos/distro.iso"),
                sha256_url=https.url("/isos/SHA256SUMS"), then="reboot")
     env = dict(os.environ, PYTHONPATH=PKG)
+    # sb=0: with Secure Boot on, the plan waits for a confirmation on a terminal
+    cmdline = tmp_path / "cmdline"
+    cmdline.write_text(CMDLINE.replace("beastnet.sb=1", "beastnet.sb=0"))
     cp = subprocess.run([sys.executable, "-m", "beastnet", "--root", str(root), "--script", "/plan.json",
-                         "--ca-file", certs.ca, "--kernel-log", os.path.join(DATA, "dmesg_mixed.txt")],
+                         "--cmdline", str(cmdline), "--ca-file", certs.ca, "--kernel-log", os.path.join(DATA, "dmesg_mixed.txt")],
                         capture_output=True, text=True, env=env, timeout=60, stdin=subprocess.DEVNULL)
     assert cp.returncode == 0, cp.stderr
     lines = [x for x in cp.stdout.splitlines() if "progress" not in x]
     kernel = os.uname().release
     assert lines == [
-        f"BEASTNET: ready kernel={kernel} sb=1 firmware=intel-wifi",
+        f"BEASTNET: ready kernel={kernel} sb=0 firmware=intel-wifi",
         f"BEASTNET: download start url={https.url('/isos/distro.iso')} dest=/downloads/distro.iso",
         f"BEASTNET: download done path=/downloads/distro.iso bytes={len(ISO)} sha256={SHA}",
         f"BEASTNET: verify ok sha256={SHA}",

@@ -64,6 +64,15 @@ def fields(line: str) -> dict[str, str]:
     return dict(t.split("=", 1) for t in line.split() if "=" in t)
 
 
+def confirm_script(vm: VM, *, timeout: float = 180, after: int = 0) -> str:
+    """Under Secure Boot the helper shows a script plan and waits for a
+    confirmation on the console before it runs it (docs/BEASTNET.md section 5):
+    wait for its `script confirm` line, then press Enter on the serial console."""
+    line = wait_line(vm, "script confirm ", timeout=timeout, after=after)
+    vm.send("\r")
+    return line
+
+
 # ---------------------------------------------------------------------------
 # Drives
 # ---------------------------------------------------------------------------

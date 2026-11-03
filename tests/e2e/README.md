@@ -109,6 +109,9 @@ They cover "Download an ISO from a link" (docs/BEASTNET.md) end to end, about
   `BEAST: oneshot <path>` and boots the ISO through the casper recipe; the boot
   after that is normal. Also on Secure Boot, and on exFAT with a path that has
   spaces. The interactive line UI (no script) is driven over the serial port too.
+  Under Secure Boot the helper asks before it runs a plan: the tests wait for
+  `BEASTNET: script confirm ...` and press Enter on the serial console
+  (`bbe2e.beastnet.confirm_script`; also in the Trust Ubuntu tests).
 - **Refusals**: wrong SHA-256, plain HTTP without SHA-256, an untrusted
   (self-signed) HTTPS certificate: an `error` line, no hand-off, nothing left
   under `/downloads`.

@@ -56,6 +56,31 @@ in `.tools/bin` set the library path for those tools only. If you prefer a
 system-wide install, the header of `scripts/bootstrap-tools.sh` has the
 `sudo apt install ...` line with the same packages.
 
+### On macOS
+
+`make tools` (`scripts/bootstrap-tools.sh`) installs what the Mac needs with
+Homebrew (bash, Colima, the docker CLI and buildx, shellcheck, Python 3.12 if
+no Python 3.10+ is found) and creates `.venv`. It then builds the
+x86-64 Ubuntu image from `build/Containerfile` and runs the Linux bootstrap
+inside it. After that:
+
+| Runs on the Mac | Runs in the container (`scripts/container.sh`) | Linux only |
+|---|---|---|
+| `make test`, `make lint`, `make portable`, `make net-sources` | `make build`, `make sbom`, `make vulns`, `make keys`, `make image`, `make e2e` | `bb-dev` dev images and VMs, boot-menu screenshots, KVM e2e in releases |
+
+`scripts/container.sh CMD` runs any command in that container, with the repo
+mounted at the same path and `.tools/` kept in the docker volume `beast-boot-tools`.
+
+Ubuntu 26.04's `tar` needs the `openat2` system call, which Rosetta and QEMU
+before 9.1 do not emulate, so every archive extraction fails with
+"Function not implemented". Run Colima without Rosetta and register a current
+QEMU once after each VM start:
+
+```sh
+colima start --vm-type vz --vz-rosetta=false
+docker run --privileged --rm tonistiigi/binfmt --install amd64
+```
+
 ## 2. One-command setup
 
 ```sh

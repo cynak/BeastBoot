@@ -23,6 +23,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TOOLS="$ROOT/.tools"
 cd "$ROOT"
+# shellcheck source=lib/platform.sh
+source "$ROOT/scripts/lib/platform.sh"
+bb_require_bash4 "$0" "$@"
 
 # --- ShellCheck pin: koalaman/shellcheck v0.11.0 (released 2025-08-04) --------
 # SHA-256 = the release asset digests GitHub publishes for these files.
@@ -68,16 +71,12 @@ log() { printf 'lint: %s\n' "$*"; }
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/bb-lint.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 
-sha256_of() {
-  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
-  else shasum -a 256 "$1" | cut -d' ' -f1; fi
-}
-
 # --- tools --------------------------------------------------------------------
 RUFF=()
 find_ruff() {
+  local py
   if [ -x "$ROOT/.venv/bin/ruff" ]; then RUFF=("$ROOT/.venv/bin/ruff")
-  elif python3 -c 'import ruff' >/dev/null 2>&1; then RUFF=(python3 -m ruff)
+  elif py="$(bb_python 2>/dev/null)" && "$py" -c 'import ruff' >/dev/null 2>&1; then RUFF=("$py" -m ruff)
   elif command -v ruff >/dev/null 2>&1; then RUFF=(ruff)
   else return 1; fi
 }
@@ -90,7 +89,7 @@ install_shellcheck() {
   url="https://github.com/koalaman/shellcheck/releases/download/v$SC_VERSION/$file"
   dl="$TOOLS/cache/lint/$file"
   mkdir -p "$TOOLS/cache/lint" "$TOOLS/bin"
-  if [ ! -f "$dl" ] || [ "$(sha256_of "$dl")" != "$sum" ]; then
+  if [ ! -f "$dl" ] || [ "$(bb_sha256 "$dl")" != "$sum" ]; then
     log "downloading ShellCheck $SC_VERSION ($url)"
     rm -f "$dl.part"
     if command -v curl >/dev/null 2>&1; then
@@ -100,7 +99,7 @@ install_shellcheck() {
     else
       log "need curl or wget to download ShellCheck"; return 1
     fi
-    if [ "$(sha256_of "$dl.part")" != "$sum" ]; then
+    if [ "$(bb_sha256 "$dl.part")" != "$sum" ]; then
       rm -f "$dl.part"; log "ERROR: SHA-256 mismatch for $file (expected $sum)"; return 1
     fi
     mv -f "$dl.part" "$dl"

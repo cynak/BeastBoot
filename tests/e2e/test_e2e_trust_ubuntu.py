@@ -98,6 +98,7 @@ def use_debian_chain(drive, workdir: Path) -> None:
 def run_helper(vm_factory, drive, vars_file: Path):
     vm = vm_factory("uefi-sb", drive.path, vars_file=vars_file, memory=1536, hard_timeout=420)
     boot = bn.select_entry(vm)
+    bn.confirm_script(vm, timeout=HELPER_TIMEOUT, after=boot.end)  # Secure Boot: confirm the plan
     state = bn.fields(bn.wait_line(vm, "trust state=", timeout=HELPER_TIMEOUT, after=boot.end))
     vm.wait_exit(timeout=120)  # then=poweroff / on_error=poweroff
     return vm, state, boot

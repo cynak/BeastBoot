@@ -153,6 +153,9 @@ def _run(args, paths: Paths, params, reporter: Reporter, ui, script, live: bool,
                 return 0
             if outcome == "shell":
                 return 1
+            if outcome == "refused":  # Secure Boot and not confirmed: nothing ran
+                _late_print(ui, "beast-net: the plan on the stick was not run.")
+                return 2
         if ui is None:
             from .ui.plain import LineUI
             ui_obj = LineUI()

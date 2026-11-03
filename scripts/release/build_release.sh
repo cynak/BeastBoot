@@ -25,13 +25,20 @@
 #   BB_PROJECT_URL              project URL for the SBAT entry (default with --official: from the CI)
 #   BB_RELEASE_SKIP_TESTS=1     local troubleshooting only: skip the unit tests (refused with --official;
 #                               recorded in _release/release.json)
+#
+# On macOS the steps that need Ubuntu (make build, the SBOM and vulnerability scan) run in the Linux
+# container (scripts/container.sh); the QEMU end-to-end tests are skipped there.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
-TOOL=(python3 -I "$ROOT/scripts/release/release_tool.py")
+# shellcheck source=../lib/platform.sh
+source "$ROOT/scripts/lib/platform.sh"
+bb_require_bash4 "$0" "$@"
+PY="$(bb_python)" || exit 1
+TOOL=("$PY" -I "$ROOT/scripts/release/release_tool.py")
 
-usage() { sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; }
 die() { echo "build_release: error: $*" >&2; exit 1; }
 note() {
   echo "build_release: NOTE: $*" >&2
@@ -66,6 +73,15 @@ LOGS="$META/logs"
 mkdir -p "$LOGS"
 date -u +%FT%TZ > "$META/started"
 
+# lx CMD...: run CMD where the Ubuntu tools are (the Linux container on macOS, here on Linux).
+lx() {
+  if [ "$(bb_os)" = macos ]; then "$ROOT/scripts/container.sh" "$@"; else "$@"; fi
+}
+# sums_check SUMSFILE: verify the files listed in it (in the current directory).
+sums_check() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum -c --quiet "$1"; else shasum -a 256 -c --quiet "$1"; fi
+}
+
 # run NAME CMD...: output to a log; on failure show its end and stop.
 run() {
   local name="$1"; shift
@@ -81,6 +97,9 @@ run() {
 # shellcheck source-path=SCRIPTDIR source=../dev-env.sh
 source "$ROOT/scripts/dev-env.sh"
 if [ "$OFFLINE" = 1 ]; then export BB_OFFLINE=1; fi
+if [ "$(bb_os)" = macos ] && [ -x "$ROOT/.venv/bin/pytest" ]; then
+  pytest() { "$ROOT/.venv/bin/pytest" "$@"; }
+fi
 
 # ---------------------------------------------------------------------------
 step "Version and tag"
@@ -92,7 +111,7 @@ vargs=(version)
 if [ -n "$TAG" ]; then vargs+=(--tag "$TAG"); fi
 if [ "$OFFICIAL" = 1 ]; then vargs+=(--require-tag); fi
 VJSON="$("${TOOL[@]}" "${vargs[@]}")" || exit 1
-VERSION="$(python3 -I -c 'import json, sys; print(json.loads(sys.argv[1])["version"])' "$VJSON")"
+VERSION="$("$PY" -I -c 'import json, sys; print(json.loads(sys.argv[1])["version"])' "$VJSON")"
 echo "    version $VERSION, tag ${TAG:-(none: not a tagged commit)}, official: $([ "$OFFICIAL" = 1 ] && echo yes || echo no)"
 
 # ---------------------------------------------------------------------------
@@ -109,7 +128,7 @@ if [ "$OFFICIAL" = 1 ]; then
     fi
   fi
 fi
-CERT_SHA256="$(sha256sum < "$CER" | cut -d' ' -f1)"
+CERT_SHA256="$(bb_sha256 "$CER")"
 if [ -n "${BB_RELEASE_CERT_SHA256:-}" ] && [ "${BB_RELEASE_CERT_SHA256,,}" != "$CERT_SHA256" ]; then
   die "the certificate in $KEY_DIR (SHA-256 $CERT_SHA256) is not the pinned release certificate ($BB_RELEASE_CERT_SHA256)"
 fi
@@ -134,6 +153,9 @@ fi
 if [ "$SKIP_E2E" = 1 ]; then
   E2E="skipped (--skip-e2e)"
   note "end-to-end QEMU tests skipped (--skip-e2e)"
+elif [ "$(bb_os)" = macos ]; then
+  E2E="skipped (macOS: needs Linux with KVM)"
+  note "end-to-end QEMU tests skipped: they need Linux with /dev/kvm"
 elif [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then
   E2E="skipped (no usable /dev/kvm)"
   note "end-to-end QEMU tests skipped: no usable /dev/kvm on this machine"
@@ -145,13 +167,13 @@ fi
 # ---------------------------------------------------------------------------
 step "SBOM and vulnerability scan"
 if [ "$OFFLINE" = 0 ]; then
-  run 07-sbom-tools bash scripts/sbom-vuln.sh tools
+  run 07-sbom-tools lx bash scripts/sbom-vuln.sh tools
 fi
-run 08-sbom bash scripts/sbom-vuln.sh sbom
-run 08b-test-sbom-tooling python3 -I scripts/selftest.py
+run 08-sbom lx bash scripts/sbom-vuln.sh sbom
+run 08b-test-sbom-tooling lx python3 -I scripts/selftest.py
 scan_args=(scan --fail-on none)
 if [ "$OFFLINE" = 1 ]; then scan_args+=(--offline); fi
-run 09-scan bash scripts/sbom-vuln.sh "${scan_args[@]}"
+run 09-scan lx bash scripts/sbom-vuln.sh "${scan_args[@]}"
 
 GATE_MODE="${BB_RELEASE_GATE:-$([ "$OFFICIAL" = 1 ] && echo enforce || echo warn)}"
 gate_args=(gate --report sbom/vulnerabilities.json --out "$META/gate.json" --mode "$GATE_MODE"
@@ -196,13 +218,13 @@ if [ "${BB_RELEASE_ATTESTATIONS:-0}" = 1 ]; then notes_args+=(--attestations); f
 
 # ---------------------------------------------------------------------------
 step "Self-verification"
-(cd "$OUT" && sha256sum -c --quiet SHA256SUMS) || die "SHA256SUMS does not match the files"
+(cd "$OUT" && sums_check SHA256SUMS) || die "SHA256SUMS does not match the files"
 "${TOOL[@]}" verify --dir "$OUT" --version "$VERSION" || die "release verification failed"
-run 11-verify-archives python3 -I packaging/portable/build.py --verify \
+run 11-verify-archives "$PY" -I packaging/portable/build.py --verify \
   "$OUT/$P-linux-x86_64.tar.gz" "$OUT/$P-windows-x86_64.zip" "$OUT/$P-macos-x86_64.zip" "$OUT/$P-macos-arm64.zip"
 
-PRERELEASE="$(python3 -I -c 'import json, sys; print(str(json.loads(sys.argv[1])["prerelease"]).lower())' "$VJSON")"
-python3 -I - "$META/release.json" "$VERSION" "${TAG:-}" "$OFFICIAL" "$PRERELEASE" "$CERT_SHA256" "$OUT/SHA256SUMS" \
+PRERELEASE="$("$PY" -I -c 'import json, sys; print(str(json.loads(sys.argv[1])["prerelease"]).lower())' "$VJSON")"
+"$PY" -I - "$META/release.json" "$VERSION" "${TAG:-}" "$OFFICIAL" "$PRERELEASE" "$CERT_SHA256" "$OUT/SHA256SUMS" \
     "$TESTS" "$E2E" <<'EOF'
 import json, sys
 out, version, tag, official, pre, cert, sums, tests, e2e = sys.argv[1:]
@@ -217,7 +239,7 @@ rm -rf "$META/portable" "$META/started"
 
 step "Done: $([ "$OFFICIAL" = 1 ] && echo "release $VERSION" || echo "UNOFFICIAL local build $VERSION") in ${OUT#"$ROOT"/}"
 while read -r _ f; do
-  printf '  %12s  %s\n' "$(stat -c %s "$OUT/$f")" "$f"
+  printf '  %12s  %s\n' "$(bb_file_size "$OUT/$f")" "$f"
 done < "$OUT/SHA256SUMS"
-printf '  %12s  %s\n' "$(stat -c %s "$OUT/SHA256SUMS")" SHA256SUMS
+printf '  %12s  %s\n' "$(bb_file_size "$OUT/SHA256SUMS")" SHA256SUMS
 echo "  notes: ${META#"$ROOT"/}/RELEASE_NOTES.md, gate: ${META#"$ROOT"/}/gate.json, logs: ${LOGS#"$ROOT"/}/"

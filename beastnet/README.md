@@ -47,7 +47,11 @@ certificate and host name verification against `/etc/ssl/certs/ca-certificates.c
 only (no option to turn it off); `http://` only with a SHA-256 that came from the
 user or from an `https://` checksum file; no HTTPS -> HTTP redirects; at most 10
 redirects; a checksum mismatch deletes everything; an existing file is never
-replaced without the user choosing to (script mode: `"overwrite": true`).
+replaced without the user choosing to (script mode: `"overwrite": true`);
+the checksum file entry is picked by the link's and the destination's file
+names, server-sent names only when it lists a single file; `user:password@`
+only over `https://`; under Secure Boot a script plan runs only after the user
+confirms its summary on the console (`script.py` `confirm_plan`).
 
 Kernel parameters: those of BEASTNET.md section 5, plus `beastnet.ui=plain`
 (line-based interface even when curses works). Script plans accept two

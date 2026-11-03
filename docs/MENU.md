@@ -140,9 +140,9 @@ Rules for `config.env` (GRUB 2.14 `grub-core/lib/envblk.c`):
 | `bb_dryrun=1` | do everything except actually starting the kernel or boot loader: print what would be run and return to the menu |
 | `bb_gfx=0` | no graphics: the plain text menu, exactly as on a console without graphics |
 | `bb_gfxmode=WxH` | screen mode(s) for the graphical menu, a GRUB `gfxmode` list such as `1280x720` or `1024x768,auto`. Default: `1920x1080,1280x720,1024x768,auto` (the first mode the firmware offers) |
-| `bb_theme=/path/theme.txt` | use your own GRUB theme file from the data partition instead of BeastBoot's (see [Changing the look](#changing-the-look)) |
+| `bb_theme=/path/theme.txt` | use your own GRUB theme file from the data partition instead of BeastBoot's (see [Changing the look](#changing-the-look)). Ignored with Secure Boot on (see below) |
 | `bb_fs_addon=0` | do not use the [exFAT add-on](ISO_SUPPORT.md#the-exfat-add-on): casper and live-boot ISOs on an exFAT drive are started exactly as on FAT32 (with the ISO's own `loopback.cfg`). Default: on |
-| `bb_kargs="word ..."` | extra kernel parameters added at the end of the command line of every ISO started by one of BeastBoot's own Linux recipes (casper, live-boot, archiso, dracut-live, anaconda, suse), for example `bb_kargs="console=ttyS0,115200"`. Not added for an ISO started with its own `loopback.cfg` (GRUB cannot change those lines), for Windows or EFI loaders, or for the network helper. Default: empty. Used by the real-ISO tests ([tests/e2e/REAL_ISOS.md](../tests/e2e/REAL_ISOS.md)) |
+| `bb_kargs="word ..."` | extra kernel parameters added at the end of the command line of every ISO started by one of BeastBoot's own Linux recipes (casper, live-boot, archiso, dracut-live, anaconda, suse), for example `bb_kargs="console=ttyS0,115200"`. Not added for an ISO started with its own `loopback.cfg` (GRUB cannot change those lines), for Windows or EFI loaders, or for the network helper. Default: empty. When set, the root menu shows it in the entry "Extra kernel parameters: <value> - help" and a real boot prints it. Used by the real-ISO tests ([tests/e2e/REAL_ISOS.md](../tests/e2e/REAL_ISOS.md)) |
 | `bb_windows=pe` | for `bb_autoboot` of a Windows installation ISO: start its Windows PE command prompt instead of Windows Setup. From the menu you choose in a small menu instead. Default: `setup` |
 | `bb_beastnet_script=/path/plan.json` | start the network helper in script mode with this JSON plan (a path on the data partition) instead of asking questions; see [BEASTNET.md](BEASTNET.md) §5 |
 
@@ -166,13 +166,24 @@ change it. With Secure Boot on it reads only `config.env` and never
 `config.cfg`: GRUB script there would let anyone who can write to the drive
 run GRUB commands and choose what the signed kernels and loaders get. When
 `config.cfg` exists it prints a short notice (`BEAST:
-config-cfg-ignored-sb`) and adds the entry "Settings: config.cfg is not read
-with Secure Boot on - help" at the end of the root menu. Keep your settings
-in `config.env` and they apply in both modes.
+config-cfg-ignored-sb`) and adds the entry "Settings ignored with Secure
+Boot on - help" at the end of the root menu. Keep your settings in
+`config.env` and they apply in both modes.
+
+`bb_theme` is ignored with Secure Boot on, and the menu uses its built-in
+theme: GRUB's Secure Boot checks do not cover theme and image files, so the
+signed GRUB would otherwise parse files from the data partition that anyone
+with write access could craft. The menu prints a short notice (`BEAST:
+theme-ignored-sb`) and adds the same "Settings ignored with Secure Boot on -
+help" entry, whose text says which settings were ignored. Without Secure
+Boot your theme is used.
 
 `bb_kargs` stays allowed under Secure Boot: kernel parameters are not
 something Secure Boot protects (the menu's own entries can be edited with
-`e` too), and the signed kernel still enforces its own lockdown.
+`e` too), and the signed kernel still enforces its own lockdown. It is
+never silent: when it is set, with Secure Boot on or off, the root menu
+shows the entry "Extra kernel parameters: <value> - help" after the tools,
+and a real boot of a Linux ISO prints the value before the kernel starts.
 
 The same `bb_*` settings may also be put in `grub/beast/device.cfg` on the
 boot partition (it is GRUB script too, sourced before the menu starts). That
@@ -224,9 +235,11 @@ BEAST: error no-recipe /mystery.iso
   data partition is not exFAT or the ISO is not a casper / live-boot ISO.
 - `config-cfg-ignored-sb` is printed before `ready` when Secure Boot is on
   and `/beast-booter/config.cfg` exists (it is not read).
+- `theme-ignored-sb` is printed before `ready` when Secure Boot is on and
+  `bb_theme` is set (the built-in theme is used).
 - `error <code> <text>` codes: `config-env-bad-value <name>` (a `config.env`
   value of the wrong form, ignored), `no-data-partition`, `iso-not-found`,
-  `loopback-failed`, `no-recipe`, `ntfs-unsupported`, `windows-sb-no-helper` (Secure Boot is on, the Windows ISO is not prepared and the helper is not on the drive; see [WINDOWS_SECURE_BOOT.md](WINDOWS_SECURE_BOOT.md)), `windows-bad-name` (the ISO path has a quote or control character), `windows-no-wimboot`, `grubenv-not-writable`,
+  `loopback-failed`, `no-recipe`, `ntfs-unsupported`, `iso-bad-name` (a Linux ISO, or one with its own `loopback.cfg`, whose path has a quote (`"` or `'`), a backslash or a control character: the path goes onto the kernel command line, so it is refused; rename the file), `oneshot-bad-path` (the one-time boot entry from the network helper is not an absolute path or has a quote or control character; it is cleared and ignored), `windows-sb-no-helper` (Secure Boot is on, the Windows ISO is not prepared and the helper is not on the drive; see [WINDOWS_SECURE_BOOT.md](WINDOWS_SECURE_BOOT.md)), `windows-bad-name` (the ISO path has a quote or control character), `windows-no-wimboot`, `grubenv-not-writable`,
   `iso-too-large` (Alpine or Debian installer ISO that does not fit in memory as an initrd), `sb-verify-failed`, `boot-failed`. The text after the code is for people, not parsers. Under
   Secure Boot, any failure of `linux`, `initrd`, `chainloader` or `boot` is
   reported as `sb-verify-failed`; without Secure Boot it is `boot-failed`.
@@ -341,8 +354,10 @@ What is on the boot partition, all listed in `manifest.json`:
   Its images are found relative to the theme file. Fonts available to it:
   `Noto Sans Regular 16`, `Noto Sans Regular 20`, `Noto Sans Bold 20`,
   `Noto Sans Mono Regular 16` (and `GNU Unifont Regular 16` without Secure
-  Boot). GRUB parses that theme and its PNG files like any other file it
-  reads; nothing about Secure Boot verification changes.
+  Boot). With Secure Boot on `bb_theme` is ignored and the built-in theme
+  is used: GRUB's Secure Boot checks do not cover theme and PNG files, so
+  the signed GRUB does not parse them from the data partition
+  ([With Secure Boot on](#with-secure-boot-on)).
 
 ## System information
 

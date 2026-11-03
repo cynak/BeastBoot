@@ -111,12 +111,23 @@ Changing the key forces everyone to enroll again, so create it once, carefully:
 2. Keep `beast-boot.key` offline and backed up (for example two encrypted USB
    sticks in different places). **Never commit it** and never put it anywhere
    but the two places below.
-3. In GitHub: *Settings → Secrets and variables → Actions → New repository secret*:
+3. In GitHub, create the environment `release` (*Settings → Environments → New
+   environment*) and protect it:
+   - *Deployment branches and tags*: selected tags only, pattern `v*.*.*`;
+   - *Required reviewers*: yourself (each release waits for one click);
+   - add a tag ruleset (*Settings → Rules → Rulesets*) for `v*` so only you can
+     create, move or delete release tags.
+
+   Then add the two secrets to that environment, **not** as repository secrets:
    - `BB_SB_KEY_PEM` = the contents of `beast-boot.key`
    - `BB_SB_CERT_PEM` = the contents of `beast-boot.crt`
 
-   or with the GitHub CLI: `gh secret set BB_SB_KEY_PEM < beast-boot.key` and
-   `gh secret set BB_SB_CERT_PEM < beast-boot.crt`.
+   or with the GitHub CLI: `gh secret set BB_SB_KEY_PEM --env release < beast-boot.key`
+   and `gh secret set BB_SB_CERT_PEM --env release < beast-boot.crt`. Delete any
+   repository secrets of the same name. The release job uses `release` only for
+   official runs (tag pushes, `dry_run=false`); dry runs use the secret-less
+   environment `dry-run`, and the key step refuses any ref that is not a
+   `v*.*.*` tag.
 4. Recommended: pin the certificate. Set the repository *variable*
    `BB_RELEASE_CERT_SHA256` to `sha256sum beast-boot.cer` (the DER file), so a
    wrong or swapped secret fails the build instead of shipping a new key.

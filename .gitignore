@@ -43,3 +43,14 @@ __pycache__/
 /.github/*
 !/.github/workflows/
 !/.github/FUNDING.yml
+
+# Security testing (security/): scan results, the generated report and the
+# finding/triage records stay local while findings are open (public repo).
+# THREAT_MODEL.md and scope.json are source. /.build/ is covered by /.*/ above.
+/security/findings.json
+/security/SECURITY_REPORT.md
+/security/manual.json
+/security/triage.json
+
+# macOS Finder metadata
+.DS_Store

@@ -767,3 +767,17 @@ def test_disk_vanishing_during_listing(backend, du):
     assert [d.id for d in backend.list_disks()] == ["/dev/disk4"]
     with pytest.raises(BeastError, match="Could not find disk: disk5"):
         backend.get_disk("disk5")
+
+
+@pytest.mark.parametrize("err,code,text", [
+    (1, "access-blocked", "Full Disk Access"),  # EPERM: TCC refused root
+    (13, None, "administrator rights are needed"),  # EACCES: not root
+])
+def test_raw_target_open_denied(raw_file, monkeypatch, err, code, text):
+    def denied(*_a, **_k):
+        raise PermissionError(err, os.strerror(err))
+
+    monkeypatch.setattr(os, "open", denied)
+    with pytest.raises(BeastError) as e:
+        DarwinRawTarget(str(raw_file), writable=True, sector_size=512, size=RAW_SIZE)
+    assert e.value.code == code and text in str(e.value)

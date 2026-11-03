@@ -40,6 +40,7 @@ from .errors import (CHECKSUM_MISMATCH, EXISTS, HTTP, MOUNT, NO_SPACE, REFUSED_P
                      TLS, BeastNetError, Cancelled)
 from .events import Reporter
 from .paths import DEFAULT_CA_FILE, DOWNLOADS, normalize_data_path
+from .safedir import SafeDir, UnsafePath
 
 CHUNK = 256 * 1024
 MAX_REDIRECTS = 10
@@ -317,6 +318,11 @@ class Http:
             hdrs = {"User-Agent": USER_AGENT, "Accept": "*/*",
                     "Accept-Encoding": "identity", "Connection": "close"}
             if parts.username is not None and parts.netloc == first_netloc:
+                if scheme != "https":  # Basic auth is the password in clear text
+                    raise _err(REFUSED_PLAIN_HTTP,
+                               f"refused to send the user name and password to {host} over plain HTTP",
+                               "Use the https:// link: a password in an http:// link would "
+                               "cross the network unencrypted.")
                 cred = f"{unquote(parts.username)}:{unquote(parts.password or '')}"
                 hdrs["Authorization"] = "Basic " + base64.b64encode(cred.encode()).decode()
             hdrs.update(headers or {})
@@ -388,34 +394,20 @@ class _Meter:
         self.fn(Progress(phase, done, self.total, speed, eta, self.resumed_from))
 
 
-def _hash_file(path: str, hasher, limit: int | None, meter: _Meter | None,
-               cancel=None) -> int:
+def _hash_file(f, hasher, limit: int | None, meter: _Meter | None, cancel=None) -> int:
+    """Hash an open file from its current position (up to ``limit`` bytes)."""
     n = 0
-    with open(path, "rb") as f:
-        while limit is None or n < limit:
-            if cancel is not None and cancel.is_set():
-                raise Cancelled()
-            buf = f.read(1024 * 1024 if limit is None else min(1024 * 1024, limit - n))
-            if not buf:
-                break
-            hasher.update(buf)
-            n += len(buf)
-            if meter is not None:
-                meter.update(n, "check")
+    while limit is None or n < limit:
+        if cancel is not None and cancel.is_set():
+            raise Cancelled()
+        buf = f.read(1024 * 1024 if limit is None else min(1024 * 1024, limit - n))
+        if not buf:
+            break
+        hasher.update(buf)
+        n += len(buf)
+        if meter is not None:
+            meter.update(n, "check")
     return n
-
-
-def _fsync_dir(path: str) -> None:
-    try:
-        fd = os.open(path, os.O_RDONLY)
-    except OSError:
-        return
-    try:
-        os.fsync(fd)
-    except OSError:
-        pass
-    finally:
-        os.close(fd)
 
 
 class Downloader:
@@ -512,6 +504,8 @@ class Downloader:
             total = None
         cd_name = filename_from_disposition(headers.get("content-disposition"))
         names = [n for n in (cd_name, name_from_url(final), name_from_url(url)) if n]
+        # The checksum entry is picked by what the user chose, not by what the server says.
+        user_names = [n for n in (name_from_url(url), posixpath.basename(req.dest or "")) if n]
         if req.dest:
             try:
                 dest = normalize_data_path(req.dest, under=DOWNLOADS)
@@ -524,12 +518,14 @@ class Downloader:
         names.append(posixpath.basename(dest))
         expected_from = "given" if expected else ""
         if entries is not None:
-            expected = pick_checksum(entries, names)
+            expected = pick_checksum(entries, user_names, server_names=names)
             if expected is None:
                 raise _err(CHECKSUM_MISMATCH,
-                           f"{sums_url} has no SHA-256 for {names[0]}",
-                           "The checksum file does not list this file name, so the "
-                           "download could not be verified. Give the SHA-256 directly.")
+                           f"{sums_url} has no SHA-256 for {(user_names or names)[0]}",
+                           "The checksum file does not list the file name of the link "
+                           "(or of the destination), so the download could not be "
+                           "verified. Save it under the name the checksum file lists, "
+                           "or give the SHA-256 directly.")
             expected_from = sums_url or ""
         etag = headers.get("etag")
         return Plan(req, url, final, dest, self.local_path(dest), total, etag,
@@ -556,8 +552,13 @@ class Downloader:
         if not plan.expected or not plan.exists:
             return None
         hasher = hashlib.sha256()
-        meter = _Meter(progress, None, os.path.getsize(plan.local), 0)
-        size = _hash_file(plan.local, hasher, None, meter, cancel)
+        try:
+            with self._folder(plan, create=False) as sd, \
+                    sd.open_file(posixpath.basename(plan.dest)) as f:
+                meter = _Meter(progress, None, os.fstat(f.fileno()).st_size, 0)
+                size = _hash_file(f, hasher, None, meter, cancel)
+        except (OSError, UnsafePath, BeastNetError):
+            return None  # a link or odd file is never "already there"
         digest = hasher.hexdigest()
         if digest != plan.expected:
             return None
@@ -587,22 +588,34 @@ class Downloader:
             raise _err(NO_SPACE, f"needs {_human(need)}, only {_human(free)} free on the stick",
                        "Delete some files from the stick (from any computer) and try again.")
 
-    def _read_meta(self, path: str) -> dict:
+    def _folder(self, plan: Plan, create: bool = True) -> SafeDir:
+        """The destination's folder, reached without following links (the data
+        partition is untrusted: NTFS via ntfs3 can hold symlinks)."""
+        parts = [p for p in plan.dest.split("/") if p][:-1]
         try:
-            with open(path, encoding="utf-8") as f:
-                meta = json.load(f)
+            return SafeDir(self.data_root, parts, create=create)
+        except UnsafePath as e:
+            raise _err(MOUNT, str(e), "Remove the link from the stick and try again.") from None
+        except OSError as e:
+            raise self._write_error(e, os.path.dirname(plan.local)) from None
+
+    @staticmethod
+    def _read_meta(sd: SafeDir, name: str) -> dict:
+        try:
+            meta = json.loads(sd.read(name, 64 * 1024) or b"")
             return meta if isinstance(meta, dict) else {}
-        except (OSError, ValueError):
+        except ValueError:
             return {}
 
-    def _write_meta(self, path: str, plan: Plan) -> None:
+    def _write_meta(self, sd: SafeDir, name: str, plan: Plan) -> None:
         meta = {"url": plan.url, "etag": plan.etag, "last_modified": plan.last_modified,
                 "total": plan.total}
         try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(meta, f)
+            sd.remove(name)
+            with sd.create(name) as f:
+                f.write(json.dumps(meta).encode())
         except OSError as e:
-            raise self._write_error(e, path) from None
+            raise self._write_error(e, sd.join(name)) from None
 
     @staticmethod
     def _write_error(e: OSError, path: str) -> BeastNetError:
@@ -616,11 +629,16 @@ class Downloader:
               *, overwrite: bool = False) -> DownloadResult:
         if plan.exists and not overwrite:
             raise _err(EXISTS, f"{plan.dest} already exists")
-        part, meta_path = plan.local + ".part", plan.local + ".part.json"
-        try:
-            os.makedirs(os.path.dirname(plan.local), exist_ok=True)
-        except OSError as e:
-            raise self._write_error(e, os.path.dirname(plan.local)) from None
+        with self._folder(plan) as sd:
+            try:
+                return self._fetch(sd, plan, progress, cancel)
+            except UnsafePath as e:
+                raise _err(MOUNT, str(e), "Remove the link from the stick and try again.") from None
+
+    def _fetch(self, sd: SafeDir, plan: Plan, progress: ProgressFn | None, cancel) -> DownloadResult:
+        """fetch() inside the destination folder: every file is opened through ``sd``."""
+        name = posixpath.basename(plan.dest)
+        part, meta_name = name + ".part", name + ".part.json"
         if self.reporter:
             self.reporter.download_start(plan.url, plan.dest)
         if progress:
@@ -628,19 +646,30 @@ class Downloader:
 
         hasher = hashlib.sha256()
         offset = 0
-        meta = self._read_meta(meta_path)
+        meta = self._read_meta(sd, meta_name)
         same_file = (meta.get("url") == plan.url and meta.get("total") == plan.total
                      and meta.get("etag") == plan.etag
                      and meta.get("last_modified") == plan.last_modified)
-        if os.path.exists(part) and same_file:
-            size = os.path.getsize(part)
+        try:
+            f = sd.open_file(part, write=True) if sd.lstat(part) is not None else None
+        except OSError as e:
+            raise self._write_error(e, sd.join(part)) from None
+        if f is not None and same_file:
+            size = os.fstat(f.fileno()).st_size
             if plan.total is None or size <= plan.total:
                 meter = _Meter(progress, None, size, 0)
-                offset = _hash_file(part, hasher, size, meter, cancel)
+                offset = _hash_file(f, hasher, size, meter, cancel)
         if offset == 0:
             hasher = hashlib.sha256()
-        self._check_space(plan, (plan.total - offset) if plan.total is not None else 0)
-        self._write_meta(meta_path, plan)
+        try:
+            self._check_space(plan, (plan.total - offset) if plan.total is not None else 0)
+            self._write_meta(sd, meta_name, plan)
+            if f is None:
+                f = sd.create(part)
+        except BaseException:
+            if f is not None:
+                f.close()
+            raise
         meter = _Meter(progress, self.reporter, plan.total, offset)
 
         # If-Range needs a strong validator: a strong ETag, else Last-Modified.
@@ -648,10 +677,6 @@ class Downloader:
         url = plan.final_url
         attempt = 0
         tried_original = url == plan.url
-        try:
-            f = open(part, "r+b" if os.path.exists(part) else "w+b")
-        except OSError as e:
-            raise self._write_error(e, part) from None
         with f:
             f.seek(offset)
             f.truncate(offset)
@@ -713,10 +738,10 @@ class Downloader:
             if digest != plan.expected:
                 if self.reporter:
                     self.reporter.verify_fail(plan.expected, digest)
-                for p in (part, meta_path):
+                for p in (part, meta_name):
                     try:
-                        os.unlink(p)
-                    except OSError:
+                        sd.remove(p)
+                    except (OSError, UnsafePath):
                         pass
                 raise _err(CHECKSUM_MISMATCH,
                            f"SHA-256 of {plan.dest} does not match: expected {plan.expected}, got {digest}",
@@ -725,13 +750,13 @@ class Downloader:
             if self.reporter:
                 self.reporter.verify_ok(digest)
         try:
-            os.replace(part, plan.local)
+            sd.replace(part, name)
         except OSError as e:
             raise self._write_error(e, plan.local) from None
-        _fsync_dir(os.path.dirname(plan.local))
+        sd.fsync()
         try:
-            os.unlink(meta_path)
-        except OSError:
+            sd.remove(meta_name)
+        except (OSError, UnsafePath):
             pass
         return DownloadResult(plan.dest, plan.local, offset, digest, plan.expected)
 

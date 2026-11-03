@@ -24,7 +24,8 @@ from beastnet.events import Reporter
 from beastnet.firmware import load_catalog
 from beastnet.flow import Interactive
 from beastnet.paths import Paths
-from beastnet.script import parse_plan, run_script
+from beastnet.script import parse_plan
+from beastnet.script import run_script as _run_script
 from beastnet.system import Runner, System
 from beastnet.ui import Item
 from beastnet.ui.plain import LineUI
@@ -458,6 +459,11 @@ def test_cmdline_action():
     p = parse_cmdline("beastnet.action=format-disk")
     assert p.action is None and p.raw["action"] == "format-disk"
     assert parse_cmdline("quiet").action is None
+
+
+def run_script(ctx, path):
+    """beastnet.sb=1: answer the plan's confirmation with Enter (test_security_script_confirm.py)."""
+    return _run_script(ctx, path, ask=lambda text: "\n")
 
 
 def context(m, *, dry_run=False):

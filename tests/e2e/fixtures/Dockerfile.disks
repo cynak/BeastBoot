@@ -2,7 +2,7 @@
 # Package versions are pinned to what Ubuntu 26.04 shipped when the recipe was
 # written; if one is gone from the archive, bump the pin (the recipe hash changes,
 # so the cache rebuilds).
-FROM ubuntu:26.04
+FROM docker.io/library/ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -qq \
  && apt-get install -y -qq --no-install-recommends \

@@ -10,7 +10,8 @@ boots the downloaded ISO once (through the normal recipes) and clears the entry.
 Images: the "browse" base (FAT32; exFAT for one download run) with its ISOs
 removed, so the root menu holds only the tool entries.
 The helper runs in script mode (`bb_beastnet_script` in config.cfg / config.env ->
-`beastnet.script=`), so no questions are asked.
+`beastnet.script=`), so no questions are asked, except the one confirmation of
+the plan under Secure Boot (answered by `bn.confirm_script`).
 """
 
 from __future__ import annotations
@@ -175,6 +176,8 @@ def test_download_and_oneshot(mode, kind, dest, bn_drive, vm_factory, request, w
         bn.write_plan(drive, plan(bn.guest_url(srv, "x.iso"), sha256=digest, dest=dest))
         vm = boot_vm(vm_factory, request, mode, drive, net=True)
         boot = bn.select_entry(vm)
+        if mode == "uefi-sb":  # Secure Boot: the plan runs only once confirmed on the console
+            bn.confirm_script(vm, timeout=HELPER_TIMEOUT, after=boot.end)
         up = bn.fields(bn.wait_line(vm, "net up ", timeout=HELPER_TIMEOUT, after=boot.end))
         assert up.get("ip") == bn.GUEST_IP and up.get("type") == "ethernet", up
         done = bn.wait_line(vm, "download done ", timeout=120, after=boot.end)

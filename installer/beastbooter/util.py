@@ -92,6 +92,21 @@ def human_size(n: int) -> str:
     return f"{n} B"
 
 
+_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+
+def printable(text: object) -> str:
+    """`text` for the terminal: every control character (C0, DEL, C1) becomes "?".
+    Strings read from a drive (marker, device.cfg, installed.json, a disk's model)
+    could otherwise carry escape sequences (clipboard writes, faked output)."""
+    return _CONTROL.sub("?", str(text))
+
+
+def printable_lines(text: str) -> str:
+    """printable() for each line of a multi-line message (its newlines stay)."""
+    return "\n".join(printable(line) for line in text.split("\n"))
+
+
 class Reporter:
     """Progress for people (short lines on stderr; stdout stays clean for --json)
     and, with --progress-file, for the GUI (events.ProgressFile).
@@ -110,7 +125,7 @@ class Reporter:
         self.current_step: str | None = None
 
     def _print(self, line: str) -> None:
-        print(line, file=self.stream or sys.stderr, flush=True)
+        print(printable_lines(line), file=self.stream or sys.stderr, flush=True)
 
     def _emit(self, event: str, **fields) -> None:
         if self.events is not None:
