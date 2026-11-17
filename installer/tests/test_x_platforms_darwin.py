@@ -20,6 +20,7 @@ import stat
 import struct
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -740,6 +741,26 @@ def test_command_survives_osascript_dying(backend, osascript, tmp_path):
     assert p.wait(30) == 5  # the status the root shell recorded, once the installer exited
     assert done.read_text() == "ok"
     assert "line 39" in p.output and not os.path.exists(p.files.dir)
+
+
+def test_status_recorded_after_the_command_ended(backend, osascript, monkeypatch):
+    """osascript was killed and the installer has ended, but the root shell has not recorded
+    its status yet: poll() waits for the record instead of reporting osascript's status."""
+    p = backend.run_elevated(py("import sys, time\nprint('up', flush=True)\ntime.sleep(0.3)\nsys.exit(5)"))
+    wait_for(lambda: "up" in Path(p.files.output).read_text())
+    real, late = p.files.marker, {}
+
+    def marker(prefix):  # the exit record shows up 0.5 s after the command is gone
+        value = real(prefix)
+        if prefix != "exit-" or value is None:
+            return value
+        late.setdefault("t", time.monotonic())
+        return value if time.monotonic() - late["t"] > 0.5 else None
+
+    monkeypatch.setattr(p.files, "marker", marker)
+    p._p.kill()
+    p._p.wait(10)
+    assert p.wait(30) == 5
 
 
 def test_is_elevated(backend, monkeypatch):
