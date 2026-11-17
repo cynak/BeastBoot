@@ -34,7 +34,16 @@ from pathlib import Path
 
 from ..errors import BeastError
 from ..fs import normalize_label
-from ..installed import NEWER, OTHER_BUILD, REINSTALL, Freshness, ProbeResult, assess
+from ..installed import (
+    CERT_CHANGE_NOTICE,
+    NEWER,
+    OTHER_BUILD,
+    REINSTALL,
+    Freshness,
+    ProbeResult,
+    assess,
+    certificate_changes,
+)
 from ..interfaces import DiskInfo, ElevatedProcess, PlatformBackend
 from ..layout import (
     DATA_LABEL_DEFAULT,
@@ -819,6 +828,7 @@ class Controller:
             f"The boot code and the boot partition are replaced with beast-boot {version}{now}.",
             *(("That is older than what the drive has: this downgrades it.",) if f and f.state == NEWER else ()),
             "The storage partition with your files is not touched.",
+            *((CERT_CHANGE_NOTICE,) if f and f.installed and certificate_changes(f.installed.version) else ()),
             "This only works on a drive that beast-boot installed; anything else is refused.",
             "Your system will ask for administrator rights to write to the drive.",
         )
@@ -1162,8 +1172,9 @@ class Controller:
             return [
                 "Your ISO files and other data on the drive were not touched.",
                 ubuntu,
-                "Computers that already enrolled this beast-boot key start it directly. "
-                "On any other computer: " + secure_boot[0].lower() + secure_boot[1:],
+                "Computers that already enrolled the certificate this drive has now start it directly. "
+                "On any other computer (after an update from a version before 0.5.0: on every computer): "
+                + secure_boot[0].lower() + secure_boot[1:],
             ]
         return [
             f"Copy your ISO files onto the {label} drive, like onto any USB drive. Folders are fine.",

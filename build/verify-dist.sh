@@ -3,8 +3,8 @@
 #
 # Usage: build/verify-dist.sh [DIST] [--cert FILE] [--rebuild]
 #   DIST        the dist/ directory to check (default: $BB_ROOT/dist)
-#   --cert F    a beast-boot certificate you obtained independently (PEM or
-#               DER); grubx64.efi must verify against it and the certificate
+#   --cert F    the BeastBoot CA certificate you obtained independently (PEM or
+#               DER); the signed files must chain to it and the certificate
 #               shipped in DIST must be the same one
 #   --rebuild   build GRUB, wimboot and beastmount.exe from the pinned source
 #               (build/grub/grubsrc.py: a few minutes the first time, then
@@ -20,10 +20,17 @@
 #      and one chaining to Microsoft UEFI CA 2023, both over its own Authenticode
 #      digest (checked with openssl against build/shim/microsoft-uefi-ca-*.pem);
 #      MokManager is signed through shim's built-in (Debian) vendor key
-#   3. grubx64.efi carries exactly one signature, which verifies with the
-#      beast-boot certificate; without that signature it is exactly the image
-#      recorded in the manifest (grub_unsigned_sha256). The beast-net helper
-#      kernel likewise carries only our signature, and its Authenticode digest
+#   3. grubx64.efi carries exactly one signature, made with the manifest's GRUB leaf
+#      certificate, issued by the BeastBoot CA; without it, it is exactly the image
+#      recorded in the manifest (grub_unsigned_sha256). The menu it runs under
+#      UEFI is inside it: the memdisk rebuilt from the menu scripts, hooks, theme
+#      and fonts in DIST (manifest build.efi_memdisk) is the manifest's and is
+#      found in grubx64.efi byte for byte, as is build/early-efi.cfg, the
+#      embedded config that makes that memdisk the only place GRUB starts a
+#      menu from.
+#      The build id in version.cfg is the manifest's and is recomputed from the
+#      files in DIST. The beast-net helper
+#      kernel likewise carries only our signature (its own leaf), and its Authenticode digest
 #      is the manifest's, which is that of the Ubuntu kernel package it came
 #      from (compared with the .deb itself when it is in the beast-net cache)
 #   4. the SBAT embedded in grubx64.efi equals the manifest's
@@ -51,7 +58,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --cert) CERT="${2:?--cert needs a file}"; shift 2 ;;
     --rebuild) REBUILD=1; shift ;;
-    -h|--help) sed -n '2,39p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,46p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) echo "verify-dist: unknown option $1" >&2; exit 2 ;;
     *) DIST="$1"; shift ;;
   esac
@@ -84,7 +91,7 @@ if out="$(bbtool manifest-verify "$DIST" 2>&1)"; then ok "$out"; else echo "$out
 if [ ! -e "$ESP/EFI/BOOT/fbx64.efi" ]; then ok "no fbx64.efi (no firmware boot entries are ever created)"; else bad "fbx64.efi present"; fi
 
 echo
-echo "[2] beast-boot certificate"
+echo "[2] BeastBoot CA certificate (the one to enroll)"
 openssl x509 -inform DER -in "$CER" -out "$T/dist.pem" 2>/dev/null || { bad "cannot parse $CER"; cp /dev/null "$T/dist.pem"; }
 if [ -s "$T/dist.pem" ]; then
   subj="$(openssl x509 -in "$T/dist.pem" -noout -subject -nameopt RFC2253 | sed 's/^subject=//')"
@@ -106,6 +113,30 @@ else
   info "tip: compare the fingerprints above with the ones published by whoever built this dist/ (or pass --cert)"
 fi
 
+# signer_check COMPONENT FILE: FILE is signed with the leaf certificate the manifest names
+# for COMPONENT (secure_boot.signer_<component>_*), whose subject says OU=<component>; each
+# component has its own, so one MokListX entry revokes one component.
+SEEN_SIGNERS=" "
+signer_check() {
+  local comp="$1" f="$2" want subj got
+  want="$(mget "secure_boot.signer_${comp}_cert_sha256" 2>/dev/null)" || want=""
+  subj="$(mget "secure_boot.signer_${comp}_subject" 2>/dev/null)" || subj=""
+  got="$(python3 -I "$BB_ROOT/scripts/efi_inspect.py" signers "$f" 2>/dev/null | python3 -I -c '
+import json, sys
+sigs = json.load(sys.stdin)["signatures"]
+print(" ".join(sigs[0]["cert_sha256"]) if len(sigs) == 1 else "")')" || got=""
+  if [ -n "$want" ] && [ "$got" = "$want" ]; then
+    case ",$subj," in
+      *",OU=$comp,"*) ok "$(basename "$f") is signed with the $comp certificate of the manifest: $subj" ;;
+      *) bad "the manifest's $comp signer is not a $comp certificate: $subj" ;;
+    esac
+  else
+    bad "$(basename "$f") is not signed with the manifest's $comp certificate (signature carries ${got:-nothing readable}, manifest says ${want:-nothing})"
+  fi
+  case "$SEEN_SIGNERS" in *" $want "*) bad "the $comp certificate also signs another component" ;; esac
+  SEEN_SIGNERS+="$want "
+}
+
 echo
 echo "[3] signatures"
 # shellcheck disable=SC2001  # indent every line
@@ -125,22 +156,65 @@ fi
 sigs="$(sbverify --list "$GRUB" 2>/dev/null)" || true
 n="$(grep -c '^signature ' <<<"$sigs" || true)"
 if [ "$n" = 1 ]; then ok "grubx64.efi has exactly one signature"; else bad "grubx64.efi has $n signatures (expected 1)"; fi
-if sbverify --cert "$VERIFY_PEM" "$GRUB" >/dev/null 2>&1; then ok "grubx64.efi signature verifies with the beast-boot certificate"; else bad "grubx64.efi signature does NOT verify"; fi
+if efi_inspect require "$GRUB" --only "the BeastBoot CA=$VERIFY_PEM" >/dev/null 2>&1; then ok "grubx64.efi signature chains to the BeastBoot CA certificate"; else bad "grubx64.efi signature does NOT chain to the BeastBoot CA certificate"; fi
+signer_check grub "$GRUB"
 cp "$GRUB" "$T/grub-unsigned.efi"
 if sbattach --remove "$T/grub-unsigned.efi" >/dev/null 2>&1 && [ "$(sha "$T/grub-unsigned.efi")" = "$(mget secure_boot.grub_unsigned_sha256)" ]; then
   ok "grubx64.efi without its signature = manifest grub_unsigned_sha256 $(mget secure_boot.grub_unsigned_sha256 | cut -c1-16)..."
 else
   bad "grubx64.efi without its signature does not match grub_unsigned_sha256"
 fi
+# The menu inside the signed image. Its memdisk is a deterministic tar of files that are
+# also in DIST (for legacy BIOS): rebuild it from them and look for it in the image.
+mapfile -t memd < <(python3 -I -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["build"]["efi_memdisk"]))' "$DIST/manifest.json")
+margs=(); for e in "${memd[@]}"; do margs+=("${e%%=*}=$DIST/${e#*=}"); done
+if python3 -I "$HERE/theme/mkmemdisk.py" --out "$T/memdisk.tar" "${margs[@]}" >/dev/null 2>&1 \
+   && [ "$(sha "$T/memdisk.tar")" = "$(mget build.efi_memdisk_sha256)" ]; then
+  ok "memdisk rebuilt from ${#memd[@]} files in dist/ (menu scripts, hooks, theme, fonts, Windows PE start-up scripts) = manifest efi_memdisk_sha256"
+  if python3 -I -c 'import sys; sys.exit(open(sys.argv[2], "rb").read() not in open(sys.argv[1], "rb").read())' "$GRUB" "$T/memdisk.tar"; then
+    ok "that memdisk is inside grubx64.efi byte for byte: the signature covers the menu"
+  else
+    bad "grubx64.efi does not contain the memdisk rebuilt from dist/"
+  fi
+else
+  bad "the memdisk rebuilt from the files in dist/ does not match efi_memdisk_sha256"
+fi
+missing=""
+for f in grub/grub.cfg grub/beast/main.cfg grub/beast/lib.cfg grub/beast/version.cfg; do
+  case " ${memd[*]} " in *" $f=esp/$f "*) ;; *) missing="$missing $f" ;; esac
+done
+# build/early-efi.cfg points GRUB's prefix at the memdisk and unsets fw_path (see the file).
+# grub-mkimage stores the embedded config as it is, followed by a NUL byte.
+sed -e 's/^[[:space:]]*#.*//' "$HERE/early-efi.cfg" | grep -v '^[[:space:]]*$' > "$T/early-efi.cfg"
+if [ -z "$missing" ] && [ "$(sha "$T/early-efi.cfg")" = "$(mget build.efi_early_config_sha256)" ] \
+   && python3 -I -c 'import sys; sys.exit(open(sys.argv[2], "rb").read() + b"\0" not in open(sys.argv[1], "rb").read())' "$GRUB" "$T/early-efi.cfg"; then
+  ok "grubx64.efi carries build/early-efi.cfg and the memdisk holds grub.cfg and the menu: under UEFI no menu file is taken from the drive"
+else
+  bad "grubx64.efi does not start the menu inside it (build/early-efi.cfg not embedded as in this checkout, or missing from the memdisk:${missing:- nothing})"
+fi
+# The build id: in version.cfg, and recomputed from the files here. Signed files count by
+# their unsigned hashes, grubx64.efi by the hash of the image built with an empty id (the id
+# is inside it); version.cfg and the certificate are not part of it (build/bbtool.py).
+bid_args=()
+[ ! -f "$ESP/beast-net/vmlinuz" ] || bid_args+=(--unsigned "esp/beast-net/vmlinuz=$(mget secure_boot.beastnet_kernel_unsigned_sha256)")
+[ ! -f "$ESP/beast-booter/wimboot" ] || bid_args+=(--unsigned "esp/beast-booter/wimboot=$(mget secure_boot.wimboot_unsigned_sha256)")
+bid="$(bbtool build-id "$DIST" "$(mget version)" "$(mget secure_boot.grub_unsigned_noid_sha256)" "${bid_args[@]}" 2>/dev/null)" || bid=""
+if [ "$bid" = "$(mget build_id)" ] \
+   && [ "$(sed -n 's/^set bb_build_id="\(.*\)"$/\1/p' "$ESP/grub/beast/version.cfg")" = "$bid" ]; then
+  ok "build id $bid: recomputed from the files in dist/, and the one in version.cfg"
+else
+  bad "the build id recomputed from dist/ (${bid:-none}) is not the manifest's and version.cfg's ($(mget build_id))"
+fi
 BN_K="$ESP/beast-net/vmlinuz"
 if [ -f "$BN_K" ]; then
   sigs="$(sbverify --list "$BN_K" 2>/dev/null)" || true
   n="$(grep -c '^signature ' <<<"$sigs" || true)"
   if [ "$n" = 1 ]; then ok "beast-net/vmlinuz has exactly one signature (sbverify)"; else bad "beast-net/vmlinuz has $n signatures (expected 1)"; fi
-  if efi_inspect require "$BN_K" --only "beast-boot=$VERIFY_PEM" >/dev/null 2>&1; then
-    ok "beast-net/vmlinuz has exactly one signature, which verifies with the beast-boot certificate"
+  signer_check kernel "$BN_K"
+  if efi_inspect require "$BN_K" --only "the BeastBoot CA=$VERIFY_PEM" >/dev/null 2>&1; then
+    ok "beast-net/vmlinuz has exactly one signature, which chains to the BeastBoot CA certificate"
   else
-    bad "beast-net/vmlinuz is not signed by the beast-boot certificate alone"
+    bad "beast-net/vmlinuz is not signed through the BeastBoot CA certificate alone"
   fi
   bn_auth="$(efi_inspect authenticode "$BN_K")"
   bn_src="$(mget secure_boot.beastnet_kernel_source)" || bn_src=""
@@ -213,10 +287,11 @@ else
   sigs="$(sbverify --list "$WIM" 2>/dev/null)" || true
   n="$(grep -c '^signature ' <<<"$sigs" || true)"
   if [ "$n" = 1 ]; then ok "beast-booter/wimboot has exactly one signature (sbverify)"; else bad "beast-booter/wimboot has $n signatures (expected 1)"; fi
-  if efi_inspect require "$WIM" --only "beast-boot=$VERIFY_PEM" >/dev/null 2>&1; then
-    ok "beast-booter/wimboot has exactly one signature, which verifies with the beast-boot certificate"
+  signer_check wimboot "$WIM"
+  if efi_inspect require "$WIM" --only "the BeastBoot CA=$VERIFY_PEM" >/dev/null 2>&1; then
+    ok "beast-booter/wimboot has exactly one signature, which chains to the BeastBoot CA certificate"
   else
-    bad "beast-booter/wimboot is not signed by the beast-boot certificate alone"
+    bad "beast-booter/wimboot is not signed through the BeastBoot CA certificate alone"
   fi
   # the build output is unsigned: everything below compares the file with its signature removed
   cp "$WIM" "$T/wimboot-unsigned"
@@ -328,18 +403,10 @@ if [ "$REBUILD" = 1 ]; then
     if [ "$nbad" -eq 0 ]; then ok "all $nmod files in grub/i386-pc/ are byte-identical to the rebuilt ones"
     else bad "$nbad of $nmod files in grub/i386-pc/ differ from the rebuilt GRUB"; fi
     if cmp -s "$DIST/bios/boot.img" "$GOUT/i386-pc/boot.img"; then ok "bios/boot.img is byte-identical"; else bad "bios/boot.img differs"; fi
-    # grubx64.efi: same modules, memdisk (rebuilt from the dist/ fonts) and SBAT
+    # grubx64.efi: same modules, memdisk (rebuilt from the dist/ files in [3]) and SBAT
     mapfile -t mods < <(python3 -I -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["build"]["efi_modules"]))' "$DIST/manifest.json")
-    mapfile -t memd < <(python3 -I -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["build"]["efi_memdisk"]))' "$DIST/manifest.json")
-    margs=(); for e in "${memd[@]}"; do margs+=("${e%%=*}=$DIST/${e#*=}"); done
-    if python3 -I "$HERE/theme/mkmemdisk.py" --out "$T/memdisk.tar" "${margs[@]}" >/dev/null \
-       && [ "$(sha "$T/memdisk.tar")" = "$(mget build.efi_memdisk_sha256)" ]; then
-      ok "memdisk rebuilt from the dist/ fonts matches efi_memdisk_sha256"
-    else
-      bad "memdisk rebuilt from the dist/ fonts does not match efi_memdisk_sha256"
-    fi
     if "$GOUT/bin/grub-mkimage" -O x86_64-efi -d "$GOUT/x86_64-efi" -m "$T/memdisk.tar" -p "$(mget build.efi_prefix)" \
-         --sbat "$T/sbat.manifest" -o "$T/rebuilt.efi" "${mods[@]}" 2>"$T/mk.log"; then
+         -c "$T/early-efi.cfg" --sbat "$T/sbat.manifest" -o "$T/rebuilt.efi" "${mods[@]}" 2>"$T/mk.log"; then
       if [ "$(sha "$T/rebuilt.efi")" = "$(mget secure_boot.grub_unsigned_sha256)" ]; then
         ok "unsigned grubx64.efi rebuilt from source is byte-identical"
       else
@@ -347,6 +414,17 @@ if [ "$REBUILD" = 1 ]; then
       fi
     else
       bad "grub-mkimage (x86_64-efi) failed: $(head -n1 "$T/mk.log")"
+    fi
+    # ... and the image the build id was computed from: the same, with an empty id in version.cfg
+    sed 's/^set bb_build_id=".*"$/set bb_build_id=""/' "$ESP/grub/beast/version.cfg" > "$T/version-noid.cfg"
+    nargs=(); for e in "${margs[@]}"; do [ "${e%%=*}" = grub/beast/version.cfg ] || nargs+=("$e"); done
+    if python3 -I "$HERE/theme/mkmemdisk.py" --out "$T/memdisk-noid.tar" "${nargs[@]}" "grub/beast/version.cfg=$T/version-noid.cfg" >/dev/null 2>&1 \
+       && "$GOUT/bin/grub-mkimage" -O x86_64-efi -d "$GOUT/x86_64-efi" -m "$T/memdisk-noid.tar" -p "$(mget build.efi_prefix)" \
+            -c "$T/early-efi.cfg" --sbat "$T/sbat.manifest" -o "$T/rebuilt-noid.efi" "${mods[@]}" 2>"$T/mk.log" \
+       && [ "$(sha "$T/rebuilt-noid.efi")" = "$(mget secure_boot.grub_unsigned_noid_sha256)" ]; then
+      ok "grubx64.efi rebuilt with an empty build id = manifest grub_unsigned_noid_sha256 (what the build id covers)"
+    else
+      bad "grubx64.efi rebuilt with an empty build id does not match grub_unsigned_noid_sha256"
     fi
     mapfile -t bmods < <(python3 -I -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["build"]["bios_core_modules"]))' "$DIST/manifest.json")
     sed -e 's/^[[:space:]]*#.*//' "$HERE/early-bios.cfg" | grep -v '^[[:space:]]*$' > "$T/early.cfg"

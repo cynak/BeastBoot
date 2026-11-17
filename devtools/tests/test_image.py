@@ -14,7 +14,7 @@ for _p in (ROOT / "devtools", ROOT / "installer"):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-from beastbooter import layout  # noqa: E402
+from beastbooter import esp, layout  # noqa: E402
 
 from bbdev import cli, diskimg, freshness, menufiles, paths, userconfig  # noqa: E402
 from bbdev.commands import image  # noqa: E402
@@ -148,8 +148,9 @@ def test_real_fat32_build(tmp_path, capsys):
     assert "1 empty folder kept" in stdout
     cfg = userconfig.UserConfig(fat.read(diskimg.USER_CONFIG).decode())
     assert cfg.settings() == {"bb_debug": "1", "bb_dryrun": "1", "bb_autoboot": "/linux/a.iso"}
-    device_cfg = info.esp().read("/grub/beast/device.cfg").decode()
-    assert 'bb_serial="1"' in device_cfg
+    # config.env carries the same settings: it is what the menu reads on UEFI
+    assert esp.parse_env_block(fat.read(diskimg.USER_ENV)) == cfg.settings()
+    assert esp.parse_env_block(info.esp().read(diskimg.DEVICE_ENV))["bb_serial"] == "1"
     # --force replaces it
     assert cli.main(["image", "--out", str(out), "--size", "1G", "--fs", "fat32", "--force"]) == 0
     assert diskimg.image_info(out).data_fat().read(diskimg.USER_CONFIG) is None

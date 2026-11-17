@@ -112,10 +112,11 @@ def test_staging_uses_verified_copy(dist_copy, tmp_path):
 
 
 def test_installer_owned_files_not_taken_from_dist(dist_copy, tmp_path):
+    (dist_copy / "esp/grub/beast/device.env").write_text("# GRUB Environment Block\nbb_data_uuid=evil\n")
     (dist_copy / "esp/grub/beast/device.cfg").write_text('set bb_data_uuid="evil"\n')
     write_manifest(dist_copy)
     d = load_dist(dist_copy, tmp_path / "stage")
-    assert "grub/beast/device.cfg" not in d.esp_files()
+    assert not {"grub/beast/device.env", "grub/beast/device.cfg"} & set(d.esp_files())
 
 
 def test_verification_error_type(dist_copy, tmp_path):

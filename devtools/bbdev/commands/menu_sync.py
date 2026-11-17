@@ -1,10 +1,17 @@
 """bb-dev menu-sync: push grub/ into an image's ESP for the edit -> reboot loop.
 
+Legacy BIOS only. Under UEFI the menu is inside the signed grubx64.efi (its
+memdisk: grub.cfg, grub/beast/, the theme, the fonts) and GRUB never reads the
+ESP's /grub/ scripts, with Secure Boot on or off; a synced file changes nothing
+there. So: boot the image with `bb-dev vm --mode bios` for the quick loop, and
+for UEFI run `make build` and start `bb-dev vm`, which puts the new boot files
+on the image (docs/DEVELOPMENT.md, "The menu edit loop"). Every run says so.
+
 Copies the menu files (same selection as build/build.sh) into /grub/ on the
 image's ESP with mtools, at the ESP offset from `beast-boot info --json`.
 The ESP then mirrors grub/: changed files are rewritten, new ones added, and
 menu files that are no longer in grub/ removed. Never touched: version.cfg,
-device.cfg, grubenv and everything else the build puts under /grub/ from other
+device.env, grubenv and everything else the build puts under /grub/ from other
 sources (dist/manifest.json: the theme from build/theme, fonts, i386-pc/).
 BB_MENU_DIR overrides the source directory, as for build.sh.
 
@@ -29,12 +36,17 @@ from .. import diskimg, freshness, menufiles, paths
 from ..msg import Failure, error, note, rel, run_guarded, warn
 
 CMD = "menu-sync"
+BIOS_ONLY = ("this changes the menu under legacy BIOS only (`bin/bb-dev vm --mode bios`). Under UEFI the menu is "
+             "inside the signed grubx64.efi and the ESP's /grub/ is not read: run `make build`, then "
+             "`bin/bb-dev vm` (it updates the image's boot files)")
 
 
 def register(sub) -> None:
-    p = sub.add_parser("menu-sync", help="push edited grub/ files into an image's ESP",
+    p = sub.add_parser("menu-sync", help="push edited grub/ files into an image's ESP (legacy BIOS only)",
                        description="Copy grub/ (menu scripts) into the image's ESP /grub/, so a reboot of "
-                                   "the VM shows the change without `make build` and a reinstall.")
+                                   "a legacy BIOS VM (bb-dev vm --mode bios) shows the change without "
+                                   "`make build` and a reinstall. Under UEFI the menu is inside the signed "
+                                   "grubx64.efi and this changes nothing: `make build`, then `bb-dev vm`.")
     p.add_argument("--image", type=Path, metavar="PATH", help=f"drive image (default: {rel(paths.DEFAULT_IMAGE)})")
     p.add_argument("--watch", action="store_true", help="keep running and re-sync whenever grub/ changes")
     p.add_argument("--interval", type=float, default=1.0, metavar="SECONDS",
@@ -180,6 +192,7 @@ def _run(args) -> int:
     src = menufiles.menu_dir()
     info = diskimg.image_info(image)
     check_fresh(info)
+    note(CMD, BIOS_ONLY)
     if not args.watch:
         res = sync(info, src)
         report(res, info, src)

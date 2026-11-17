@@ -34,7 +34,11 @@ This file is the contract between the parts built in parallel. Code:
 3. **Only a confirmed target becomes writable**, after the plan screen and a
    typed confirmation (last 6 characters of the target's serial; the whole
    serial if two disks end the same). The target is re-identified (serial,
-   WWN, size) right before writing and opened `O_EXCL` for the whole job.
+   WWN, size, and a hash of its first and last MiB taken when the plan was
+   made) right before writing and opened `O_EXCL` for the whole job.
+   A serial that two attached disks report (many USB bridges report a fixed
+   one) names neither: no source, target or image disk can be given by it,
+   and neither disk can be written until one is unplugged.
 4. **Refusals** (`disk-refused`, reason shown): the BeastBoot stick itself;
    the source or any member of the source stack; a disk holding the image,
    mapfile or hash list; a disk with a mounted filesystem or an active
@@ -103,8 +107,10 @@ assemble ok id=<stack> dev=<path> ro=1   |   assemble fail id=<stack> code=<code
 reconstruct candidate rank=<n> level=<l> chunk=<bytes> order=<i,j,...> layout=<l> offset=<bytes> score=<f>
                                              # order: indices into the given members by slot, "-" = missing; layout "-" = none
 copy start kind=<clone|image|restore> src=<id|path> dst=<id|path> size=<bytes>
-copy progress done=<bytes> errors=<n> rate=<bytes/s>
-copy done kind=<k> bytes=<n> errors=<n> sha256=<hex|->   |   copy stopped resumable=1
+copy progress done=<bytes> errors=<n> unread=<bytes> rate=<bytes/s>
+copy done kind=<k> bytes=<n> errors=<n> unread=<bytes> sha256=<hex|->   |   copy stopped resumable=1
+                                             # errors = bad areas in the mapfile (both lines), unread = bytes not recovered
+fs repair dev=<dev> fs=<type> result=<fixed|clean|refused|failed>   # a dirty drive checked before a copy (s.6)
 health id=<kernel> status=<ok|warn|fail> hours=<n> realloc=<n> pending=<n> wear=<pct|->
 disk dest id=<kernel> dev=<path> fs=<type> rw=0|1 free=<bytes>   # a disk opened for image files (rw=1) or to read one (rw=0)
 ```
@@ -144,6 +150,7 @@ stacks are stopped). Optional keys:
 | `use_disk` (`disk`, `confirm`) | `partition`: opens one exFAT/NTFS/ext4/XFS filesystem of a confirmed disk read-write for image files (largest one by default); refused for the stick, a disk without a serial, or a disk of any set |
 | `image`, `clone` | `verify` (default true); `member_of_set: true` to copy one disk of a multi-disk set on its own (refused otherwise); `image` also `on` (serial of a disk opened by `use_disk`) |
 | `restore` | `verify`; `on` (the image is on another disk: opened read-only, no journal replay, no confirmation; or the disk `use_disk` opened) |
+| `image`, `clone`, `restore` | `restart: true`: start over when the saved progress cannot be trusted (without it the step ends with `error copy ... cannot be trusted`) |
 
 Without `on`, image paths are on the stick's data partition. A `use_disk`
 disk is made writable through the guard (`make_writable`, then `exempt`
@@ -158,6 +165,40 @@ A `source` is a reconstruction name, a started stack id (when it gave one
 volume), a volume id or path, or a disk serial or name. Image paths are on
 the stick's data partition; ddrescue mapfiles go to `/disk-tools` there.
 
+**Progress that survives a power cut** (`disks/mapstore.py`, `disks/fsrepair.py`).
+ddrescue writes its mapfile in RAM (`/run/beastnet/disk-maps`). Every 30 seconds, after
+each ddrescue pass, on a stop and at the end, the engine copies it to the mapfile's
+place. It does this only when the map is complete (it covers the whole source, has no
+gaps and no unknown states). Before the copy, it fsyncs the target, so every area the
+map calls finished is on the target. The copy is written as `<map>.tmp`, fsynced and
+renamed over `<map>`, then the directory is fsynced. Each copy carries the source size
+and its own SHA-256 in its first line.
+
+30 seconds keeps a slow USB stick from an fsync storm: one small file and three fsyncs
+per interval. A power cut loses at most about a minute of progress, because ddrescue
+itself saves the RAM map every 30 seconds.
+
+When a copy starts, it uses the newest saved map whose checksum and coverage hold.
+A map that is damaged, torn, or was not written this way is never used: the step stops
+with `error copy ... cannot be trusted`. The screen then offers "Start over", and script
+mode has `restart: true`. The damaged file is kept as `<map>.untrusted`.
+
+Disk tools check two kinds of filesystem after a power cut. The stick's data partition is
+checked when Disk tools start, before the guard. A `use_disk` disk, confirmed with its
+serial, is checked before it is mounted. Each has its checker run in automatic mode, and
+the screen and an `fs repair` line say so:
+
+| fs | handling |
+|---|---|
+| FAT32 | `fsck.fat -a -w` |
+| exFAT | `fsck.exfat -p` |
+| ext4 | the read-write mount replays the journal |
+| XFS | the read-write mount replays the log |
+| NTFS | refused with "run chkdsk /f in Windows" |
+
+Sources and disks opened read-only are never checked. If the stick cannot be repaired,
+copies that would keep their map there are refused with the reason.
+
 **Confirmation in two stages.** `copy.plan(..., confirm=None)` runs every
 other check and returns the plan with `confirmed=False` (for the plan
 screen); `copy.plan(..., confirm=<typed>)` raises `disk-refused` when the
@@ -168,31 +209,68 @@ make_writable, relock, open_exclusive, spawn, ...) for tests.
 
 ## 7. Tests
 
-- Unit tests with fake sysfs/proc trees and stub tools (`beastnet/tests/`).
-- QEMU e2e: NVMe (`-device nvme,serial=`) and AHCI disks, not virtio; md
-  RAID 0/1/5/6/10 incl. degraded; IMSM/DDF made with
-  `IMSM_NO_PLATFORM=1 mdadm -e imsm|ddf`; LVM, LUKS, btrfs RAID1; arrays
-  with wiped metadata and shuffled order for reconstruction (oracle: the
-  original parameters and file hashes); dm-flakey/blkdebug for read errors.
+- Unit tests with fake sysfs/proc trees and stub tools (`beastnet/tests/`, `make test`).
+  Rescue and stop/resume at this level use a stub `ddrescue`.
+- QEMU e2e, `tests/e2e/test_e2e_disks.py`: NVMe (`-device nvme,serial=`) and
+  AHCI disks, not virtio. Detection and read-only assembly of md RAID 0/1/5/6/10/linear,
+  incl. degraded RAID1/RAID5 and internal and stale write-intent bitmaps. md metadata
+  0.90, 1.0 and 1.1 (RAID1 and RAID5 each) besides 1.2; a RAID1 member with the superblock
+  at the end reads as a plain ext4 disk and is still refused as a place for images. IMSM RAID5 and
+  DDF RAID1, made with `IMSM_NO_PLATFORM=1 mdadm -e imsm|ddf`. LVM, incl. a duplicate VG
+  name and a refused raid1 LV. LUKS2, btrfs RAID1. Wiped md RAID0/RAID5/RAID5-missing:
+  the reconstruction candidate's parameters are checked against the original ones (the
+  rebuilt array is not imaged). Image and restore of a 512-byte GPT disk; clone AHCI to
+  NVMe; the clone refusals.
+- QEMU e2e, `tests/e2e/test_e2e_disks_copy.py`:
+  - Clone onto an equal-size and a larger target, MBR and GPT. On the larger target the
+    partitions are byte-exact, the extra space is untouched and the GPT backup header
+    moves to the end.
+  - 4Kn to 4Kn (NVMe `logical_block_size=4096`); 512e source or target (AHCI
+    `physical_block_size=4096`). Refused: a clone between 4Kn and 512 in either
+    direction, and a raw restore of a 4Kn image onto a 512 disk.
+  - A USB target (`usb-storage`).
+  - An assembled md RAID1, an LVM LV and an opened LUKS volume as the source: cloned to a
+    disk, and imaged to a file and restored to another disk.
+  - Rescue with the real `ddrescue` against read errors injected with QEMU `blkdebug`
+    (bad sectors at the start, in the middle and a 1 MiB region), cloned and imaged. The
+    tests check the mapfile, every readable byte and the bad-area count. dm-flakey is not used.
+  - Stop and resume: QEMU is killed mid-copy (a power cut) and the same plan runs again,
+    for a clone and for a rescue. The second run checks the stick's FAT, continues from
+    the mapfile and ends with the same result as an uninterrupted copy. A stop without a
+    power cut has no QEMU test: script mode has no stop.
+- **Firmware modes.** Every test above boots the helper under UEFI. A chosen set also runs
+  under legacy BIOS and under UEFI with Secure Boot (shim, the signed GRUB, the signed helper
+  kernel in lockdown, `beastnet.sb=1`): the scan; detection, read-only assembly and imaging
+  of md RAID 0/1/linear/5/10, LVM, LUKS2 and btrfs; one disk clone; the rescue with a power
+  cut and resume. `test_modules_load_under_lockdown` checks under Secure Boot that the
+  kernel is locked down, that every on-demand module of section 8 loads, and that an
+  unsigned copy of a shipped module is refused. Under Secure Boot the helper asks on the
+  console before it runs a plan from the stick; the tests answer it.
 - **The gate:** the host hashes every source image before and after each
-  read-only flow (scan, assemble, reconstruct, image, clone); any changed
+  flow (scan, assemble, reconstruct, image, clone, rescue); any changed
   byte fails.
-- Real hardware later: the maintainer's Intel RST/VMD board.
+- Not in QEMU (hardware only): Intel RST/VMD with real serials, hardware RAID
+  controllers, USB bridges' SMART, a genuinely failing disk. The maintainer's Intel
+  RST/VMD board comes later.
 
 ## 8. Platform notes (helper image: drivers, tools, running without udev)
 
-The mdadm (md RAID1, read-only assemble), LVM (read-only activation), dmsetup and cryptsetup (LUKS2 read-only) lines were exercised in QEMU (q35, 1 GiB, no udev); the IMSM/DDF, LDM, partial-VG and smartctl-on-USB lines are untested.
+These lines were exercised in QEMU (q35, 2 GiB, no udev, `tests/e2e/test_e2e_disks*.py`; UEFI, and a chosen set under BIOS and Secure Boot, see section 7): mdadm (md RAID 0/1/5/6/10/linear and IMSM/DDF read-only assemble), LVM (read-only activation), dmsetup, cryptsetup (LUKS2 read-only) and ddrescue (real read errors). The LDM, partial-VG and smartctl-on-USB lines are untested, and so is running at 1 GiB.
 
 **Drivers.** `nvme`, `ahci`, `sata_*`, `pata_*`, `vmd` and the HBA/RAID-controller drivers
 (`megaraid_sas`, `mpt3sas`, `mpi3mr`, `hpsa`, `smartpqi`, `aacraid`, `3w-*`, `arcmsr`) load at
 coldplug by PCI modalias, like the network drivers; a RAID controller shows up as ordinary
 disks. Built into the kernel: `md-mod`, `dm-mod`, `loop`, `libata`, `sd_mod`, `ext4`, `vfat`,
-and the crypto used by LUKS (aes, xts, cbc, sha256/512). Loaded **on demand, by the Python
-code** (`modprobe -q`, ignore failure): md levels `raid0 raid1 raid10 raid456 linear`
-(mdadm also triggers them), `dm-crypt dm-snapshot dm-mirror dm-raid dm-thin-pool dm-cache
+and the crypto used by LUKS (aes, xts, cbc, sha256/512). Loaded **on demand, by the
+kernel** when mdadm, device-mapper, cryptsetup or `mount` first need them (the Python code
+does not `modprobe` them; it only does so for the optional ZFS pack): md levels `raid0 raid1 raid10 raid456
+linear`, `dm-crypt dm-snapshot dm-mirror dm-raid dm-thin-pool dm-cache
 dm-integrity dm-zero dm-delay dm-flakey`, `btrfs xfs hfsplus hfs udf exfat ntfs3 isofs`,
-`essiv adiantum lrw serpent_generic twofish_generic`. All are in-tree modules signed by the
-kernel build, so they load under Secure Boot lockdown (`beastnet.sb=1`); nothing else may be added.
+`essiv adiantum lrw serpent_generic twofish_generic`. A btrfs set is offered as a device and
+not mounted, so starting one does not load `btrfs`. All are in-tree modules signed by the
+kernel build, so they load under Secure Boot lockdown (`beastnet.sb=1`); nothing else may be
+added. This is tested: with Secure Boot on, lockdown reads `integrity`, each module in this
+list loads, and a module with its signature removed is refused (section 7).
 There is no APFS, no ReFS and no ZFS module (ZFS is the optional pack).
 
 **Programs** (`/usr/sbin`, `/usr/bin`): `mdadm mdmon lvm (pvs vgs lvs pvscan vgscan lvscan

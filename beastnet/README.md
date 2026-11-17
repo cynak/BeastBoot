@@ -24,8 +24,8 @@ Modules: `download` (HTTPS client, redirects, resume, checksums, free space),
 block, byte-compatible with `grub-editenv`), `net` + `firmware` + `wifi` (NICs,
 missing firmware -> catalog pack, DHCP, `iw` scan, wpa_supplicant), `script`
 (`beastnet.script=` plans), `flow` (the interactive steps), `ui/tui.py` (curses)
-and `ui/plain.py` (line-based fallback), `events` (`BEASTNET:` lines), `app`
-(command line).
+and `ui/plain.py` (line-based fallback), `events` (`BEASTNET:` lines), `addons`
+(the add-on hook, see [Add-ons](#add-ons)), `app` (command line).
 
 ## How it runs
 
@@ -81,6 +81,72 @@ for images on the server later) instead of `beastnet.data=` / `beastnet.esp=`. T
   that a stopped copy resumes only until the computer restarts. Every other safety
   rule (read-only guard, typed serial, refusals) is unchanged.
 - Logs stay in `/run/beastnet` (RAM), as on the stick.
+
+## Add-ons
+
+A boot loader can add its own Python code to the helper. BeastBoot ships no
+add-on and does not need one; without an add-on nothing changes.
+
+**Where.** An add-on is a Python package in `/usr/lib/beastnet/addons/<name>/`
+in the initramfs. `<name>` is lower-case letters, digits and `_`. The boot
+loader puts it there by loading one more initrd archive (a cpio archive, as the
+firmware packs are) after `initrd.img`; the kernel unpacks it over the helper's
+files.
+
+**Trust rule.** The helper loads add-ons from that one directory of the
+initramfs and from nowhere else: never from the data partition, the ESP, a
+mounted disk or the network, and no kernel parameter can change the directory.
+The boot loader's menu decides which initrd archives are loaded, so an add-on is
+exactly as trusted as the rest of the initramfs (`/init` and the app itself): a
+boot loader that loads only archives it trusts gets only add-ons it trusts.
+An entry that is a link to another place, or that is not on the initramfs
+itself (something mounted over the directory), is refused. Note for the
+BeastBoot drive: its menu loads `initrd.img` and the firmware packs from the
+ESP, and these files are not signed (docs/SECURE_BOOT.md, "What this does not
+cover"). Someone who can write the ESP can already replace any file of the
+helper; add-ons do not change that.
+
+**Entry point.** The package's `__init__.py` has one function:
+
+```python
+def start(params, ui, ctx, version):
+    ...
+    return None      # or a beastnet.ui.UI object that wraps ui
+```
+
+| Argument | What it is |
+|---|---|
+| `params` | the parsed kernel command line (`cmdline.BootParams`). `params.extra` is a dict of every `beastnet.<key>=<value>` parameter the helper does not know itself (key without `beastnet.`, a parameter without a value is `"1"`, the last one wins). The helper keeps these, never rejects them and never logs them. |
+| `ui` | the screen the helper is about to use (`ui.UI`: the curses screen or the line-based one) |
+| `ctx` | the run's `context.Context` (paths, reporter, system, network, ...) |
+| `version` | the helper's version, e.g. `0.5.0` |
+
+`start()` is called once, after script mode and before the first interactive
+screen (so not when a script plan ends the run). It returns `None`, or a
+`ui.UI` object that the helper then uses for all its screens in place of `ui`.
+Such an object passes the screens on to `ui` and closes `ui` in its own
+`close()`; the helper calls `close()` at the end. Several add-ons are started
+in name order; each gets the UI the one before it returned.
+
+Disk tools call three more methods on the UI when it has them:
+`attach_disks(session)` when the Disk tools open (the `DiskSession`),
+`write_plan(kind, plan, target, inventory)` just before a typed confirmation
+of a write, and `copy_progress(progress)` for every `CopyProgress` of a copy.
+The titles of those typed confirmations are in `diskflow.WRITE_CONFIRMS`.
+
+**Failures.** An add-on can never stop the helper from starting. If it cannot
+be imported, has no `start()`, raises, or returns something that is not a UI,
+the helper logs one line and goes on with the local screen:
+
+```
+BEASTNET: addon <name> started ui=<wrapped|local>
+BEASTNET: addon <name> failed <error>
+BEASTNET: addon <name> refused <reason>
+```
+
+The code is `python/beastnet/addons.py`; tests are `tests/test_addons.py` and
+`tests/e2e/test_e2e_addons.py` (a toy add-on in a second initrd, UEFI and
+Secure Boot).
 
 ## Testing
 

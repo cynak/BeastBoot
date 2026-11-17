@@ -363,6 +363,9 @@ def blocked_hint() -> str:
 # ---------------------------------------------------------------------------
 
 ELEVATION_PROMPT = "beast-boot needs administrator rights to write to the selected drive."
+# After osascript was killed: how long poll() waits for the root shell to record the status of
+# a command that has just ended, before it reports osascript's own status instead.
+EXIT_RECORD_GRACE = 5.0
 
 
 def applescript_string(s: str) -> str:
@@ -481,6 +484,7 @@ class OsascriptProcess(PopenProcess):
         self._out, self._err = out, err
         self._cancels = 0
         self._stopped_before_start = False
+        self._ended_at: float | None = None  # when poll() first saw the command gone with no status yet
         self.stdout = ""
         self.stderr = ""
         self.output = ""
@@ -507,8 +511,17 @@ class OsascriptProcess(PopenProcess):
         rc = self._p.poll()
         if rc is None:
             return None
-        if rc < 0 and self.started() and self.files.marker("exit-") is None and self._command_alive():
-            return None  # osascript was killed, the installer itself still runs
+        if rc < 0 and self.started() and self.files.marker("exit-") is None:
+            # osascript was killed. The installer itself still runs, or it has just ended and
+            # the root shell records its status a moment later: wait for that record.
+            if self._command_alive():
+                self._ended_at = None
+                return None
+            now = time.monotonic()
+            if self._ended_at is None:
+                self._ended_at = now
+            if now - self._ended_at < EXIT_RECORD_GRACE:
+                return None
         self.returncode = self._finish(rc)
         return self.returncode
 

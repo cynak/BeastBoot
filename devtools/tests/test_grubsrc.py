@@ -235,6 +235,53 @@ def test_sbat_lines_raise_the_proven_generation(tmp_path):
     assert gs.sbat_lines(out)[1].startswith("grub,6,Free Software Foundation,grub,2.14,")
 
 
+def test_sbat_lines_take_the_highest_proven_claim(tmp_path):
+    claims = [dict(_claim(7, ["B"]), proven=True, missing=[]), dict(_claim(6, ["A"]), proven=True, missing=[])]
+    out = _out(tmp_path, [_done("A", [{"present": True}]), _done("B", [{"present": True}])], claims)
+    assert gs.sbat_lines(out)[1].startswith("grub,7,Free Software Foundation,grub,2.14,")
+
+
+# --------------------------------------------------------------------------- the grub,7 claim
+
+SERIAL_FIX = "CVE-2026-97876"
+SERIAL_COMMIT = "26beaa3b2720fefdc4d04c1ae209b776fe6848d6"
+
+
+def test_repo_claims_grub7_for_the_serial_fix_only():
+    """grub,7 is what shim's SbatLevel 2026092500 requires (CVE-2026-97876): the claim names
+    that level and that fix, and the fix is proven by its upstream commit and comes from our patch."""
+    top = max(FIXES["sbat_claims"], key=lambda c: c["generation"])
+    assert (top["component"], top["generation"], top["shim_sbat_level"]) == ("grub", 7, "2026092500")
+    assert top["requires"] == [SERIAL_FIX]
+    assert "20e9be4dea5a503e4e9e2ecbc87b6b55bb79d692" in top["level_source"] and "grub,7" in top["level_text"]
+    assert [c["generation"] for c in FIXES["sbat_claims"]] == [6, 7], "grub,6 stays claimed with its own fixes"
+    assert "not_claimed" not in FIXES
+    fix = next(f for f in FIXES["fixes"] if f["id"] == SERIAL_FIX)
+    assert fix["sbat"] == "grub,7" and [e["commit"] for e in fix["evidence"]] == [SERIAL_COMMIT]
+    assert fix["where"].split()[0].removeprefix("build/grub/patches/") in SERIES
+
+
+def test_grub7_claim_is_refused_when_the_serial_fix_is_missing(tmp_path, monkeypatch):
+    """The repo's own security-fixes.json against a source tree without the serial fix (the
+    real reverse-apply check of upstream commit 26beaa3b fails there); every other fix is
+    taken as present. grub,6 stays proven, grub,7 does not, and the build stops."""
+    if not shutil.which("patch"):
+        pytest.skip("needs patch(1)")
+    real = gs.fix_present
+    monkeypatch.setattr(gs, "fix_present", lambda src, ev: real(src, ev) if ev.get("commit") == SERIAL_COMMIT
+                        else (True, "taken as present"))
+    r = gs.check_fixes(tmp_path)
+    assert r["missing"] == [SERIAL_FIX]
+    by_gen = {c["generation"]: c for c in r["sbat_claims"]}
+    assert by_gen[6]["proven"] is True
+    assert by_gen[7]["proven"] is False and by_gen[7]["missing"] == [SERIAL_FIX]
+    with pytest.raises(gs.Fail, match=r"SBAT grub,7 is claimed.*NOT in the source: CVE-2026-97876"):
+        gs.refuse_unproven(r)
+    # with the fix present nothing is refused
+    monkeypatch.setattr(gs, "fix_present", lambda src, ev: (True, "taken as present"))
+    gs.refuse_unproven(gs.check_fixes(tmp_path))
+
+
 # --------------------------------------------------------------------------- BB_OFFLINE
 
 def test_offline_never_downloads(tmp_path, monkeypatch):

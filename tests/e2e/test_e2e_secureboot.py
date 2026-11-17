@@ -130,8 +130,9 @@ def test_2023_only_db_menu_runs_locked_down(sbvars_ok, mok_cert, make_drive, vm_
 
 
 # ---------------------------------------------------------------------------
-# User settings (docs/MENU.md): with Secure Boot on the menu reads only the
-# allow-list of /beast-booter/config.env; config.cfg (GRUB script) is ignored.
+# User settings (docs/MENU.md): on UEFI the menu reads only the allow-list of
+# /beast-booter/config.env; config.cfg (GRUB script) is ignored (without Secure
+# Boot too: test_e2e_signed_menu.py).
 # ---------------------------------------------------------------------------
 
 def test_enrolled_config_cfg_cannot_switch_off_checks(secureboot_ok, mok_cert, make_drive, vm_factory):
@@ -145,7 +146,7 @@ def test_enrolled_config_cfg_cannot_switch_off_checks(secureboot_ok, mok_cert, m
     drive = make_drive("main", cfg)
     vm = vm_factory("uefi-sb", drive.path, mok_certs=[mok_cert])
     checks.check_ready(checks.wait_ready(vm, timeout=120), platform="efi", sb=1)
-    assert vm.records("config-cfg-ignored-sb"), "the menu must say that config.cfg is ignored"
+    assert vm.records("config-cfg-ignored"), "the menu must say that config.cfg is ignored"
     err = vm.wait_record("error", timeout=120)
     assert error_code(err) == "sb-verify-failed", str(err)
     vm.expect_absent(r"BEAST_CFG_SCRIPT_RAN", within=3)
@@ -160,7 +161,7 @@ def test_enrolled_config_env_alone(secureboot_ok, mok_cert, make_drive, vm_facto
     boot = vm.wait_record("boot", timeout=120)
     assert boot.args.startswith(iso + " "), str(boot)
     vm.wait_record("dryrun", timeout=60, after=boot.start)
-    assert not vm.records("config-cfg-ignored-sb")
+    assert not vm.records("config-cfg-ignored")
 
 
 # ---------------------------------------------------------------------------

@@ -61,16 +61,16 @@ def test_update_events_and_warning(tmp_path, fake_dist, fake_dist_v2):
     img = tmp_path / "u.img"
     assert install(img, fake_dist, tmp_path / "i.jsonl") == 0
     progress = tmp_path / "u.jsonl"
-    # A FAT32 ESP marker is kept, device.cfg removed: update recreates it, with a warning.
+    # A FAT32 ESP marker is kept, device.env removed: update recreates it, with a warning.
     subprocess.run(["mdel", "-i", f"{img}@@{info_json(img)['esp']['start_lba'] * 512}",
-                    "::/grub/beast/device.cfg"], check=True,
+                    "::/grub/beast/device.env"], check=True,
                    env={**os.environ, "MTOOLS_SKIP_CHECK": "1", "MTOOLSRC": "/dev/null"})
     assert run_cli("update", "--image", img, "--quiet", "--progress-file", progress, "--dist", fake_dist_v2) == 0
     events = read_events(progress)
     assert events[0] == {"v": 1, "event": "start", "action": "update", "target": str(img)}
     assert step_ids(events) == ["verify-dist", "check-target", "write-esp", "boot-code", "flush", "verify-write"]
     warnings = [e["message"] for e in events if e["event"] == "warning"]
-    assert warnings == ["device.cfg was missing; recreating it from partition 1"]
+    assert warnings == ["device.env was missing; recreating it from partition 1"]
     assert events[-1]["event"] == "done" and events[-1]["info"]["version"] == "0.2.0"
 
 

@@ -19,12 +19,13 @@ from pathlib import Path
 from .errors import BeastError
 from .layout import (
     BOOT_IMG_SIZE,
-    DEVICE_CFG_PATH,
+    DEVICE_ENV_PATH,
     DIST_BOOT_IMG,
     DIST_CORE_IMG,
     DIST_ESP_DIR,
     DIST_MANIFEST,
     ESP_MARKER_PATH,
+    LEGACY_DEVICE_CFG_PATH,
     REQUIRED_ESP_FILES,
 )
 
@@ -34,7 +35,7 @@ WRITTEN_DIRS = (DIST_ESP_DIR, "bios")
 # Must never be shipped: shim would run it and create firmware boot entries.
 FORBIDDEN_ESP_FILES = ("efi/boot/fbx64.efi",)
 # Files the installer itself writes into the ESP.
-INSTALLER_ESP_FILES = (DEVICE_CFG_PATH, ESP_MARKER_PATH)
+INSTALLER_ESP_FILES = (DEVICE_ENV_PATH, LEGACY_DEVICE_CFG_PATH, ESP_MARKER_PATH)
 
 
 @dataclass

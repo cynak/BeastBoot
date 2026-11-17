@@ -35,7 +35,7 @@ def sh(*cmd, check=True, input=None, cwd=None):
 
 # --- loop devices ---------------------------------------------------------
 
-def loop_attach(path, offset=0, size=None):
+def loop_attach(path, offset=0, size=None, sector_size=None):
     with open("/dev/loop-control", "rb") as f:
         n = fcntl.ioctl(f, 0x4C82)  # LOOP_CTL_GET_FREE
     dev = f"/dev/loop{n}"
@@ -46,6 +46,8 @@ def loop_attach(path, offset=0, size=None):
         args += ["-o", offset]
     if size:
         args += ["--sizelimit", size]
+    if sector_size:
+        args += ["--sector-size", sector_size]
     sh(*args, dev, path)
     LOOPS.append(dev)
     return dev
@@ -125,6 +127,7 @@ def md_examine(dev):
         return m.group(1) if m else None
 
     return {
+        "version": g(r"Version : (\S+)") or "",
         "data_offset_bytes": int(g(r"Data Offset : (\d+) sectors") or 0) * 512,
         "chunk_kib": int(g(r"Chunk Size : (\d+)K") or 0),
         "layout": (g(r"Layout : (\S+)") or "").strip(),
@@ -144,15 +147,22 @@ def build_md_array(out, a, seed, wiped):
     devs = [loop_attach(out / f"{n}.img") for n in a["disks"]]
     md = next_md()
     bitmap = "internal" if a.get("bitmap") in ("internal", "stale") else "none"
-    cmd = ["mdadm", "--create", md, "--run", "--force", "--assume-clean", "--metadata=1.2", f"--level={a['level']}",
-           f"--raid-devices={len(devs)}", f"--bitmap={bitmap}", f"--uuid={a['uuid']}", f"--name={a['name']}"]
+    meta = a.get("metadata", "1.2")
+    cmd = ["mdadm", "--create", md, "--run", "--force", "--assume-clean", f"--metadata={meta}", f"--level={a['level']}",
+           f"--raid-devices={len(devs)}", f"--bitmap={bitmap}", f"--uuid={a['uuid']}"]
+    if meta != "0.90":  # a 0.90 superblock has no name field
+        cmd.append(f"--name={a['name']}")
     if a["level"] != "linear" and a["level"] != "1":
         cmd.append(f"--chunk={a['chunk_kib']}")
     if a.get("layout"):
         cmd.append(f"--layout={a['layout']}")
     sh(*cmd, *devs)
     rec = {"name": a["name"], "kind": "md", "level": a["level"], "uuid": a["uuid"], "slots": a["disks"],
-           "bitmap": a.get("bitmap") or "none"}
+           "bitmap": a.get("bitmap") or "none", "metadata": meta}
+    if meta != "1.2":
+        # the UUID as mdadm reports it for this superblock format (what a scan will show)
+        exported = dict(ln.split("=", 1) for ln in sh("mdadm", "--examine", "--export", devs[0]).splitlines() if "=" in ln)
+        rec["uuid"] = exported["MD_UUID"]
     rec["volumes"] = [fill_fs(md, "ext4", "BB" + re.sub(r"[^A-Z0-9]", "", a["name"].upper())[:10], seed + a["name"])]
     rec["examine"] = md_examine(devs[0])
     rec["array_size_bytes"] = dev_bytes(md)
@@ -365,10 +375,62 @@ def build_gpt(out, s, seed):
     return [{"name": "gpt-ntfs-ext4", "kind": "gpt-disk", "disk_guid": s["disk_guid"].lower(), "slots": [d["name"]], "volumes": parts}]
 
 
+def build_mbr(out, s, seed):
+    """MBR (dos) disk: an ext4 and an NTFS primary partition, fixed disk identifier."""
+    d = s["disks"][0]
+    img = out / f"{d['name']}.img"
+    sh("sfdisk", "-q", img, input=f"label: dos\nlabel-id: {s['disk_id']}\nunit: sectors\n"
+       "start=2048, size=131072, type=83\nstart=133120, size=131072, type=7\n")
+    parts = []
+    for i, (fs, label, first) in enumerate((("ext4", "BBMBREXT", 2048), ("ntfs", "BBMBRNTFS", 133120)), 1):
+        dev = loop_attach(img, offset=first * 512, size=131072 * 512)
+        r = fill_fs(dev, fs, label, seed + "mbr" + fs)
+        loop_detach(dev)
+        r.update(partition=i, start_sector=first, sectors=131072)
+        parts.append(r)
+    return [{"name": "mbr-ext4-ntfs", "kind": "mbr-disk", "disk_id": s["disk_id"], "slots": [d["name"]],
+             "volumes": parts}]
+
+
+def build_gpt4k(out, s, seed):
+    """GPT on a 4096-byte-sector disk (4Kn): the image is partitioned through a loop device
+    with --sector-size 4096, so every LBA in the table counts 4 KiB."""
+    d = s["disks"][0]
+    img = out / f"{d['name']}.img"
+    ss = d["lss"]
+    dev = loop_attach(img, sector_size=ss)
+    sh("sgdisk", "-U", s["disk_guid"], "-n", "1:256:+96M", "-t", "1:8300", "-u", f"1:{s['part_guids'][0]}",
+       "-c", "1:BB4KEXT4", dev)
+    info = sh("sgdisk", "-i", "1", dev)
+    loop_detach(dev)
+    first = int(re.search(r"First sector: (\d+)", info)[1])
+    last = int(re.search(r"Last sector: (\d+)", info)[1])
+    pdev = loop_attach(img, offset=first * ss, size=(last - first + 1) * ss, sector_size=ss)
+    r = fill_fs(pdev, "ext4", "BB4KEXT4", seed + "gpt4k")
+    loop_detach(pdev)
+    r.update(partition=1, start_sector=first, sectors=last - first + 1, sector_size=ss,
+             part_guid=s["part_guids"][0].lower())
+    return [{"name": "gpt4k-ext4", "kind": "gpt-disk", "disk_guid": s["disk_guid"].lower(), "sector_size": ss,
+             "slots": [d["name"]], "volumes": [r]}]
+
+
+# kernel modules the builders need; the container cannot load them itself unless the Docker
+# host's /lib/modules is mounted (disks.py does that), so load them up front
+MODULES = ["loop", "md_mod", "raid0", "raid1", "raid10", "raid456", "linear", "dm_mod", "dm_raid", "dm_crypt",
+           "dm_snapshot", "btrfs"]
+
+
+def load_modules():
+    p = subprocess.run(["modprobe", "-a", *MODULES], capture_output=True, text=True)
+    if p.returncode:
+        print("warning: modprobe:", (p.stderr or p.stdout).strip()[-300:], flush=True)
+
+
 BUILDERS = {
     "md": build_md, "wiped": build_wiped, "lvm": build_lvm, "luks": build_luks, "btrfs": build_btrfs, "gpt": build_gpt,
     "imsm": lambda o, s, sd: build_container(o, s, sd, "imsm"),
     "ddf": lambda o, s, sd: build_container(o, s, sd, "ddf"),
+    "mbr": build_mbr, "gpt4k": build_gpt4k,
 }
 
 
@@ -376,6 +438,7 @@ def main():
     recipe = json.loads(Path(sys.argv[1]).read_text())
     outdir = Path(sys.argv[2])
     only = sys.argv[3:]
+    load_modules()
     for i in range(0, 64):
         if not os.path.exists(f"/dev/loop{i}"):
             os.mknod(f"/dev/loop{i}", 0o660 | 0o060000, os.makedev(7, i))

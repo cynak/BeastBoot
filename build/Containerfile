@@ -51,7 +51,7 @@ ARG OPENSSL_VERSION=3.5.5-1ubuntu3.7
 ARG PYTHON3_VERSION=3.14.3-0ubuntu2
 ARG MAKE_VERSION=4.4.1-3
 ARG NOTO_VERSION=20201225-2build1
-ARG CA_CERTIFICATES_VERSION=20260816ubuntu0.26.04.1
+ARG CA_CERTIFICATES_VERSION=20260816ubuntu0.26.04.2
 # git: the beast-net firmware catalog (build/beastnet/gen_catalog.py) reads the linux-firmware tag.
 ARG GIT_VERSION=1:2.53.0-1ubuntu1.1
 

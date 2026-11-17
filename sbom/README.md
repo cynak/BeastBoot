@@ -79,6 +79,12 @@ SBOM too, when it describes exactly their boot files.
    records `under_investigation` or `affected` with an `action_statement`
    when there is no evidence. `not_affected` needs a `justification` or an
    `impact_statement`; the scanner ignores (and reports) invalid statements.
+   An SBAT revocation (`BB-SBAT-REVOKED-<component>-<generation>`) is different:
+   the scan measures it on the shipped binary, so no statement can close it.
+   It goes away when the binary carries the generation the level requires.
+   Its name ends in that generation, so a statement about one revocation
+   level never applies to a later one (a `fixed` statement for `grub,6` once
+   hid the `grub,7` revocation).
 4. The next `make vulns` applies `vex.openvex.json` and every other
    `vex.*.openvex.json` here (never the proposals), and the report shows
    each finding's VEX status next to it.

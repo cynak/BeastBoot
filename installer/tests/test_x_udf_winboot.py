@@ -11,6 +11,7 @@ import pytest
 
 from beastbooter import cli, safedir, udf, winboot
 from beastbooter.errors import BeastError
+from beastbooter.esp import parse_env_block
 from beastbooter.udf import UdfError
 from beastbooter.util import Reporter
 
@@ -60,7 +61,7 @@ def test_stamp_format():
     assert len(b) == 1024
     assert b.startswith(b"# GRUB Environment Block\nbb_wb_iso=/a\\\\b\nbb_wb_label=\n#")
     assert set(b[len(b"# GRUB Environment Block\nbb_wb_iso=/a\\\\b\nbb_wb_label=\n"):]) == {0x23}
-    assert winboot.parse_stamp(b) == {"bb_wb_iso": "/a\\b", "bb_wb_label": ""}
+    assert parse_env_block(b) == {"bb_wb_iso": "/a\\b", "bb_wb_label": ""}
 
 
 def make_root(tmp_path: Path, image: bytes) -> tuple[Path, Path]:
@@ -77,7 +78,7 @@ def test_prepare_cli(tmp_path, image, capsys):
     assert cli.main(["prepare-windows", "-q", str(iso)]) == 0
     d = root / "beast-booter" / "winboot" / "isos" / "Win11.iso"
     assert (d / "boot.wim").read_bytes() == wim_bytes()
-    st = winboot.parse_stamp((d / "stamp.env").read_bytes())
+    st = parse_env_block((d / "stamp.env").read_bytes())
     assert st["bb_wb_iso"] == "/isos/Win11.iso"
     assert (d / "iso-head.bin").read_bytes() == image[32768:98304]
     assert "bb_wb_uuid" not in st
@@ -97,7 +98,7 @@ def test_prepare_cli(tmp_path, image, capsys):
 def test_prepare_native_and_errors(tmp_path, capsys):
     root, iso = make_root(tmp_path, build_image(wim_bytes(), with_install=False))
     assert cli.main(["prepare-windows", "-q", str(iso)]) == 0
-    st = winboot.parse_stamp((root / "beast-booter/winboot/isos/Win11.iso/stamp.env").read_bytes())
+    st = parse_env_block((root / "beast-booter/winboot/isos/Win11.iso/stamp.env").read_bytes())
     assert st["bb_wb_kind"] == "native"
 
     r2, iso2 = make_root(tmp_path / "b", bytes(90000))

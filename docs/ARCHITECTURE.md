@@ -50,11 +50,13 @@ if this document and that file disagree, the file wins and this document is a bu
 UEFI (Secure Boot on or off)
   firmware -> ESP:\EFI\BOOT\BOOTX64.EFI   shim 16.1, Microsoft-signed through UEFI CA 2011 and 2023
                                          (from Debian shim-signed, docs/SECURE_BOOT.md §1)
-           -> ESP:\EFI\BOOT\grubx64.efi   beast-boot GRUB, signed with the beast-boot key
+           -> ESP:\EFI\BOOT\grubx64.efi   beast-boot GRUB, signed with its leaf certificate under the BeastBoot CA
                 (first boot with SB on and key not enrolled: shim shows a verification
                  error and starts MokManager (mmx64.efi); the user picks
                  "Enroll key from disk" -> ENROLL_THIS_KEY_IN_MOKMANAGER.cer -> reboot)
-           -> /grub/grub.cfg on the ESP -> beast-boot menu (grub/beast/*.cfg)
+           -> (memdisk)/grub/grub.cfg -> beast-boot menu (grub/beast/*.cfg): the menu is
+                inside grubx64.efi, in what its signature covers (§5); the ESP's
+                /grub/ scripts are not read
            -> selected ISO: kernel verified by shim (SB on), then booted
 
 Legacy BIOS
@@ -120,17 +122,22 @@ dist/
     EFI/BOOT/BOOTX64.EFI     Debian's shim 16.1 (Microsoft-signed, UEFI CA 2011 + 2023)
     EFI/BOOT/mmx64.efi       Debian's MokManager (signed through shim's Debian key)
     EFI/BOOT/grubx64.efi     beast-boot GRUB x86_64-efi: all modules embedded, SBAT,
-                             memdisk with the menu fonts (see below), signed
-    ENROLL_THIS_KEY_IN_MOKMANAGER.cer   beast-boot signing cert (DER)
+                             memdisk with the whole menu (see below), signed
+    ENROLL_THIS_KEY_IN_MOKMANAGER.cer   the BeastBoot CA certificate users enroll (DER); grubx64.efi,
+                             beast-net/vmlinuz and beast-booter/wimboot are each signed with
+                             their own leaf certificate from it (docs/SECURE_BOOT.md §1)
+    grub/                    the menu files, for legacy BIOS; UEFI reads its own copies of
+                             everything here except i386-pc/ from the memdisk of grubx64.efi
     grub/grub.cfg            from repo grub/grub.cfg
     grub/beast/*.cfg         from repo grub/beast/
+    grub/beast/hooks/*.sh    from repo grub/beast/hooks/ (handed to the booted Linux, §6)
     grub/beast/version.cfg   generated: set bb_version=...  set bb_build_id=...
     grub/themes/beast/       graphical theme: theme-{efi-sb,efi,pc}.txt, console.cfg,
                              PNG images, all drawn by build/theme/mktheme.py
     grub/fonts/*.pf2         NotoSans-{Regular-16,Regular-20,Bold-20}, NotoSansMono-Regular-16
                              (grub-mkfont from fonts-noto-core/-mono), unicode.pf2 (GRUB)
     grub/i386-pc/*.mod *.lst BIOS GRUB modules
-    beast-net/vmlinuz        Ubuntu's kernel, re-signed with the beast-boot key (code unchanged)
+    beast-net/vmlinuz        Ubuntu's kernel, re-signed with the BeastBoot kernel leaf (code unchanged)
     beast-net/initrd.img     helper initramfs (build/beastnet/, docs/BEASTNET.md §5)
     beast-net/VERSION        "beast-net <bb version> kernel <kver>"
     beast-net/catalog.json   firmware pack catalog (docs/BEASTNET.md §6)
@@ -138,20 +145,43 @@ dist/
                              source + our patches (build/wimboot/); one x86_64 hybrid image for
                              BIOS (GRUB linux16) and UEFI (GRUB linux); signed with the BeastBoot key
     beast-booter/winpe/      winpeshl.ini, beastboot.cmd: the Windows PE start-up files the menu
-                             injects with wimboot (build/winpe/, CRLF line endings)
+                             injects with wimboot (build/winpe/, CRLF line endings); for legacy
+                             BIOS, UEFI takes its copies from the memdisk of grubx64.efi
 ```
 
 There is deliberately **no** `fbx64.efi` in `EFI/BOOT/`: shim would run the
 fallback loader and create firmware boot entries on the user's machine.
 
-Fonts and Secure Boot: under lockdown GRUB loads fonts only from the memdisk
-of its own (shim-verified) image, so the Noto `.pf2` files are also packed
-into a deterministic tar (`build/theme/mkmemdisk.py`) embedded in
-`grubx64.efi` with `grub-mkimage -m`; the manifest records its member list
-and SHA-256 (`build.efi_memdisk`, `build.efi_memdisk_sha256`). The copies in
-`grub/fonts/` serve legacy BIOS. Theme files and PNGs load from the ESP in
-every mode. `BB_SKIP_BEASTNET=1` builds without `beast-net/`; the menu then
-hides its entry.
+The menu inside the signed image (0.5.0): every file staged under `esp/grub/`
+except `i386-pc/` (`grub.cfg`, `beast/*.cfg`, `beast/hooks/*.sh`,
+`beast/version.cfg`, the theme, the fonts), and the two Windows PE start-up
+scripts (`beast-booter/winpe/winpeshl.ini`, `beastboot.cmd`), is also packed into a deterministic
+tar (`build/theme/mkmemdisk.py`) that `grub-mkimage -m` embeds in
+`grubx64.efi`, together with the early config `build/early-efi.cfg`
+(`grub-mkimage -c`), which points GRUB's prefix at that memdisk (§5). The
+memdisk mirrors the ESP (`grub/...`), except the fonts, which sit in `fonts/`
+(under lockdown Ubuntu's GRUB loads fonts only as `(memdisk)/fonts/NAME.pf2`).
+The manifest records the member list and the tar's SHA-256
+(`build.efi_memdisk`, `build.efi_memdisk_sha256`), the SHA-256 of the early
+config (`build.efi_early_config_sha256`) and the prefix the image is built
+with (`build.efi_prefix`, `/grub`); `build/verify-dist.sh` rebuilds the tar
+from the files in `dist/` and finds it, and the early config, in
+`grubx64.efi` byte for byte. Under UEFI GRUB reads these files only from the
+memdisk (§5); the copies in `esp/grub/` serve legacy BIOS. A build with
+another menu or theme (`BB_MENU_DIR`, `build/theme/`) is another
+`grubx64.efi`, signed with the builder's own key. `BB_SKIP_BEASTNET=1` builds
+without `beast-net/`; the menu then hides its entry.
+
+The build id and the image: `version.cfg` carries `bb_build_id`, the id
+covers every file of the build, and `version.cfg` is inside `grubx64.efi`. So
+the image is built twice: first with an empty `bb_build_id`; the id is the
+hash of the version and of every staged file (the three signed files by their
+unsigned hashes, `grubx64.efi` by the hash of that first image; `version.cfg`
+and the certificate are left out, so the unsigned images do not depend on who
+signs them, [RELEASING.md](RELEASING.md)); then with the id filled in, which
+is the image that ships. `secure_boot.grub_unsigned_noid_sha256` is the
+first, `grub_unsigned_sha256` the second. `verify-dist.sh` recomputes the id
+from `dist/`, and with `--rebuild` rebuilds both images.
 
 wimboot and Secure Boot: our wimboot is patched (on UEFI it takes the files
 GRUB passes with `initrd newc:...` through LoadFile2, see
@@ -168,10 +198,12 @@ own program, built reproducibly with pinned MinGW-w64 packages
 (build/winpe/beastmountsrc.py). `BB_SKIP_WIMBOOT=1` builds without `beast-booter/`.
 
 The installer adds to the ESP, outside `dist/`: `BEAST-BOOTER.ID` (install
-id and layout version), `grub/beast/device.cfg` (§5), `grub/grubenv` (1024
+id and layout version), `grub/beast/device.env` (§5), `grub/grubenv` (1024
 bytes, §5) and, through `firmware install`, `beast-net/firmware/<id>.cpio`
-plus `installed.json`. `update` keeps `device.cfg` values, `grubenv` and the
-firmware packs.
+plus `installed.json`. `update` keeps the `device.env` values, `grubenv` and
+the firmware packs. A drive made before 0.5.0 has `grub/beast/device.cfg`
+(GRUB script) instead: `update` reads its values, writes `device.env` and
+leaves no `device.cfg` behind.
 
 `manifest.json` (schema 1):
 
@@ -182,7 +214,7 @@ firmware packs.
   "version": "0.3.0",
   "source_date_epoch": 1760000000,
   "secure_boot": {
-    "cert_sha256": "<sha256 of the DER cert>",
+    "cert_sha256": "<sha256 of the DER CA certificate, the one to enroll>",
     "cert_subject": "CN=...",
     "sbat": "<exact .sbat CSV embedded in grubx64.efi>"
   },
@@ -210,7 +242,10 @@ versions; for GRUB, which is built from source by `build/grub/grubsrc.py`:
 `wimboot_toolchain`), and in `secure_boot`: `cert_sha1` (what
 MokManager shows), `sbat_version_check`, `sbat_source`, `grub_security_fixes`,
 `shim_sbat_level_latest`, `shim_signers`, `shim_authenticode_sha256`,
-`shim_distro`, `grub_unsigned_sha256` and, for the re-signed helper kernel,
+`shim_distro`, `signer_<component>_subject`, `signer_<component>_cert_sha256`, `signer_<component>_cert_sha1`
+and `signer_<component>_not_after` (the leaf certificate that signed `grub`, `kernel`, `wimboot`; `cert_sha256`,
+`cert_sha1` and `cert_subject` are the CA's, the certificate to enroll),
+`grub_unsigned_sha256`, `grub_unsigned_noid_sha256` and, for the re-signed helper kernel,
 `beastnet_kernel_source`, `beastnet_kernel_authenticode_sha256`,
 `beastnet_kernel_unsigned_sha256`, `beastnet_kernel_replaced_signers` and `wimboot_unsigned_sha256` (wimboot is signed with the BeastBoot key). A `grub-src:` origin names
 a file of that GRUB build; gen_sbom.py and scan_vulns.py check it against the
@@ -223,36 +258,103 @@ rebuild byte-identically.
 
 ## 5. GRUB runtime contract
 
-Files on the ESP, sourced in this order by `grub/grub.cfg`:
+Where GRUB takes the menu from:
 
-1. `$prefix/beast/version.cfg` (build) — `bb_version`, `bb_build_id`.
-2. `$prefix/beast/device.cfg` (installer, may be missing) — see below.
-3. `$prefix/beast/main.cfg` — the menu. It locates the data partition, then
-   reads the optional user settings **from the data partition**, then shows
-   the menu (or autoboots, see below): `/beast-booter/config.env`, a GRUB
-   environment block read with `load_env` and an allow-list of names, then
-   `/beast-booter/config.cfg`, GRUB script, sourced only with Secure Boot
-   off. With Secure Boot on, `config.cfg` is ignored: anyone who can write
-   the drive could otherwise run GRUB commands in lockdown and choose the
-   arguments of signed kernels and loaders. `bb_sb` comes from GRUB's
-   `lockdown` before and again after the settings, so no setting can change
-   it ([MENU.md](MENU.md#user-configuration-configenv-and-configcfg)).
+| | `$prefix` | menu scripts, hooks, theme, fonts, `version.cfg` |
+|---|---|---|
+| UEFI (Secure Boot on or off) | `(memdisk)/grub` | the memdisk inside `grubx64.efi`, which its signature covers (§4) |
+| legacy BIOS | `(<ESP>)/grub` | the ESP (there is no signed chain to protect) |
 
-`device.cfg`, written by the installer (GRUB script, `set` lines only):
+How GRUB gets to its first config under UEFI (Ubuntu's GRUB 2.14 with our
+patches; checked in its source and by test). `grubx64.efi` is built with the
+prefix `/grub` and carries an embedded early config, `build/early-efi.cfg`,
+four lines that GRUB runs before normal mode:
 
 ```
-set bb_install_id="6f1c...-uuid4"
-set bb_layout="msdos"                # msdos | gpt
-set bb_data_fs="exfat"               # exfat | fat32 | ntfs
-set bb_data_uuid="1A2B-3C4D"         # as GRUB 2.14 `probe --fs-uuid` prints it (uppercase, same as blkid)
-set bb_data_uuid_linux="1A2B-3C4D"   # as blkid / /dev/disk/by-uuid shows it, for kernel cmdlines
-set bb_data_label="BEASTBOOTER"
-set bb_serial="0"                    # 1 = also use serial console (installer --serial-console)
+set bb_boot_dev="$root"      the device grubx64.efi was started from: the ESP
+unset fw_path
+set root=memdisk
+set prefix="(memdisk)/grub"
 ```
+
+- GRUB completes a prefix without a device with the device it was started
+  from, so `$root` is the ESP when the early config starts; `bb_boot_dev`
+  keeps it for the menu (`bb_esp`).
+- `fw_path`: Ubuntu's GRUB carries Fedora's patches (`debian/patches/network/`)
+  that set `fw_path` to the directory of the EFI binary, `(ESP)/EFI/BOOT`, and
+  make `normal` start `$fw_path/grub.cfg` **before** `$prefix/grub.cfg`. A
+  `grub.cfg` dropped next to `grubx64.efi` would run instead of the menu.
+  With `fw_path` unset GRUB goes to `$prefix/grub.cfg`. (This GRUB has no
+  `cmdpath` variable; `fw_path` replaces it.)
+- `prefix` then names the memdisk, so the first config is
+  `(memdisk)/grub/grub.cfg`, and what GRUB itself looks for under `$prefix`
+  (fonts by name, command and module lists) is looked for in the image too.
+
+A `grub.cfg` on the ESP (`/EFI/BOOT/` or `/grub/`) is never opened, also not
+when the menu ends or `normal` is run again (GRUB then shows its command
+line, or starts the memdisk's `grub.cfg` again). `grub.cfg` sources, from
+`$prefix/beast/`:
+
+1. `version.cfg` (build) — `bb_version`, `bb_build_id`.
+2. `main.cfg` — the menu. It finds the ESP and reads `device.env` there,
+   locates the data partition, reads the optional user settings **from the
+   data partition**, then shows the menu (or autoboots, see below).
+
+**Under UEFI nothing on the ESP or the data partition is run as GRUB script or
+used as a hook, theme or font**, with Secure Boot on or off (one code path).
+The two scripts wimboot injects into Windows PE (`winpeshl.ini`,
+`beastboot.cmd`) come from the memdisk as well (`(memdisk)/beast-booter/winpe/`).
+What the menu reads from the drive is:
+
+| File | What it is | How it is read |
+|---|---|---|
+| `ESP:/grub/beast/device.env` | the installer's facts about the drive (below) | `load_env` with a list of names, each value checked (`bb_dev_load`) |
+| `ESP:/grub/grubenv` | one-shot hand-off from the helper (below) | `load_env` for `bb_oneshot` only, the path checked |
+| `DATA:/beast-booter/config.env` | user settings | `load_env` with a list of names, each value checked (`bb_env_load`, [MENU.md](MENU.md#user-configuration-configenv-and-configcfg)) |
+| `DATA:/beast-booter/winboot/.../stamp.env` | which ISO a prepared Windows copy belongs to | `load_env` for two names |
+| ISOs, the helper (`beast-net/`), wimboot, `beast-booter/winpe/beastmount.exe` | what the user boots | handed to `linux`/`initrd`/`chainloader`; with Secure Boot on shim verifies every kernel and EFI binary |
+
+`load_env` can only set the variables it is given the names of, and it never
+runs anything; a file that is not a GRUB environment block is ignored with a
+notice. Not on any list, so never settable from the drive: `prefix`, `root`,
+`bb_cfg`, `bb_esp`, `bb_data`, `bb_sb`, `bb_platform` and GRUB's own
+security variables (nor `bb_boot_dev`).
+
+Two things from the drive are still run or parsed after a choice the user (or
+`bb_autoboot` in `config.env`) made, and are not part of the signed menu: the
+`loopback.cfg` of an ISO that ships one (recipe 1 in §6, that ISO's own boot
+menu, run by our GRUB), and the files of the ISO itself. GRUB stays in
+lockdown throughout, so only signed kernels and EFI binaries start.
+
+`/beast-booter/config.cfg` (GRUB script) and `bb_theme` (a theme on the data
+partition) are therefore not used on UEFI at all; legacy BIOS still uses both.
+`bb_sb` comes from GRUB's `lockdown` before and again after the settings, so
+no setting can change it.
+
+The ESP (`bb_esp`): under UEFI `bb_boot_dev` from the early config; under
+legacy BIOS the device in `$prefix`.
+
+`device.env`, written by the installer: a GRUB environment block (1024 bytes;
+the signature line, `name=value` lines, `#` padding). The menu takes these
+names and drops a value that does not have the form shown:
+
+```
+# GRUB Environment Block
+bb_install_id=6f1c...-uuid4          letters, digits, -
+bb_layout=msdos                      msdos | gpt
+bb_data_fs=exfat                     exfat | fat32 | ntfs
+bb_data_uuid=1A2B-3C4D               as GRUB 2.14 `probe --fs-uuid` prints it; hex digits and -
+bb_data_uuid_linux=1A2B-3C4D         as blkid / /dev/disk/by-uuid shows it, for kernel cmdlines; hex digits and -
+bb_data_label=BEASTBOOTER            no double quote
+bb_serial=0                          1 = also use the serial console (installer --serial-console)
+```
+
+Before 0.5.0 this was `device.cfg`, GRUB script that `grub.cfg` sourced;
+`update` migrates a drive (§4). A `device.cfg` on the ESP is not read.
 
 Data partition discovery (`main.cfg`): `search --no-floppy --fs-uuid --set=bb_data $bb_data_uuid`;
-if that fails or `device.cfg` is missing, use partition 1 of the disk holding the ESP
-(`$root` with the partition number replaced by 1).
+if that fails or `device.env` is missing or has no valid `bb_data_uuid`, use partition 1 of
+the disk holding the ESP (`bb_esp` with the partition number replaced by 1).
 
 Variables the menu sets and other scripts may read:
 
@@ -264,7 +366,7 @@ Variables the menu sets and other scripts may read:
 | `bb_sb` | `1` when GRUB is in lockdown (Secure Boot on), else `0` |
 | `bb_path` | directory currently being browsed, `/` = data root, no trailing slash except root |
 
-User/test settings (may be set in the user config on the data partition):
+User/test settings (set in `config.env` on the data partition; legacy BIOS also takes them from `config.cfg`):
 
 | Variable | Effect |
 |---|---|
@@ -275,12 +377,12 @@ User/test settings (may be set in the user config on the data partition):
 | `bb_serial=1` | mirror the menu on serial port 0 at 115200 8N1 |
 | `bb_gfx=0` | text menu only; default: graphical menu when a graphics mode, theme and fonts are usable |
 | `bb_gfxmode=WxH[,...]` | GRUB `gfxmode` list for the graphical menu (default `1920x1080,1280x720,1024x768,auto`) |
-| `bb_theme=/path/theme.txt` | GRUB theme file on the data partition instead of `grub/themes/beast/` |
+| `bb_theme=/path/theme.txt` | legacy BIOS only: GRUB theme file on the data partition instead of `grub/themes/beast/` |
 | `bb_beastnet_script=/path` | pass `beastnet.script=/path` to the beast-net helper: a non-interactive JSON plan on the data partition (docs/BEASTNET.md §5) |
 
-`main.cfg` loads these after the data partition is found; the same `set`
-lines are also honoured in `device.cfg` (values from the user config win).
-Details: docs/MENU.md.
+`main.cfg` loads these after the data partition is found. Of them only
+`bb_serial` can also come from `device.env` (the value from the user config
+wins). Details: docs/MENU.md.
 
 One-shot hand-off (`ESP:/grub/grubenv`, standard 1024-byte GRUB environment
 block, created by the installer): before the menu is built, `main.cfg` runs
@@ -293,7 +395,10 @@ failing ISO can never cause a reboot loop. Only the beast-net helper sets
 Machine-readable output when `bb_debug=1` (one per line, exact prefix `BEAST: `):
 
 ```
+BEAST: config-cfg-ignored                 (UEFI: /beast-booter/config.cfg exists and is not read)
+BEAST: theme-ignored                      (UEFI: bb_theme is set and is not used)
 BEAST: ready version=<v> platform=<efi|pc> sb=<0|1> esp=<dev> data=<dev> fs=<fs>
+BEAST: display gfx=<0|1>                  (1: the graphical menu, with the theme and fonts, is on)
 BEAST: dir <path>
 BEAST: item dir <path>
 BEAST: item iso <path>
@@ -312,7 +417,8 @@ BEAST: error <code> <free text>
 
 Error codes: `no-data-partition`, `iso-not-found`, `loopback-failed`,
 `no-recipe`, `ntfs-unsupported`, `windows-sb-no-helper`, `windows-bad-name`, `windows-no-wimboot`, `grubenv-not-writable`, `iso-too-large`,
-`sb-verify-failed`, `boot-failed`, `oneshot-not-cleared`.
+`sb-verify-failed`, `boot-failed`, `oneshot-not-cleared`, `oneshot-bad-path`,
+`config-env-bad-value <name>`, `device-env-bad-value <name>`.
 
 ## 6. ISO boot recipes
 
@@ -402,7 +508,8 @@ beast-boot firmware list    (--device DEV | --image PATH) [--json]
   shows model and size and asks the user to type the device name unless
   `--yes`. Details per OS: `platforms/` and `device.py`.
 - `update` rewrites boot code + partition 2 from a newer `dist/`, keeping
-  `device.cfg` values, `grub/grubenv` and the installed firmware packs, and
+  the `device.env` values (from `device.cfg` on a drive made before 0.5.0),
+  `grub/grubenv` and the installed firmware packs, and
   never writing partition 1 (it writes through a target that only allows the
   boot area and the ESP). It refuses a drive of another layout version:
   `reinstall-needed` (older) or `layout-too-new` (newer).
@@ -419,7 +526,7 @@ beast-boot firmware list    (--device DEV | --image PATH) [--json]
 - An `update` that the drive interrupts (Linux: the stick reports "no medium",
   `device-vanished`) can be re-run: the ESP's boot sector is written zeroed
   first and for real last, and a copy of what update carries over (marker,
-  `device.cfg`, `grubenv`, firmware packs) is kept on the computer
+  `device.env`, `grubenv`, firmware packs) is kept on the computer
   (`state_dir()`, `update-recovery/`) until the update is verified.
 - `firmware fetch` needs no administrator rights: it downloads each file of a
   pack from the catalog's pinned source, checks its SHA-256 and writes
@@ -501,7 +608,7 @@ Environment variables:
 | `BB_GRUB_EFI_DIR`, `BB_GRUB_BIOS_DIR`, `BB_GRUB_EFI_SIGNED_DIR` | tests, bb-dev (not build.sh) | GRUB module directories, by default the last GRUB source build (`.tools/cache/grub-src/current/<platform>`); Ubuntu's signed GRUB only for the e2e stub images |
 | `BB_GRUB_BUILDER`, `BB_GRUB_CACHE` | build/grub/grubsrc.py | `auto` (native, else docker), `native` or `docker`; cache directory (default `.tools/cache/grub-src`) |
 | `BB_GRUB_DBG_DIR`, `BB_GRUB_PC_DBG_DIR`, `BB_GRUB_EFI_DBG_DIR` | bb-dev gdb | GRUB debug symbols (default `.tools/grub-dbg`) |
-| `BB_MENU_DIR`, `BB_KEY_DIR`, `BB_DIST_DIR` | build.sh | menu source, signing key and output directories |
+| `BB_MENU_DIR`, `BB_KEY_DIR`, `BB_DIST_DIR` | build.sh | menu source, signing keys (CA certificate and three leaves) and output directories |
 | `BB_PROJECT_URL` | build.sh | URL in the `grub.beastbooter` SBAT line |
 | `SOURCE_DATE_EPOCH` | build.sh, portable build | timestamps (default: last git commit time, else mtime of `VERSION`) |
 | `BB_RESIGN=1` | build.sh | always make a fresh signature (§4) |

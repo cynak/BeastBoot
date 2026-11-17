@@ -19,6 +19,11 @@ VM_OUT = OUT / "vm"            # per-image VM state: out/vm/<image stem>/
 DEFAULT_IMAGE = DEV_OUT / "beast-boot-dev.img"
 DIST = REPO / "dist"
 KEYS = REPO / "keys"
+# What `make keys` (build/keygen.sh) writes and the build needs: the CA certificate users
+# enroll, and a key and certificate per signed component (build/sbkeys.sh).
+KEY_COMPONENTS = ("grub", "kernel", "wimboot")
+PRIVATE_KEYS = tuple(f"beast-boot-{c}.key" for c in KEY_COMPONENTS)
+KEY_FILES = ("beast-boot.crt", "beast-boot.cer", *PRIVATE_KEYS, *(f"beast-boot-{c}.crt" for c in KEY_COMPONENTS))
 GRUB_SRC = REPO / "grub"
 
 

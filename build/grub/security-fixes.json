@@ -11,13 +11,16 @@
       "upstream": "GNU GRUB 2.16 sets GLOBAL_SBAT_LEVEL=6 for the same push (commit 99ab9d04b5d7daf6b942221825b816ecd40801d4); announcement '[SECURITY PATCH 0/8]' https://lists.gnu.org/archive/html/grub-devel/2025-11/msg00155.html (2025-11-18)",
       "requires": ["CVE-2025-54770", "CVE-2025-54771", "CVE-2025-61661", "CVE-2025-61662", "CVE-2025-61663", "CVE-2025-61664",
                    "GRUB-2025-11-test-recursion", "GRUB-2025-11-functional-test", "GRUB-2025-11-usbtest-length"]
-    }
-  ],
-  "not_claimed": [
+    },
     {
       "component": "grub",
       "generation": 7,
-      "why": "shim PR https://github.com/rhboot/shim/pull/830 (open, not merged) proposes sbat,1,2026092500 shim,4 grub,7 for CVE-2026-97876; GRUB MR https://gitlab.freedesktop.org/gnu-grub/grub/-/merge_requests/295 (open) the matching bump. We carry the fix (patches/0001) but keep grub,6 until shim publishes that level."
+      "shim_sbat_level": "2026092500",
+      "level_source": "https://github.com/rhboot/shim/blob/main/SbatLevel_Variable.txt (added by shim commit 20e9be4dea5a503e4e9e2ecbc87b6b55bb79d692 'sbat: bump for September 2026 Grub CVE', committed 2026-10-27, shim PR https://github.com/rhboot/shim/pull/830 merged; read from rhboot/shim main on 2026-11-15, file SHA-256 4252972ed389e114388224e7a7b073e6e72afeb2f2ccfbbb856c38d8bee042cf, head commit e794a714339b1277abe9f890fc98de6e415681b0)",
+      "level_text": "Revocations for: - September 2026 grub CVE (CVE-2026-97876) sbat,1,2026092500 shim,4 grub,7",
+      "later_levels": "sbat,1,2026102600 shim,4 grub,7 fwupd-efi,2 (shim commit e794a714339b1277abe9f890fc98de6e415681b0, October 2026 fwupd-efi issue GHSA-6w3p-4pq7-j3mp): the same grub,7",
+      "upstream": "GNU GRUB merge request https://gitlab.freedesktop.org/gnu-grub/grub/-/merge_requests/295 'configure.ac: bump SBAT for September 2026 CVE' (merged 2026-11-06); the fix itself is upstream commit 26beaa3b2720fefdc4d04c1ae209b776fe6848d6 (GRUB 2.16)",
+      "requires": ["CVE-2026-97876"]
     }
   ],
   "fixes": [
@@ -103,7 +106,7 @@
       "id": "CVE-2026-97876",
       "summary": "term/serial: the serial command accepted caller-supplied I/O port / MMIO base addresses under lockdown (memory write primitive, lockdown / Secure Boot bypass for whoever controls grub.cfg)",
       "cvss31": "6.4 MEDIUM (Canonical CNA, CWE-822)",
-      "sbat": "proposed grub,7 (not claimed)",
+      "sbat": "grub,7",
       "advisory": "https://www.openwall.com/lists/oss-security/2026/09/13/5",
       "upstream_commits": ["26beaa3b2720fefdc4d04c1ae209b776fe6848d6"],
       "where": "build/grub/patches/0001-term-serial-reject-caller-supplied-port-addresses-under-lockdown.patch (Debian's 2.14 backport; upstream 2.16)",

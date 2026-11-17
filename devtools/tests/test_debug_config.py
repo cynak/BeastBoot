@@ -17,6 +17,8 @@ for _p in (ROOT / "devtools", ROOT / "installer"):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
+from beastbooter.esp import parse_env_block  # noqa: E402
+
 from bbdev import cli, diskimg, paths, userconfig  # noqa: E402
 from bbdev.msg import Failure  # noqa: E402
 from bbdev.userconfig import UserConfig  # noqa: E402
@@ -98,6 +100,27 @@ def test_print_outputs_a_config_and_writes_nothing(capsys, monkeypatch):
     assert UserConfig(out).settings() == {"bb_debug": "1", "bb_serial": "1", "timeout": "5", "debug": "linux",
                                           "bb_autoboot": "/My ISOs/x.iso"}
     assert "/beast-booter/config.cfg" in err
+    # ... and how to make the config.env that the menu reads on UEFI
+    assert "for UEFI also create /beast-booter/config.env: grub-editenv config.env set 'bb_debug=1' " in err
+    assert "'bb_autoboot=/My ISOs/x.iso'" in err and "'debug=linux'" in err
+
+
+def test_env_block_carries_only_what_the_menu_reads():
+    cfg = UserConfig()
+    for key, value in (("bb_debug", "1"), ("debug", "linux,loader"), ("pager", "1"), ("gfxmode", "auto"),
+                       ("bb_autoboot", '/a "b".iso'), ("bb_kargs", "a\\b")):
+        cfg.set(key, value)
+    block, left_out = cfg.env_block()
+    assert left_out == ["gfxmode", "bb_autoboot"]  # not on the menu's list; a value config.env refuses
+    assert parse_env_block(block) == {"bb_debug": "1", "debug": "linux,loader", "pager": "1", "bb_kargs": "a\\b"}
+    assert "gfxmode, bb_autoboot: only in config.cfg" in userconfig.env_note(left_out)
+
+
+def test_env_keys_are_the_menus_allow_list():
+    lib = (paths.REPO / "grub" / "beast" / "lib.cfg").read_text()
+    body = lib[lib.index("function bb_env_load {"):]
+    line = next(ln for ln in body.splitlines() if ln.strip().startswith('if load_env --file "$1" '))
+    assert tuple(line.split('"$1" ', 1)[1].split(";")[0].split()) == userconfig.ENV_KEYS
 
 
 @pytest.mark.skipif(not GRUB_SCRIPT_CHECK, reason="grub-script-check not installed")
@@ -132,16 +155,20 @@ def test_fat32_round_trip(fat_image, capsys):
     assert "wrote /beast-booter/config.cfg" in out and "bb_debug = 1" in out and "--- file ---" in out
     stored = fat_image.data_fat().read(diskimg.USER_CONFIG).decode()
     assert UserConfig(stored).settings() == {"bb_debug": "1", "timeout": "5"}
+    # config.env (what the menu reads on UEFI) is written with it
+    assert parse_env_block(fat_image.data_fat().read(diskimg.USER_ENV)) == {"bb_debug": "1", "timeout": "5"}
     # a hand-written line survives an edit
     fat_image.data_fat().put_bytes(diskimg.USER_CONFIG, (stored + "set default=2\n").encode())
     assert cli.main(["debug-config", "--image", img, "--unset", "timeout", "--set", "bb_dryrun=1"]) == 0
     stored = fat_image.data_fat().read(diskimg.USER_CONFIG).decode()
     assert UserConfig(stored).settings() == {"bb_debug": "1", "default": "2", "bb_dryrun": "1"}
+    assert parse_env_block(fat_image.data_fat().read(diskimg.USER_ENV)) == UserConfig(stored).settings()
     capsys.readouterr()
     assert cli.main(["debug-config", "--image", img]) == 0  # default: show
     assert "bb_dryrun = 1" in capsys.readouterr().out
     assert cli.main(["debug-config", "--image", img, "--clear"]) == 0
     assert fat_image.data_fat().read(diskimg.USER_CONFIG) is None
+    assert fat_image.data_fat().read(diskimg.USER_ENV) is None
     assert "removed" in capsys.readouterr().out
     assert cli.main(["debug-config", "--image", img, "--show"]) == 0
     assert "no config.cfg" in capsys.readouterr().out

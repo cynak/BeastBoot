@@ -13,9 +13,11 @@
 #   --offline     no downloads: cached runtimes, beast-net packages and vulnerability data only
 #
 # Environment:
-#   BB_KEY_DIR                  signing key directory (beast-boot.key/.crt/.cer; default keys/)
+#   BB_KEY_DIR                  signing keys (the CA certificate beast-boot.crt/.cer and the three
+#                               leaves, build/keygen.sh; default keys/)
 #   BB_RELEASE_TAG              the tag being released (default: CI tag variables, else a v* tag on HEAD)
-#   BB_RELEASE_CERT_SHA256      optional pin: the release certificate's SHA-256 (refuse any other key)
+#   BB_RELEASE_CERT_SHA256      optional pin: SHA-256 of the release CA certificate (DER), the one
+#                               users enroll (refuse any other CA)
 #   BB_RELEASE_GATE             enforce | warn | off (default: enforce with --official, else warn)
 #   BB_RELEASE_GATE_SEVERITY    critical | high (default: critical)
 #   BB_RELEASE_GATE_BASELINE    the previous release's vulnerabilities.json: findings already in it
@@ -118,7 +120,7 @@ echo "    version $VERSION, tag ${TAG:-(none: not a tagged commit)}, official: $
 step "Signing key"
 KEY_DIR="${BB_KEY_DIR:-$ROOT/keys}"
 CER="$KEY_DIR/beast-boot.cer"
-[ -f "$CER" ] || die "no signing certificate at $CER (official: write the release key there; local: make keys)"
+[ -f "$CER" ] || die "no CA certificate at $CER (official: the release CA certificate and leaves go there; local: make keys)"
 if [ "$OFFICIAL" = 1 ]; then
   [ -n "${BB_KEY_DIR:-}" ] || die "--official needs BB_KEY_DIR pointing at the release key (never the dev key in keys/)"
   [ "$(cd "$KEY_DIR" && pwd)" != "$ROOT/keys" ] || die "--official refuses the local development key in keys/"
@@ -130,7 +132,7 @@ if [ "$OFFICIAL" = 1 ]; then
 fi
 CERT_SHA256="$(bb_sha256 "$CER")"
 if [ -n "${BB_RELEASE_CERT_SHA256:-}" ] && [ "${BB_RELEASE_CERT_SHA256,,}" != "$CERT_SHA256" ]; then
-  die "the certificate in $KEY_DIR (SHA-256 $CERT_SHA256) is not the pinned release certificate ($BB_RELEASE_CERT_SHA256)"
+  die "the CA certificate in $KEY_DIR (SHA-256 $CERT_SHA256) is not the pinned release CA certificate ($BB_RELEASE_CERT_SHA256)"
 fi
 echo "    $(openssl x509 -inform DER -in "$CER" -noout -subject -nameopt RFC2253), SHA-256 $CERT_SHA256"
 export BB_KEY_DIR="$KEY_DIR"
@@ -204,7 +206,8 @@ cp sbom/VULNERABILITIES.md "$OUT/$P-VULNERABILITIES.md"
 DIST_CER="dist/esp/ENROLL_THIS_KEY_IN_MOKMANAGER.cer"
 cmp -s "$DIST_CER" "$CER" || die "$DIST_CER is not the certificate in $KEY_DIR"
 cp "$DIST_CER" "$OUT/$P-ENROLL_THIS_KEY_IN_MOKMANAGER.cer"
-cert_args=(cert --cer "$CER" --out "$OUT/$P-CERTIFICATE.txt" --version "$VERSION" --json "$META/certificate.json")
+cert_args=(cert --cer "$CER" --out "$OUT/$P-CERTIFICATE.txt" --version "$VERSION" --json "$META/certificate.json"
+           --manifest dist/manifest.json)
 if [ "$OFFICIAL" = 1 ]; then cert_args+=(--official); fi
 "${TOOL[@]}" "${cert_args[@]}"
 "${TOOL[@]}" sums --dir "$OUT"

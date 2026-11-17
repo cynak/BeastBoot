@@ -112,20 +112,29 @@ DIST_BOOT_IMG = "bios/boot.img"
 DIST_CORE_IMG = "bios/core.img"
 DIST_ESP_DIR = "esp"  # copied verbatim into the ESP root
 
+# The certificate users enroll in MokManager (DER): since 0.5.0 the BeastBoot CA
+# certificate; GRUB, the helper kernel and wimboot are signed with certificates it issued.
+ENROLL_CERT_PATH = "ENROLL_THIS_KEY_IN_MOKMANAGER.cer"
+
 # Files that must be present under dist/esp/ (paths inside the ESP).
 REQUIRED_ESP_FILES = (
     "EFI/BOOT/BOOTX64.EFI",  # shim, Microsoft-signed
     "EFI/BOOT/mmx64.efi",  # MokManager
     "EFI/BOOT/grubx64.efi",  # beast-boot GRUB, signed with the beast-boot key
-    "ENROLL_THIS_KEY_IN_MOKMANAGER.cer",  # DER certificate for MokManager
+    ENROLL_CERT_PATH,
     "grub/grub.cfg",
     "grub/beast/main.cfg",
     "grub/beast/version.cfg",
     "grub/i386-pc/normal.mod",
 )
 
-# Written by the installer into the ESP at install/update time.
-DEVICE_CFG_PATH = "grub/beast/device.cfg"
+# Written by the installer into the ESP at install/update time: a GRUB
+# environment block, which the menu reads as data (load_env with a list of
+# names; docs/ARCHITECTURE.md section 5).
+DEVICE_ENV_PATH = "grub/beast/device.env"
+# What drives made before 0.5.0 have instead: GRUB script (`set` lines), which
+# their menu sources. Only read, to carry a drive's values over in `update`.
+LEGACY_DEVICE_CFG_PATH = "grub/beast/device.cfg"
 # Marker so tools can recognise a beast-boot ESP. Contains the install id
 # and the layout version. On-disk names keep the pre-rename "beast-booter"
 # spelling (marker, user config folder, esp/beast-booter/): 0.1.x/0.2.0 drives
@@ -145,7 +154,10 @@ FIRMWARE_DIR = "beast-net/firmware"
 FIRMWARE_INSTALLED_PATH = "beast-net/firmware/installed.json"
 DIST_CATALOG = DIST_ESP_DIR + "/" + BEASTNET_CATALOG_PATH  # relative to dist/
 
-# Optional user configuration on the DATA partition (GRUB script syntax).
+# Optional user configuration on the DATA partition (GRUB script syntax; the menu
+# runs it under legacy BIOS only, and reads config.env next to it everywhere).
 USER_CONFIG_PATH = "beast-booter/config.cfg"
 # Directories on the data partition the menu never lists.
-DATA_HIDDEN_DIRS = ("beast-booter", "System Volume Information", "$RECYCLE.BIN", "$Extend", "lost+found")
+# disk-tools: the Disk tools' ddrescue progress files (beastnet/python/beastnet/disks/session.py MAPS_DIR)
+DATA_HIDDEN_DIRS = ("beast-booter", "System Volume Information", "$RECYCLE.BIN", "$Extend", "lost+found",
+                    "disk-tools")

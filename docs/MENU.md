@@ -93,8 +93,10 @@ folder itself is hidden from the menu) hold your settings:
   line. The menu reads only the names in the table below from it, with
   GRUB's `load_env` and an explicit list, and checks every value; it can
   never run GRUB commands. Read in every mode.
-- `/beast-booter/config.cfg`: GRUB script, sourced after `config.env`, so
-  its values win. **Not read when Secure Boot is on** (below).
+- `/beast-booter/config.cfg`: GRUB script. **Read under legacy BIOS only**,
+  after `config.env`, so its values win there. **Never read on UEFI**, with
+  Secure Boot on or off ([On UEFI](#on-uefi) below). Put your settings in
+  `config.env` and they apply everywhere.
 
 ```sh
 # GRUB Environment Block
@@ -104,7 +106,7 @@ bb_autoboot=/linux/ubuntu-24.04.iso
 bb_serial=1
 ```
 
-The same settings as `config.cfg`:
+The same settings as `config.cfg` (legacy BIOS only):
 
 ```sh
 # /beast-booter/config.cfg
@@ -140,58 +142,81 @@ Rules for `config.env` (GRUB 2.14 `grub-core/lib/envblk.c`):
 | `bb_dryrun=1` | do everything except actually starting the kernel or boot loader: print what would be run and return to the menu |
 | `bb_gfx=0` | no graphics: the plain text menu, exactly as on a console without graphics |
 | `bb_gfxmode=WxH` | screen mode(s) for the graphical menu, a GRUB `gfxmode` list such as `1280x720` or `1024x768,auto`. Default: `1920x1080,1280x720,1024x768,auto` (the first mode the firmware offers) |
-| `bb_theme=/path/theme.txt` | use your own GRUB theme file from the data partition instead of BeastBoot's (see [Changing the look](#changing-the-look)). Ignored with Secure Boot on (see below) |
+| `bb_theme=/path/theme.txt` | use your own GRUB theme file from the data partition instead of BeastBoot's (see [Changing the look](#changing-the-look)). Legacy BIOS only: ignored on UEFI (see below) |
 | `bb_fs_addon=0` | do not use the [exFAT add-on](ISO_SUPPORT.md#the-exfat-add-on): casper and live-boot ISOs on an exFAT drive are started exactly as on FAT32 (with the ISO's own `loopback.cfg`). Default: on |
 | `bb_kargs="word ..."` | extra kernel parameters added at the end of the command line of every ISO started by one of BeastBoot's own Linux recipes (casper, live-boot, archiso, dracut-live, anaconda, suse), for example `bb_kargs="console=ttyS0,115200"`. Not added for an ISO started with its own `loopback.cfg` (GRUB cannot change those lines), for Windows or EFI loaders, or for the network helper. Default: empty. When set, the root menu shows it in the entry "Extra kernel parameters: <value> - help" and a real boot prints it. Used by the real-ISO tests ([tests/e2e/REAL_ISOS.md](../tests/e2e/REAL_ISOS.md)) |
 | `bb_windows=pe` | for `bb_autoboot` of a Windows installation ISO: start its Windows PE command prompt instead of Windows Setup. From the menu you choose in a small menu instead. Default: `setup` |
+| `debug=name,name` | GRUB's own debug messages for these facilities, for example `debug=linux,loader` (or `all`); for developers, see [DEVELOPMENT.md 7.4](DEVELOPMENT.md#74-grubs-own-debug-output). It only changes what GRUB prints. (GRUB acts on `debug` and `pager` as soon as it has read them, so a value of the wrong form can show a few debug lines before the menu drops it; they are the first values it checks) |
+| `pager=1` | GRUB pauses after each screen of output (`--MORE--`) |
 | `bb_beastnet_script=/path/plan.json` | start the network helper in script mode with this JSON plan (a path on the data partition) instead of asking questions; see [BEASTNET.md](BEASTNET.md) §5 |
 
 Allowed in `config.env`: exactly the settings above. Never accepted from
 it: `bb_sb`, `bb_cfg`, `bb_esp`, `bb_data*`, `bb_platform`, `prefix`, `root`,
 `check_signatures` or any other variable that says where the menu's files
 come from or whether they are checked. Value forms there: `0` or `1` for
-`bb_debug`, `bb_dryrun`, `bb_serial`, `bb_gfx`, `bb_fs_addon`; digits for
-`timeout`; `setup` or `pe` for `bb_windows`; a `gfxmode` list of `WxH`,
+`bb_debug`, `bb_dryrun`, `bb_serial`, `bb_gfx`, `bb_fs_addon`, `pager`;
+lower-case names of letters, digits and `_`, separated by commas, for
+`debug`; digits for `timeout`; `setup` or `pe` for `bb_windows`; a `gfxmode` list of `WxH`,
 `WxHxD`, `auto` or `keep` for `bb_gfxmode`; a path starting with `/` for
 `bb_autoboot` and `bb_theme`; a path of letters, digits and `._/-` (no
 spaces: it goes onto the helper's kernel command line) for
 `bb_beastnet_script`; no `"` in `default`, `bb_autoboot`, `bb_theme` and
 `bb_kargs`; no control characters anywhere.
 
-### With Secure Boot on
+### On UEFI
+
+Since 0.5.0 the menu itself is part of the signed boot loader: `grub.cfg`,
+`grub/beast/*.cfg`, the hooks, the theme and the fonts are inside
+`EFI/BOOT/grubx64.efi`, and on UEFI GRUB reads them only from there
+([ARCHITECTURE.md §5](ARCHITECTURE.md#5-grub-runtime-contract)). The same is
+true for your settings: on UEFI the menu runs no GRUB script and uses no
+theme from the drive, **with Secure Boot on or off** (one code path; Secure
+Boot can be switched on later without the menu changing).
+
+- `config.cfg` is not read. GRUB script there would let anyone who can write
+  to the drive run GRUB commands inside the signed boot loader and choose
+  what the signed kernels and loaders get. When `config.cfg` exists the menu
+  prints a short notice (`BEAST: config-cfg-ignored`) and adds the entry
+  "Settings ignored on UEFI - help" at the end of the root menu. Keep your
+  settings in `config.env` and they apply in every mode. What `config.cfg`
+  could do beyond the settings in the table (your own GRUB commands or menu
+  entries) is no longer possible on UEFI.
+- `bb_theme` is not used, and the menu uses its built-in theme: nothing
+  checks theme and image files, so the signed GRUB would otherwise parse
+  files from the data partition that anyone with write access could craft.
+  The menu prints a short notice (`BEAST: theme-ignored`) and adds the same
+  "Settings ignored on UEFI - help" entry, whose text says which settings
+  were ignored.
+- Editing the files under `grub/` on the boot partition changes nothing on
+  UEFI: they are the copies legacy BIOS uses. To change the menu or its look
+  for UEFI, build BeastBoot with your changes and your own key
+  ([Changing the look](#changing-the-look), [DEVELOPMENT.md](DEVELOPMENT.md)).
+
+Legacy BIOS has no signed chain to protect: there the menu reads its files
+from the boot partition, `config.cfg` after `config.env`, and your theme.
 
 The menu takes Secure Boot's state from GRUB's lockdown (`bb_sb`) before it
-reads any user settings, and sets it again after them, so no setting can
-change it. With Secure Boot on it reads only `config.env` and never
-`config.cfg`: GRUB script there would let anyone who can write to the drive
-run GRUB commands and choose what the signed kernels and loaders get. When
-`config.cfg` exists it prints a short notice (`BEAST:
-config-cfg-ignored-sb`) and adds the entry "Settings ignored with Secure
-Boot on - help" at the end of the root menu. Keep your settings in
-`config.env` and they apply in both modes.
+reads any settings, and sets it again after them, so no setting can change
+it.
 
-`bb_theme` is ignored with Secure Boot on, and the menu uses its built-in
-theme: GRUB's Secure Boot checks do not cover theme and image files, so the
-signed GRUB would otherwise parse files from the data partition that anyone
-with write access could craft. The menu prints a short notice (`BEAST:
-theme-ignored-sb`) and adds the same "Settings ignored with Secure Boot on -
-help" entry, whose text says which settings were ignored. Without Secure
-Boot your theme is used.
+`bb_kargs` stays allowed: kernel parameters are not something Secure Boot
+protects (the menu's own entries can be edited with `e` too), and the signed
+kernel still enforces its own lockdown. It is never silent: when it is set,
+with Secure Boot on or off, the root menu shows the entry "Extra kernel
+parameters: <value> - help" after the tools, and a real boot of a Linux ISO
+prints the value before the kernel starts.
 
-`bb_kargs` stays allowed under Secure Boot: kernel parameters are not
-something Secure Boot protects (the menu's own entries can be edited with
-`e` too), and the signed kernel still enforces its own lockdown. It is
-never silent: when it is set, with Secure Boot on or off, the root menu
-shows the entry "Extra kernel parameters: <value> - help" after the tools,
-and a real boot of a Linux ISO prints the value before the kernel starts.
+`grub/beast/device.env` on the boot partition is the installer's file (what
+the data partition is, and `bb_serial` for `--serial-console`). It is a GRUB
+environment block too and is read the same way, as data with its own short
+list of names ([ARCHITECTURE.md §5](ARCHITECTURE.md#5-grub-runtime-contract));
+menu settings such as `bb_debug` are not taken from it. Before 0.5.0 it was
+`device.cfg`, GRUB script that could carry any setting; that file is no
+longer read, and updating a drive replaces it.
 
-The same `bb_*` settings may also be put in `grub/beast/device.cfg` on the
-boot partition (it is GRUB script too, sourced before the menu starts). That
-is the only way to get `bb_debug` output when the data partition itself is
-missing; values from `config.env` and `config.cfg` win when both set one.
-
-A syntax error in `config.cfg` shows up as a GRUB error at boot; anything
-not listed above is passed through to GRUB unchanged. Both files are yours:
+Under legacy BIOS a syntax error in `config.cfg` shows up as a GRUB error at
+boot, and anything not listed above is passed through to GRUB unchanged.
+Both files are yours:
 BeastBoot's installer and updater never write to the data partition.
 
 ## Debug output (`bb_debug=1`)
@@ -233,12 +258,15 @@ BEAST: error no-recipe /mystery.iso
   `hook-missing`, `no-squashfs`, `squashfs-unreadable <squashfs>` (for example
   zstd-compressed) or `no-exfat-module <squashfs>`. Nothing is printed when the
   data partition is not exFAT or the ISO is not a casper / live-boot ISO.
-- `config-cfg-ignored-sb` is printed before `ready` when Secure Boot is on
-  and `/beast-booter/config.cfg` exists (it is not read).
-- `theme-ignored-sb` is printed before `ready` when Secure Boot is on and
-  `bb_theme` is set (the built-in theme is used).
+- `config-cfg-ignored` is printed before `ready` on UEFI when
+  `/beast-booter/config.cfg` exists (it is not read).
+- `theme-ignored` is printed before `ready` on UEFI when `bb_theme` is set
+  (the built-in theme is used).
+- `display gfx=1` (the graphical menu is on, with its theme and fonts) or
+  `display gfx=0` (text menu) is printed once, before the first menu.
 - `error <code> <text>` codes: `config-env-bad-value <name>` (a `config.env`
-  value of the wrong form, ignored), `no-data-partition`, `iso-not-found`,
+  value of the wrong form, ignored), `device-env-bad-value <name>` (the same
+  for the installer's `device.env`), `no-data-partition`, `iso-not-found`,
   `loopback-failed`, `no-recipe`, `ntfs-unsupported`, `iso-bad-name` (a Linux ISO, or one with its own `loopback.cfg`, whose path has a quote (`"` or `'`), a backslash or a control character: the path goes onto the kernel command line, so it is refused; rename the file), `oneshot-bad-path` (the one-time boot entry from the network helper is not an absolute path or has a quote or control character; it is cleared and ignored), `windows-sb-no-helper` (Secure Boot is on, the Windows ISO is not prepared and the helper is not on the drive; see [WINDOWS_SECURE_BOOT.md](WINDOWS_SECURE_BOOT.md)), `windows-bad-name` (the ISO path has a quote or control character), `windows-no-wimboot`, `grubenv-not-writable`,
   `iso-too-large` (Alpine or Debian installer ISO that does not fit in memory as an initrd), `sb-verify-failed`, `boot-failed`. The text after the code is for people, not parsers. Under
   Secure Boot, any failure of `linux`, `initrd`, `chainloader` or `boot` is
@@ -268,7 +296,7 @@ recipe the ISO's own `loopback.cfg` is not run in a dry run. "Enroll a key
 In text mode (`bb_gfx=0`, or when the graphical menu could not start) the
 menu needs no fonts or graphics, so it works on any console. The graphical
 menu replaces only the firmware console: the serial console keeps showing
-the text menu. With `bb_serial=1` (from `device.cfg` or the user configuration)
+the text menu. With `bb_serial=1` (from `device.env` or the user configuration)
 the menu runs `serial --unit=0 --speed=115200` and, only if that succeeds,
 `terminal_input console serial` and `terminal_output console serial`.
 
@@ -331,17 +359,17 @@ What is on the boot partition, all listed in `manifest.json`:
   `grub-mkfont` from Noto Sans / Noto Sans Mono in Ubuntu's
   `fonts-noto-core` / `fonts-noto-mono` (SIL Open Font License 1.1). Text
   inside images (name, badges, key hints) is drawn with the same glyphs.
-- The same Noto fonts are also in a memdisk inside the signed
-  `EFI/BOOT/grubx64.efi`: with Secure Boot on, Ubuntu's GRUB refuses font
-  files from disk (they are not signed) and loads fonts only from the
-  memdisk of its own image, which shim has verified. The copies in
-  `grub/fonts/` are for legacy BIOS. The memdisk is a deterministic tar
-  made by [`build/theme/mkmemdisk.py`](../build/theme/mkmemdisk.py) from
-  those files (manifest: `build.efi_memdisk`, `build.efi_memdisk_sha256`).
-  Theme files and images are not fonts and load from disk in every mode.
+- The theme, its images and the fonts are also in a memdisk inside the
+  signed `EFI/BOOT/grubx64.efi`, together with the menu scripts, and on UEFI
+  GRUB takes them only from there, with Secure Boot on or off (with it on,
+  Ubuntu's GRUB refuses font files from disk anyway). The copies in
+  `grub/themes/` and `grub/fonts/` are for legacy BIOS. The memdisk is a
+  deterministic tar made by
+  [`build/theme/mkmemdisk.py`](../build/theme/mkmemdisk.py) from those files
+  (manifest: `build.efi_memdisk`, `build.efi_memdisk_sha256`).
 - Characters the Noto fonts lack (other scripts in file names) come from
-  GRUB's `unicode.pf2`, except with Secure Boot on, where it cannot be
-  loaded from disk; such characters then show as boxes.
+  GRUB's `unicode.pf2` (GNU Unifont). Since 0.5.0 it is in the memdisk too,
+  so they also show with Secure Boot on (before, they were boxes there).
 
 ### Changing the look
 
@@ -349,15 +377,17 @@ What is on the boot partition, all listed in `manifest.json`:
   colours; `console_text` is a GRUB colour name such as `white` or
   `light-gray`) and rebuild with `make build`. Sizes and layout are the
   constants below it and `theme_text()`.
-- Your own theme without rebuilding: put a GRUB theme on the data partition
-  and set `bb_theme`, for example `bb_theme=/beast-booter/mytheme/theme.txt` in `config.env`.
-  Its images are found relative to the theme file. Fonts available to it:
-  `Noto Sans Regular 16`, `Noto Sans Regular 20`, `Noto Sans Bold 20`,
-  `Noto Sans Mono Regular 16` (and `GNU Unifont Regular 16` without Secure
-  Boot). With Secure Boot on `bb_theme` is ignored and the built-in theme
-  is used: GRUB's Secure Boot checks do not cover theme and PNG files, so
-  the signed GRUB does not parse them from the data partition
-  ([With Secure Boot on](#with-secure-boot-on)).
+  The result is your own `grubx64.efi` (the theme is inside it), signed
+  with your own key, which the PCs you use it on must have enrolled
+  ([SECURE_BOOT.md](SECURE_BOOT.md)).
+- Your own theme without rebuilding, **legacy BIOS only**: put a GRUB theme
+  on the data partition and set `bb_theme`, for example
+  `bb_theme=/beast-booter/mytheme/theme.txt` in `config.env`. Its images are
+  found relative to the theme file. Fonts available to it: `Noto Sans
+  Regular 16`, `Noto Sans Regular 20`, `Noto Sans Bold 20`, `Noto Sans Mono
+  Regular 16` and `GNU Unifont Regular 16`. On UEFI `bb_theme` is ignored and
+  the built-in theme is used: the signed GRUB does not parse theme and PNG
+  files from the drive ([On UEFI](#on-uefi)).
 
 ## System information
 

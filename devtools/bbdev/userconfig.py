@@ -1,15 +1,22 @@
-"""The user configuration /beast-booter/config.cfg (docs/MENU.md).
+"""The user configuration /beast-booter/config.cfg and config.env (docs/MENU.md).
 
-It is GRUB script. bb-dev only rewrites `set KEY=...` and `export KEY`
-lines of the keys it is asked to change; every other line (comments, other
-commands, other settings) is kept verbatim. Values are written double-quoted
-and exported, so they also apply inside folder menus (browse.cfg runs with
-`configfile`, a new variable context).
+config.cfg is GRUB script, which the menu runs under legacy BIOS only. bb-dev
+only rewrites `set KEY=...` and `export KEY` lines of the keys it is asked to
+change; every other line (comments, other commands, other settings) is kept
+verbatim. Values are written double-quoted and exported, so they also apply
+inside folder menus (browse.cfg runs with `configfile`, a new variable
+context).
+
+config.env is a GRUB environment block with the same settings, as far as the
+menu's list of names allows (ENV_KEYS). On UEFI the menu reads only this file,
+as data, so bb-dev writes it next to every config.cfg (UserConfig.env_block).
 """
 
 from __future__ import annotations
 
 import re
+
+from beastbooter.esp import env_block
 
 from .msg import Failure
 
@@ -29,6 +36,10 @@ KNOWN = {
     "bb_theme": ("path", "your own GRUB theme.txt on the data partition"),
     "bb_beastnet_script": ("path", "run the network helper with this JSON plan (path on the data partition)"),
 }
+
+# The names the menu reads from config.env (bb_env_load in grub/beast/lib.cfg).
+ENV_KEYS = ("timeout", "default", "bb_autoboot", "bb_debug", "bb_dryrun", "bb_serial", "bb_gfx", "bb_gfxmode",
+            "bb_theme", "bb_fs_addon", "bb_kargs", "bb_windows", "bb_beastnet_script", "debug", "pager")
 
 _NAME = r"[A-Za-z_][A-Za-z0-9_]*"
 _SET_RE = re.compile(rf'^\s*set\s+({_NAME})=(.*)$')
@@ -151,6 +162,28 @@ class UserConfig:
 
     def is_empty(self) -> bool:
         return not any(line.strip() and line.strip() != HEADER for line in self.lines)
+
+    def env_block(self) -> tuple[bytes, list[str]]:
+        """(config.env with these settings, the names it cannot carry). The menu
+        takes only ENV_KEYS from config.env and refuses values with a double
+        quote or a control character, so those stay config.cfg-only (legacy BIOS)."""
+        items, left_out = [], []
+        for key, value in self.settings().items():
+            if key in ENV_KEYS and not re.search(r'["\x00-\x1f\x7f]', value):
+                items.append((key, value))
+            else:
+                left_out.append(key)
+        block = env_block(items)
+        if block is None:
+            raise Failure("the settings do not fit into config.env (a GRUB environment block holds 1024 bytes)")
+        return block, left_out
+
+
+def env_note(left_out: list[str]) -> str:
+    """What to tell the user about settings that config.env cannot carry."""
+    return (f"{', '.join(left_out)}: only in config.cfg, which the menu runs under legacy BIOS only; on UEFI it "
+            "reads config.env (an allow-list of names, values without double quotes), so "
+            + ("this setting does" if len(left_out) == 1 else "these settings do") + " not apply there")
 
 
 def render(*, debug: bool = False, dryrun: bool = False, autoboot: str | None = None,

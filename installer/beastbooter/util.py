@@ -97,7 +97,7 @@ _CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 def printable(text: object) -> str:
     """`text` for the terminal: every control character (C0, DEL, C1) becomes "?".
-    Strings read from a drive (marker, device.cfg, installed.json, a disk's model)
+    Strings read from a drive (marker, device.env, installed.json, a disk's model)
     could otherwise carry escape sequences (clipboard writes, faked output)."""
     return _CONTROL.sub("?", str(text))
 

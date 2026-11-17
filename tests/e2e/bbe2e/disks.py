@@ -3,6 +3,7 @@
 * attach fixture images (tests/e2e/fixtures/disks.py) to the helper VM as NVMe
   (`-device nvme,serial=`) or AHCI (`ide-hd,serial=` on q35) disks;
 * write script-mode plans (`beastnet.script=`), wait for the event lines;
+* boot the helper under UEFI, legacy BIOS or UEFI with Secure Boot (`boot_helper(mode=)`);
 * the immutability gate: every source image is hashed fully before and after
   a flow; any changed byte fails;
 * targets and image destinations for copy tests: blank sparse disks and an
@@ -50,9 +51,13 @@ FEATURE_TOOLS = {"mdadm": "mdadm", "lvm": "lvm", "cryptsetup": "cryptsetup", "dd
 class Attached:
     path: Path
     serial: str
-    transport: str = "nvme"        # nvme | ahci
+    transport: str = "nvme"        # nvme | ahci | usb (usb-storage on its own xHCI controller)
     name: str = ""
     snapshot: bool = False         # writes go to a temporary overlay (QEMU snapshot=on)
+    lbs: int = 512                 # logical sector size (4096 = 4Kn; NVMe and USB only, IDE is 512)
+    pbs: int = 0                   # physical sector size (4096 with lbs 512 = 512e); 0 = same as lbs
+    throttle_bps: int = 0          # QEMU read throttling (bytes/s), to stop a copy halfway
+    blkdebug: Path | None = None   # blkdebug config: read errors injected on chosen sectors
 
 
 def from_manifest(manifest: dict, *sets: str, only_present: bool = True) -> list[Attached]:
@@ -61,7 +66,7 @@ def from_manifest(manifest: dict, *sets: str, only_present: bool = True) -> list
         for d in manifest["sets"][s]["disks"]:
             if d.get("omit") and only_present:
                 continue
-            out.append(Attached(Path(d["path"]), d["serial"], d["transport"], d["name"]))
+            out.append(Attached(Path(d["path"]), d["serial"], d["transport"], d["name"], lbs=d.get("lss", 512)))
     return out
 
 
@@ -70,20 +75,143 @@ def qemu_args(disks: list[Attached]) -> list[str]:
     (the stick keeps ide.0 if it is attached as IDE)."""
     args: list[str] = []
     ahci = 5
+    usb_ctrl = False
     for i, d in enumerate(disks):
         did = f"fx{i}"
         snap = "on" if d.snapshot else "off"
-        args += ["-drive", f"if=none,id={did},file={d.path},format=raw,snapshot={snap},cache=unsafe"]
+        if d.blkdebug:
+            spec = (f"if=none,id={did},driver=raw,file.driver=blkdebug,file.config={d.blkdebug},"
+                    f"file.image.driver=file,file.image.filename={d.path}")
+        else:
+            spec = f"if=none,id={did},file={d.path},format=raw"
+        spec += f",snapshot={snap},cache=unsafe"
+        if d.throttle_bps:
+            spec += f",throttling.bps-read={d.throttle_bps}"
+        args += ["-drive", spec]
+        blk = ""
+        if d.lbs != 512 or d.pbs:
+            blk = f",logical_block_size={d.lbs},physical_block_size={d.pbs or d.lbs}"
         if d.transport == "nvme":
-            args += ["-device", f"nvme,serial={d.serial},drive={did}"]
+            args += ["-device", f"nvme,serial={d.serial},drive={did}{blk}"]
         elif d.transport == "ahci":
             if ahci < 1:
                 raise ValueError("more than 5 AHCI disks")
-            args += ["-device", f"ide-hd,serial={d.serial},drive={did},bus=ide.{ahci}"]
+            if d.lbs != 512:
+                raise ValueError("IDE/AHCI disks have 512-byte logical sectors")
+            args += ["-device", f"ide-hd,serial={d.serial},drive={did},bus=ide.{ahci}{blk}"]
             ahci -= 1
+        elif d.transport == "usb":
+            if not usb_ctrl:
+                args += ["-device", "qemu-xhci,id=bbxhci"]
+                usb_ctrl = True
+            args += ["-device", f"usb-storage,bus=bbxhci.0,serial={d.serial},drive={did},removable=off{blk}"]
         else:
             raise ValueError(d.transport)
     return args
+
+
+# ---------------------------------------------------------------------------
+# Data disks made on the host: random content, read errors, byte ranges
+# ---------------------------------------------------------------------------
+
+def random_disk(path: Path, size: int, serial: str, seed: str, transport: str = "nvme") -> Attached:
+    """A disk full of seeded pseudo-random bytes (no partition table): every byte is checkable."""
+    import random
+    r = random.Random(seed)
+    with open(path, "wb") as f:
+        left = size
+        while left:
+            n = min(8 * MIB, left)
+            f.write(r.randbytes(n))
+            left -= n
+    return Attached(Path(path), serial, transport, Path(path).name)
+
+
+def blkdebug_config(path: Path, bad: list[tuple[int, int]]) -> Path:
+    """QEMU blkdebug rules: every read touching a sector in the (first, count) ranges fails with
+    EIO, every time (one rule per sector: blkdebug matches single sectors)."""
+    rules = []
+    for first, count in bad:
+        for s in range(first, first + count):
+            rules.append(f'[inject-error]\nevent = "read_aio"\nerrno = "5"\nsector = "{s}"\nonce = "off"\n')
+    Path(path).write_text("\n".join(rules))
+    return Path(path)
+
+
+def fill_range(path: Path, start: int, length: int, byte: int) -> None:
+    with open(path, "r+b") as f:
+        f.seek(start)
+        left = length
+        while left:
+            n = min(MIB, left)
+            f.write(bytes([byte]) * n)
+            left -= n
+
+
+def sha256_range(path: Path, start: int, length: int) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        f.seek(start)
+        left = length
+        while left:
+            b = f.read(min(8 * MIB, left))
+            if not b:
+                break
+            h.update(b)
+            left -= len(b)
+    return h.hexdigest()
+
+
+def read_range(path: Path, start: int, length: int) -> bytes:
+    with open(path, "rb") as f:
+        f.seek(start)
+        return f.read(length)
+
+
+def parse_mapfile(text: str) -> list[tuple[int, int, str]]:
+    """ddrescue mapfile blocks (pos, size, status); the first data line is the current status."""
+    blocks, seen = [], False
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        w = line.split()
+        if not seen:
+            seen = True
+            continue
+        if len(w) >= 3:
+            blocks.append((int(w[0], 0), int(w[1], 0), w[2]))
+    return blocks
+
+
+def stick_mapfiles(drive) -> dict[str, bytes | None]:
+    """ddrescue mapfiles the helper left in /disk-tools on the stick's data partition.
+    None = listed but unreadable (after a power cut the FAT may not hold the file's clusters)."""
+    out: dict[str, bytes | None] = {}
+    with drive.data_writer() as w:
+        if not w.exists("/disk-tools"):
+            return out
+        for entry in w.listing("/disk-tools"):
+            name = entry.rsplit("/", 1)[-1]
+            if name.endswith(".map"):
+                try:
+                    out[name] = w.read("/disk-tools/" + name)
+                except subprocess.CalledProcessError:
+                    out[name] = None
+    return out
+
+
+def gpt_header(path: Path, lba: int, ss: int) -> dict | None:
+    import struct
+    with open(path, "rb") as f:
+        f.seek(lba * ss)
+        h = f.read(92)
+    if h[:8] != b"EFI PART":
+        return None
+    my, alt, first, last = struct.unpack_from("<QQQQ", h, 24)
+    entries, n, esz, ecrc = struct.unpack_from("<QIII", h, 72)
+    return {"my": my, "alt": alt, "first_usable": first, "last_usable": last, "entries_lba": entries,
+            "n_entries": n, "entry_size": esz, "entries_crc": ecrc}
 
 
 def sha256_file(path: Path) -> str:
@@ -325,9 +453,16 @@ class Boot:
     notes: list[str] = field(default_factory=list)
 
 
-def boot_helper(vm_factory, drive, attached: list[Attached], *, memory: int = 2048, hard_timeout: float = 600) -> Boot:
-    """Boot the stick (UEFI), pick the helper entry (the plan in `drive` is run
-    by script mode) with the fixture disks attached."""
-    vm = vm_factory("uefi", drive.path, memory=memory, hard_timeout=hard_timeout, extra_args=qemu_args(attached))
+def boot_helper(vm_factory, drive, attached: list[Attached], *, memory: int = 2048, hard_timeout: float = 600,
+                mode: str = "uefi", mok_certs: list[Path] | tuple = ()) -> Boot:
+    """Boot the stick, pick the helper entry (the plan in `drive` is run by script mode) with
+    the fixture disks attached. `mode` is a VM mode: "uefi", "bios" or "uefi-sb". "uefi-sb" is
+    the real Secure Boot chain (shim, signed GRUB, signed helper kernel in lockdown) and needs
+    the BeastBoot certificate in `mok_certs`; there the helper asks on the console before it
+    runs a plan from the stick, and this answers it."""
+    kw = {"mok_certs": list(mok_certs)} if mode == "uefi-sb" else {}
+    vm = vm_factory(mode, drive.path, memory=memory, hard_timeout=hard_timeout, extra_args=qemu_args(attached), **kw)
     rec = bn.select_entry(vm)
+    if mode == "uefi-sb":
+        bn.confirm_script(vm, after=rec.end)
     return Boot(vm, rec.end)

@@ -87,6 +87,18 @@ def _vpd_serial(path: str) -> str:
     return data[4:4 + n].decode("ascii", "replace").strip("\0 ")
 
 
+def _usb_serial(sys_root: str, name: str) -> str:
+    """iSerial of the USB device a disk sits on (usb-storage/UAS skip the SCSI VPD pages, so a
+    USB disk has no serial in /sys/block otherwise): the nearest ancestor with idVendor."""
+    root = os.path.realpath(sys_root)
+    dev = os.path.realpath(os.path.join(sys_root, "block", name, "device"))
+    while dev.startswith(root + os.sep) and dev != root:
+        if os.path.exists(os.path.join(dev, "idVendor")):
+            return read_text(os.path.join(dev, "serial"))
+        dev = os.path.dirname(dev)
+    return ""
+
+
 def serial_of(sys_root: str, name: str) -> str:
     base = os.path.join(sys_root, "block", name)
     for p in (os.path.join(base, "serial"), os.path.join(base, "device", "serial")):
@@ -94,6 +106,9 @@ def serial_of(sys_root: str, name: str) -> str:
         if s:
             return s
     s = _vpd_serial(os.path.join(base, "device", "vpd_pg80"))
+    if s:
+        return s
+    s = _usb_serial(sys_root, name)
     if s:
         return s
     if name.startswith("nvme"):
@@ -173,20 +188,30 @@ def blkid_all(ctx: Context, paths: list[str]) -> dict[str, dict[str, str]]:
     out: dict[str, dict[str, str]] = {p: {} for p in paths}
     for i in range(0, len(paths), 40):
         chunk = paths[i:i + 40]
-        cp = ctx.system.runner.run(["blkid", "-p", "-o", "export", *chunk], timeout=60)
-        cur: dict[str, str] = {}
-        for line in (cp.stdout or "").splitlines() + [""]:
-            line = line.strip()
-            if not line:
-                if cur.get("DEVNAME") in out:
-                    out[cur["DEVNAME"]].update(cur)
-                elif cur and len(chunk) == 1:  # one device: some blkid versions omit DEVNAME
-                    out[chunk[0]].update(cur)
-                cur = {}
-            elif "=" in line:
-                k, v = line.split("=", 1)
-                cur[k] = v
+        _blkid_chunk(ctx, chunk, out)
+        # blkid stops at the first device it cannot read (an I/O error), so one failing
+        # disk would hide the filesystems of every device after it: probe those one by one
+        if len(chunk) > 1:
+            for p in chunk:
+                if not out[p]:
+                    _blkid_chunk(ctx, [p], out)
     return out
+
+
+def _blkid_chunk(ctx: Context, chunk: list[str], out: dict[str, dict[str, str]]) -> None:
+    cp = ctx.system.runner.run(["blkid", "-p", "-o", "export", *chunk], timeout=60)
+    cur: dict[str, str] = {}
+    for line in (cp.stdout or "").splitlines() + [""]:
+        line = line.strip()
+        if not line:
+            if cur.get("DEVNAME") in out:
+                out[cur["DEVNAME"]].update(cur)
+            elif cur and len(chunk) == 1:  # one device: some blkid versions omit DEVNAME
+                out[chunk[0]].update(cur)
+            cur = {}
+        elif "=" in line:
+            k, v = line.split("=", 1)
+            cur[k] = v
 
 
 def part_type(info: dict[str, str]) -> str:

@@ -23,8 +23,10 @@ certificate (`keys/beast-boot.cer`, or the one in dist/), Secure Boot firmware
 and `virt-fw-vars`, or a usable `udisksctl`.
 
 **exFAT and NTFS tests** fill the data partition through a loop device that
-udisks sets up. This needs the system D-Bus and polkit. Inside a sandbox that
-blocks them, the tests skip. Run pytest outside the sandbox to include them.
+udisks sets up. This needs the system D-Bus and polkit. Inside a sandbox or
+container that blocks them, the exFAT tests fill it with the installer's own
+exFAT code instead (`bbe2e.images.ExfatWriter`) and still run; the NTFS tests
+skip. Run pytest outside the sandbox to include them.
 Loop devices are always unmounted and deleted, and only one backed by our own
 image file is ever touched.
 
@@ -64,7 +66,7 @@ bbe2e/serial.py             BEAST: record parser and VT100 screen emulator (menu
 bbe2e/images.py             installer wrapper, partition parsing, FAT (mtools) and udisks writers
 bbe2e/trees.py              data-partition trees and the listings they must produce
 bbe2e/checks.py             shared assertions (ready line, listing, interactive browse flow)
-bbe2e/beastnet.py           beast-net helpers: BEASTNET: lines, ESP/grubenv access, fake firmware packs, host HTTP(S) server
+bbe2e/beastnet.py           beast-net helpers: BEASTNET: lines, ESP/grubenv access, fake firmware packs, extra initrd archives, host HTTP(S) server
 bbe2e/stubs.py              stand-in GRUB images for the self-test (incl. a shim + throwaway-signed GRUB)
 bbe2e/sbtrust.py            Secure Boot trust fixtures: 2023-only db, MokList/MokListX stores, Canonical-signed kernel, test CA
 fixtures/build_fixtures.py  fixture ISOs (python3 tests/e2e/fixtures/build_fixtures.py [--force] [NAME...])
@@ -73,9 +75,22 @@ test_e2e_*.py               the tests
 
 ## How a test drives the menu
 
-Each test copies a base image and writes `/beast-booter/config.cfg` on the
-data partition, for example `bb_debug=1`, `bb_dryrun=1` or `bb_autoboot=/path.iso`.
-It then boots the copy and waits for `BEAST:` records.
+Each test copies a base image and writes its settings to the data partition,
+for example `bb_debug=1`, `bb_dryrun=1` or `bb_autoboot=/path.iso`: as
+`/beast-booter/config.cfg` (GRUB script, which the menu runs under legacy BIOS
+only) and, derived from its `set` lines, as `/beast-booter/config.env` (the
+GRUB environment block the menu reads on UEFI). It then boots the copy and
+waits for `BEAST:` records.
+
+No test steers the menu by changing menu files on the ESP: under UEFI the
+menu is inside the signed `grubx64.efi` and those files are not read
+(docs/ARCHITECTURE.md §5). A test that needs another menu builds another
+`dist/` (`BB_MENU_DIR`, `BB_DIST_DIR`) and points `BB_E2E_DIST` at it.
+`test_e2e_signed_menu.py` changes the ESP's menu files on purpose, to prove
+exactly that: every script, hook, theme file and font on the ESP changed, a
+`grub.cfg` added next to `grubx64.efi`, hostile `device.env`, `grubenv` and
+`config.env` files; no effect under UEFI with Secure Boot on or off, while
+legacy BIOS runs the changed files.
 
 The serial stream is not clean line-by-line text, and the parser in
 `bbe2e/serial.py` copes with that:
@@ -88,6 +103,18 @@ The serial stream is not clean line-by-line text, and the parser in
 
 So assertions check tokens and regexes (`Record.has_token`, `Record.matches`)
 that try every way of re-joining the wrapped lines, rather than whole lines.
+
+## The CA and its leaf certificates (`test_e2e_ca_chain.py`, marker `secureboot`)
+
+With Secure Boot on and the drive's own shim: only the BeastBoot CA in MokList
+starts GRUB, the helper's kernel and wimboot (each signed with its own leaf);
+a leaf in MokListX refuses exactly that component; a replacement leaf from the
+same CA works with nothing new enrolled (needs the CA key of a development key
+set in `keys/` or `BB_KEY_DIR`, else it skips); a PC with only a 0.4.x-style
+certificate lands in shim's first-time enrolment; and `PROFILES` records what
+certificate properties shim accepts and refuses (CA flag, keyUsage, EKU,
+dates, an embedded chain), each with wimboot loaded through GRUB and the main
+ones with GRUB loaded by shim.
 
 ## beast-net tests (`test_e2e_beastnet.py`, marker `beastnet`)
 
@@ -118,6 +145,10 @@ They cover "Download an ISO from a link" (docs/BEASTNET.md) end to end, about
 - **Firmware packs**: a tiny pack (`lib/firmware/beastbooter-test.bin`, built
   with the installer's cpio module and written to the ESP with mtools) is passed
   as an extra initrd, listed in `ready ... firmware=` and readable in the helper.
+- **Add-ons** (`test_e2e_addons.py`, beastnet/README.md "Add-ons"): a toy add-on
+  in a second initrd archive is started by the helper under UEFI and under
+  Secure Boot, a broken one next to it only logs a line, and the same package on
+  the data partition is not loaded.
 
 Networking is QEMU user mode (slirp) with `-device virtio-net-pci,romfile=`: the
 guest is 10.0.2.15 and reaches the host's 127.0.0.1 as 10.0.2.2, so the test
@@ -176,6 +207,10 @@ The quick check without a VM is `make net-sources`
 `"action": "disk"` plan and reads the `BEASTNET:` event lines. Every flow runs
 under the **immutability gate**: all source images are hashed before and after
 (and checked against the fixture cache); one changed byte fails the test.
+All tests boot the helper under UEFI. A chosen set also runs under legacy BIOS and under
+UEFI with Secure Boot (ids ending in `bios` and `uefi-sb`; `dk.boot_helper(mode=)`): the
+scan, five stack groups, one clone, the rescue with a power cut, and
+`test_modules_load_under_lockdown`. Select a mode with `-m bios` or `-m secureboot`.
 
 ```sh
 python tests/e2e/fixtures/disks.py needs      # what is missing on this host
@@ -189,7 +224,7 @@ pinned mdadm, lvm2, cryptsetup, btrfs-progs, e2fsprogs, xfsprogs, ntfs-3g
 (`fixtures/Dockerfile.disks`). Images are sparse, cached in
 `.tools/cache/disk-fixtures/<recipe-hash>/` (override: `BB_DISK_FIXTURE_CACHE`);
 the manifest holds each stack's parameters, member order and the SHA-256 of every file
-written inside. Sets: md RAID 0/1/linear, 5/10, 6 + degraded RAID5/RAID1, IMSM, DDF,
+written inside. Sets: md RAID 0/1/linear, 5/10, 6 + degraded RAID5/RAID1, md metadata 0.90/1.0/1.1, IMSM, DDF,
 LVM (two VGs plus a same-named VG on another disk), LUKS2 (passphrase in the manifest), btrfs RAID1,
 GPT with NTFS and ext4, and "wiped" arrays (superblocks zeroed, shuffled member order, one member missing).
 ZFS is not built (needs the zfs kernel module on the Docker host).

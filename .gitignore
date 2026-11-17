@@ -42,6 +42,7 @@ __pycache__/
 !/.github/
 /.github/*
 !/.github/workflows/
+!/.github/actions/
 !/.github/FUNDING.yml
 
 # Security testing (security/): scan results, the generated report and the

@@ -66,6 +66,32 @@ OPENVEX_JUSTIFICATIONS = {"component_not_present", "vulnerable_code_not_present"
                           "vulnerable_code_cannot_be_controlled_by_adversary",
                           "inline_mitigations_already_exist"}
 OPENVEX_STATUSES = {"not_affected", "affected", "fixed", "under_investigation"}
+SBAT_REVOKED = "BB-SBAT-REVOKED-"
+
+
+def sbat_required(generation: int | None, *required: int | None) -> int | None:
+    """The highest generation a revocation level requires above GENERATION (what the binary
+    carries), or None when no level revokes it."""
+    if generation is None:
+        return None
+    above = [r for r in required if r is not None and generation < r]
+    return max(above) if above else None
+
+
+def sbat_finding_id(component: str, required: int) -> str:
+    """The id of an SBAT revocation finding names the generation the level requires
+    (BB-SBAT-REVOKED-grub-7), so a VEX statement written about one revocation level can
+    never close a later one."""
+    return f"{SBAT_REVOKED}{component}-{required}"
+
+
+def sbat_vex_name_problem(name: str) -> str | None:
+    """Why a VEX statement about an SBAT revocation is not usable (None when it is, or when
+    NAME is another kind of finding): ids from before the generation was part of the id."""
+    if name.startswith(SBAT_REVOKED) and not re.search(r"-\d+$", name):
+        return (f"{name} names no SBAT generation (the id is {SBAT_REVOKED}<component>-<required generation>, "
+                "one statement per revocation level) - statement ignored")
+    return None
 FAMILY = {"grub2": "grub2", "grub2-unsigned": "grub2", "grub2-signed": "grub2",
           "shim": "shim", "shim-signed": "shim"}
 
@@ -484,6 +510,9 @@ def load_vex(path: Path) -> tuple[list[dict], list[str], dict]:
         if st not in OPENVEX_STATUSES:
             errs.append(f"{where} ({vname}): status {st!r} invalid")
             continue
+        if sbat_vex_name_problem(vname):
+            errs.append(f"{where}: {sbat_vex_name_problem(vname)}")
+            continue
         if st == "not_affected" and not (s.get("justification") in OPENVEX_JUSTIFICATIONS or s.get("impact_statement")):
             errs.append(f"{where} ({vname}): not_affected needs a justification ({', '.join(sorted(OPENVEX_JUSTIFICATIONS))}) "
                         "or an impact_statement - statement ignored")
@@ -547,6 +576,10 @@ def apply_vex(findings: list[dict], statements: list[dict]) -> None:
         for s in statements:
             vn = {s["vulnerability"]["name"], *(s["vulnerability"].get("aliases") or [])}
             if not names & vn:
+                continue
+            # An SBAT revocation is measured on the shipped binary: while the finding exists the
+            # binary is below the level, so no statement can call it fixed or not affected.
+            if f["id"].startswith(SBAT_REVOKED) and s["status"] in ("fixed", "not_affected"):
                 continue
             ok = False
             for pid in prod_ids(s):
@@ -831,12 +864,14 @@ def removability_text(w: dict) -> str:
 
 
 def context_severity(f: dict) -> tuple[str | None, str | None]:
-    """beast-boot-specific: GRUB's config and the ESP are on a user-writable FAT partition, so
-    'an attacker who controls grub.cfg / the boot media' is a given for a USB boot drive."""
+    """beast-boot-specific: 'an attacker who controls the boot media' is a given for a USB boot
+    drive. Since 0.5.0 the menu scripts are inside the signed grubx64.efi (UEFI), but GRUB still
+    reads file systems, ISOs, an ISO's own loopback.cfg and environment blocks from the drive."""
     t = (f.get("description") or "") + " " + (f.get("title") or "")
     if re.search(r"secure ?boot|lockdown", t, re.I) and re.search(r"bypass|unsigned|circumvent", t, re.I):
-        return "high", ("raised to high for beast-boot: a Secure Boot / lockdown bypass, and beast-boot's "
-                        "grub.cfg and modules live on a FAT ESP that anyone holding the drive can modify")
+        return "high", ("raised to high for beast-boot: a Secure Boot / lockdown bypass, and anyone holding the "
+                        "drive can modify what GRUB parses from it (file systems, ISOs and their loopback.cfg; "
+                        "the menu scripts themselves are inside the signed grubx64.efi since 0.5.0)")
     return None, None
 
 
@@ -946,9 +981,10 @@ def check_boot_chain(root: Path, dist: Path, manifest: dict, fetch: Fetcher, idx
                               "status": status})
                 if status != "ok":
                     bad_any = True
-                    finding(f"BB-SBAT-REVOKED-{r['component']}", "critical", comp_of(rel),
+                    need = sbat_required(r["generation"], req, req_prev, req_lat)
+                    finding(sbat_finding_id(r["component"], need), "critical", comp_of(rel),
                             f"{rel}: SBAT {r['component']},{r['generation']} is below the revocation level "
-                            f"{r['component']},{req} (SbatLevel {latest['datestamp']})",
+                            f"{r['component']},{need} (SbatLevel {latest['datestamp']})",
                             f"Machines whose SbatLevel UEFI variable has reached {latest['datestamp']} refuse this "
                             f"binary under Secure Boot. Our SBAT line: {r['component']},{r['generation']},{r['vendor']},"
                             f"{r['package']},{r['version']}.",
@@ -1042,50 +1078,82 @@ def check_boot_chain(root: Path, dist: Path, manifest: dict, fetch: Fetcher, idx
                        "No shim signed by a Microsoft UEFI CA 2023 was found on this host (/usr/lib/shim, .tools/root, "
                        ".tools/debian) and the configured Ubuntu archive offers only: " + signers["apt_policy_shim_signed"]),
                     "R-CA2011", "boot-chain:signers")
-    # ---- beast-boot certificate ------------------------------------------------------
+    # ---- BeastBoot CA certificate and the leaf certificates that sign ---------------------
+    # The .cer on the drive is the CA users enroll. Each signed:beast-boot file carries one
+    # signature by its own component's leaf certificate, which the CA issued (build/sbkeys.sh):
+    # one MokListX entry then revokes one component.
     cer = next((r for r in manifest["files"] if r.endswith(".cer")), None)
     bbcert = None
     if cer:
         c = efi.cert_info((dist / cer).read_bytes())
-        exp = dt.datetime.fromisoformat(c["not_after"].replace("Z", "+00:00"))
-        days_left = (exp - now).days
+        sb_man = manifest.get("secure_boot", {})
+
+        def lifetime(ci: dict) -> int:
+            return (dt.datetime.fromisoformat(ci["not_after"].replace("Z", "+00:00")) - now).days
+
+        def key_problems(ci: dict, what: str) -> list[str]:
+            out = []
+            if ci["key_algorithm"] == "rsaEncryption" and (ci["key_bits"] or 0) < 2048:
+                out.append(f"{what}: RSA key of {ci['key_bits']} bits (< 2048)")
+            if "sha1" in ci["signature_algorithm"].lower() or "md5" in ci["signature_algorithm"].lower():
+                out.append(f"{what}: weak signature algorithm {ci['signature_algorithm']}")
+            days = lifetime(ci)
+            if days < 0:
+                out.append(f"{what}: expired {-days} days ago")
+            elif days < 365:
+                out.append(f"{what}: expires in {days} days")
+            return out
+
+        days_left = lifetime(c)
+        problems = key_problems(c, "CA")
+        if not c["ca"]:
+            problems.append("the certificate to enroll is not a CA certificate (basicConstraints CA:TRUE)")
+        if c["sha256"] != sb_man.get("cert_sha256"):
+            problems.append("differs from manifest.secure_boot.cert_sha256")
+        component = {"grubx64.efi": "grub", "vmlinuz": "kernel", "wimboot": "wimboot"}
+        leaves, seen = [], {}
+        with tempfile.TemporaryDirectory(prefix="bb-ca-") as td:
+            ca_pem = Path(td) / "ca.pem"
+            ca_pem.write_text(efi.der_to_pem([(dist / cer).read_bytes()]))
+            for r in bb_signed:
+                comp = component.get(r.rsplit("/", 1)[-1], "?")
+                sigs = efis[r]["signatures"]
+                signer = (sigs[0].get("signer") if len(sigs) == 1 else None) or {}
+                chains = efi.check_signers(dist / r, {"ca": ca_pem})["signatures"]
+                leaf = {"file": r, "component": comp, "subject": signer.get("subject"), "sha256": signer.get("sha256"),
+                        "not_after": signer.get("not_after"), "signatures": len(sigs),
+                        "chains_to_ca": len(chains) == 1 and "ca" in chains[0]["chains_to"]}
+                leaves.append(leaf)
+                if len(sigs) != 1 or not signer:
+                    problems.append(f"{r}: {len(sigs)} signatures, expected exactly one")
+                    continue
+                if not leaf["chains_to_ca"]:
+                    problems.append(f"{r} is not signed through this CA certificate")
+                if signer["sha256"] != sb_man.get(f"signer_{comp}_cert_sha256"):
+                    problems.append(f"{r} is not signed with the manifest's {comp} certificate")
+                if f"OU={comp}," not in (signer.get("subject") or "") + ",":
+                    problems.append(f"{r}: its signer is not a {comp} certificate ({signer.get('subject')})")
+                if signer.get("ca") or not signer.get("code_signing_eku"):
+                    problems.append(f"{r}: its signer is not a code-signing end-entity certificate")
+                if signer["sha256"] in seen:
+                    problems.append(f"{r} and {seen[signer['sha256']]} are signed with the same certificate")
+                seen.setdefault(signer["sha256"], r)
+                problems += key_problems(signer, f"{comp} leaf")
+                leaf["days_left"] = lifetime(signer)
         grub_rel = next((r for r in efis if r.endswith("grubx64.efi")), None)
-        grub_signer = None
-        if grub_rel:
-            for s in efis[grub_rel]["signatures"]:
-                if s.get("signer"):
-                    grub_signer = s["signer"]["sha256"]
-        not_bb = [r for r in bb_signed if not any((s.get("signer") or {}).get("sha256") == c["sha256"]
-                                                   for s in efis[r]["signatures"])]
+        not_bb = [lf["file"] for lf in leaves if not lf["chains_to_ca"]]
         bbcert = {"file": cer, "subject": c["subject"], "sha256": c["sha256"], "key": f"{c['key_algorithm']} {c['key_bits']}",
                   "signature_algorithm": c["signature_algorithm"], "not_before": c["not_before"],
                   "not_after": c["not_after"], "days_left": days_left, "eku": c["extended_key_usage"],
-                  "code_signing_eku": c["code_signing_eku"], "self_signed": c["self_signed"],
-                  "matches_manifest": c["sha256"] == manifest.get("secure_boot", {}).get("cert_sha256"),
-                  "signs_grubx64": grub_signer == c["sha256"],
-                  "signed_files": bb_signed, "not_signed_by_cert": not_bb}
-        problems = []
-        if c["key_algorithm"] == "rsaEncryption" and (c["key_bits"] or 0) < 2048:
-            problems.append(f"RSA key of {c['key_bits']} bits (< 2048)")
-        if not c["code_signing_eku"]:
-            problems.append("no extendedKeyUsage codeSigning")
-        if days_left < 0:
-            problems.append(f"expired {-days_left} days ago")
-        elif days_left < 365:
-            problems.append(f"expires in {days_left} days")
-        if not bbcert["matches_manifest"]:
-            problems.append("differs from manifest.secure_boot.cert_sha256")
-        if not bbcert["signs_grubx64"]:
-            problems.append("grubx64.efi is not signed by this certificate")
-        if "sha1" in c["signature_algorithm"].lower() or "md5" in c["signature_algorithm"].lower():
-            problems.append(f"weak signature algorithm {c['signature_algorithm']}")
-        for r in not_bb:
-            if r != grub_rel:
-                problems.append(f"{r} is not signed by this certificate")
+                  "is_ca": c["ca"], "self_signed": c["self_signed"],
+                  "matches_manifest": c["sha256"] == sb_man.get("cert_sha256"),
+                  "signs_grubx64": bool(grub_rel) and grub_rel not in not_bb,
+                  "signed_files": bb_signed, "not_signed_by_cert": not_bb, "leaves": leaves}
         bbcert["problems"] = problems
         if problems:
-            sev = "critical" if any(x.startswith(("expired", "grubx64", "differs", "no extended")) or x.endswith("not signed by this certificate") for x in problems) else "medium"
-            finding("BB-CERT-PROBLEM", sev, comp_of(cer), "beast-boot signing certificate: " + "; ".join(problems),
+            soft = ("expires in", "RSA key", "weak signature")
+            sev = "medium" if all(any(k in x for k in soft) for x in problems) else "critical"
+            finding("BB-CERT-PROBLEM", sev, comp_of(cer), "BeastBoot CA and signing certificates: " + "; ".join(problems),
                     json.dumps({k: bbcert[k] for k in ("subject", "key", "not_after")}), "R-CERT", "boot-chain:cert")
 
     # ---- dbx ---------------------------------------------------------------------------
@@ -1354,13 +1422,15 @@ def remediation(f: dict, idx: dict, codename: str, archive: dict) -> tuple[str, 
     ubs = f" Ubuntu {codename}: " + ", ".join(f"{k} {v}" for k, v in ub.items()) + "." if ub else ""
     if f.get("severity_context") and (FAMILY.get(src) == "grub2" or c["name"].endswith("grub2")):
         return ("R-SB-BYPASS", f"No fixed GRUB package yet and no evidence the fix is in the shipped build.{ubs} This is a "
-                "Secure Boot / lockdown bypass that needs control of GRUB's configuration - on a beast-boot drive grub.cfg, "
-                "grub/beast/*.cfg and /grub/ are on a FAT ESP anyone holding the drive can modify, so treat it as reachable. "
+                "Secure Boot / lockdown bypass that needs control of what GRUB reads. Since 0.5.0 the menu scripts are "
+                "inside the signed grubx64.efi under UEFI, but GRUB still parses the drive's file systems and ISOs and "
+                "runs the loopback.cfg of an ISO that has one, all of which anyone holding the drive can modify, so "
+                "treat it as reachable unless the advisory needs a GRUB command the menu never runs on such input. "
                 "Actions: (1) add the upstream fix to the GRUB source build (build/grub/patches + "
                 "build/grub/security-fixes.json, see R-SBAT for the SBAT generation), `make build`, `make e2e`, re-scan; (2) document the gap in SECURITY.md / "
-                "docs/SECURE_BOOT.md; (3) proposal for the build owner: evaluate GRUB's GPG verification of everything "
-                "it reads (grub-mkimage --pubkey + check_signatures=enforce, menu files signed at build time) so a "
-                f"tampered ESP is detected. Record OpenVEX affected with that action_statement meanwhile.{track}")
+                "docs/SECURE_BOOT.md; (3) the menu itself is already covered by the signature (memdisk of grubx64.efi, "
+                "docs/ARCHITECTURE.md section 5): check whether the vulnerable code is reachable from what the menu "
+                f"still reads from the drive. Record OpenVEX affected with that action_statement meanwhile.{track}")
     if FAMILY.get(src) == "grub2" or c["name"].endswith("grub2"):
         if hints and not emb:
             mods = sorted({x for h in hints for x in h["modules"]})
@@ -1560,13 +1630,21 @@ def write_markdown(path: Path, rep: dict) -> None:
             for k, v in arch.items() if v.get("published")) + ".")
         a("")
     c = bc.get("beast_booter_cert")
-    a("### beast-boot signing certificate")
+    a("### BeastBoot CA certificate and signing certificates")
     a("")
     if c:
-        a(f"`{c['file']}`: `{c['subject']}`, {c['key']}, {c['signature_algorithm']}, valid {c['not_before'][:10]} to "
-          f"{c['not_after'][:10]} ({c['days_left']} days left), EKU: {c['eku'] or 'none'}, self-signed: {c['self_signed']}, "
-          f"matches manifest: {c['matches_manifest']}, signs grubx64.efi: {c['signs_grubx64']}, signed:beast-boot files checked: {len(c.get('signed_files', []))} (not signed by it: {', '.join(c.get('not_signed_by_cert', [])) or 'none'}). SHA-256 `{c['sha256']}`. "
+        a(f"The certificate users enroll, `{c['file']}`: `{c['subject']}`, {c['key']}, {c['signature_algorithm']}, "
+          f"valid {c['not_before'][:10]} to {c['not_after'][:10]} ({c['days_left']} days left), CA: {c.get('is_ca')}, "
+          f"matches manifest: {c['matches_manifest']}. SHA-256 `{c['sha256']}`. "
+          f"signed:beast-boot files checked: {len(c.get('signed_files', []))} "
+          f"(not signed through it: {', '.join(c.get('not_signed_by_cert', [])) or 'none'}). "
           + ("Problems: " + "; ".join(c["problems"]) if c["problems"] else "No problems found."))
+        if c.get("leaves"):
+            a("")
+            a("| File | Component | Signed with (one MokListX entry revokes it) | Valid until | SHA-256 |")
+            a("|---|---|---|---|---|")
+            for lf in c["leaves"]:
+                a(f"| `{lf['file']}` | {lf['component']} | `{lf['subject']}` | {(lf['not_after'] or '?')[:10]} | `{lf['sha256']}` |")
     else:
         a("No certificate in dist/.")
     a("")
@@ -1733,14 +1811,18 @@ REMEDIATION_TEXT = {
               "there - the GRUB build proves every listed fix present (reverse-applying the upstream commit) and "
               "refuses a claim it cannot prove. Then `make build`, `make e2e`, regenerate the SBOM and re-scan. Never "
               "edit the `grub,N` line by hand: SBAT must truthfully describe the code. Bump `grub.beastbooter` "
-              "(build/sbat-beastbooter.csv) only for beast-boot's own GRUB bugs.",
+              "(build/sbat-beastbooter.csv, which lists what each generation stands for) only for beast-boot's "
+              "own GRUB problems.",
     "R-CA2011": "Ship a shim that is also signed by the Microsoft UEFI CA 2023. beast-boot ships Debian's shim "
                 "(build/shim/debian-shim.lock), signed through both CAs over one Authenticode digest; build/build.sh "
                 "refuses a shim without both signatures. If this finding appears, the lock or BB_SHIM_DIR points at "
                 "another shim: pin a dual-signed shim-signed + the matching shim-helpers-amd64-signed, rebuild "
                 "(`make build`) and run the e2e Secure Boot tests (test_e2e_secureboot.py boots a 2023-only db).",
-    "R-CERT": "Regenerate the beast-boot key with `make keys` (RSA >= 2048, codeSigning EKU, long validity), rebuild "
-              "(`make build`) and tell users to enroll the new ENROLL_THIS_KEY_IN_MOKMANAGER.cer.",
+    "R-CERT": "A problem with one leaf (a signing certificate): issue a new one from the CA with "
+              "`build/keygen.sh leaf <component> --force` and rebuild; users enroll nothing. A problem with the CA "
+              "certificate itself: a new CA (`build/keygen.sh ca`, RSA >= 2048, long validity), new leaves, rebuild "
+              "(`make build`) and tell users to enroll the new ENROLL_THIS_KEY_IN_MOKMANAGER.cer "
+              "(docs/RELEASING.md section 3, docs/SECURE_BOOT.md section 7).",
     "R-DBX": "Never ship a binary that is in dbx. Replace it with a non-revoked build of the same component (newer "
              "shim-signed / GRUB package), rebuild, and verify with this scan.",
     "R-SIG-BROKEN": "The binary's Authenticode digest does not match its content: rebuild (`make build`) and check "
@@ -1796,9 +1878,9 @@ REMEDIATION_TEXT = {
                     "Ubuntu update, rebuild and re-scan; under_investigation meanwhile.",
     "R-SHIM-TRACK": "shim must remain the Microsoft-signed Ubuntu binary: track shim-signed updates, rebuild, run the "
                     "Secure Boot e2e test, re-scan; assess impact and record VEX meanwhile.",
-    "R-SB-BYPASS": "A Secure Boot / lockdown bypass reachable through files on the ESP (which any holder of the "
-                   "drive can modify). Take the Ubuntu fix as soon as it exists and rebuild; document the gap; consider "
-                   "GRUB GPG verification of menu files (grub-mkimage --pubkey, check_signatures=enforce) as hardening; "
+    "R-SB-BYPASS": "A Secure Boot / lockdown bypass reachable through files on the drive (which any holder of it "
+                   "can modify: file systems, ISOs, an ISO's loopback.cfg; the menu scripts are inside the signed "
+                   "grubx64.efi since 0.5.0). Take the Ubuntu fix as soon as it exists and rebuild; document the gap; "
                    "record OpenVEX affected + action_statement meanwhile.",
     "R-TRACK": "Track the distribution update, rebuild and re-scan; record a VEX assessment meanwhile.",
     "R-BUILD": "Tooling only (not on the drive): update on the build host or with `make tools`; lower priority.",

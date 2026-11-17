@@ -312,15 +312,15 @@ def _flow(s: Setup, args) -> int:
 
     # 4. keys
     n += 1
-    st = s.head(n, total, "signing key (keys/)")
+    st = s.head(n, total, "signing keys (keys/)")
     keys = paths.KEYS
-    if all((keys / f).is_file() for f in ("beast-boot.key", "beast-boot.crt", "beast-boot.cer")):
-        st.status, st.detail = SKIP, "keys/beast-boot.{key,crt,cer} present"
+    if all((keys / f).is_file() for f in paths.KEY_FILES):
+        st.status, st.detail = SKIP, "keys/: a CA certificate and three signing keys present"
     else:
         if s.sh(["make", "keys"], env) != 0:
             st.status = FAILED
             raise Failure("make keys failed")
-        st.status, st.detail = DONE, "created a local key (git-ignored; never share keys/beast-boot.key)"
+        st.status, st.detail = DONE, "created a local CA and three signing keys (git-ignored; never share keys/*.key)"
         s.changed = True
 
     # 5. build

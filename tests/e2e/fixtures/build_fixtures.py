@@ -286,9 +286,14 @@ def build_squashfs_exfat(dest: Path) -> None:
             f = tree / rel
             f.parent.mkdir(parents=True, exist_ok=True)
             f.write_bytes(data)
-        subprocess.run([_need("mksquashfs"), str(tree), str(dest), "-noappend", "-quiet", "-no-progress",
-                        "-comp", "xz", "-all-root", "-mkfs-time", "1760000000", "-all-time", "1760000000"],
-                       check=True, capture_output=True, text=True)
+        # mksquashfs 4.6+ refuses -mkfs-time/-all-time when SOURCE_DATE_EPOCH is set (build
+        # environments set it): the fixed times here are the reproducible ones
+        env = {k: v for k, v in os.environ.items() if k != "SOURCE_DATE_EPOCH"}
+        p = subprocess.run([_need("mksquashfs"), str(tree), str(dest), "-noappend", "-quiet", "-no-progress",
+                            "-comp", "xz", "-all-root", "-mkfs-time", "1760000000", "-all-time", "1760000000"],
+                           capture_output=True, text=True, env=env)
+        if p.returncode:  # show why (the exception alone hides mksquashfs's message)
+            raise RuntimeError(f"mksquashfs failed (exit {p.returncode}): {(p.stderr or p.stdout).strip()[-800:]}")
 
 
 def _spec_key(name: str, spec: dict, payload_hash: str) -> str:

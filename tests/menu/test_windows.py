@@ -128,8 +128,9 @@ def test_wimboot_commands_per_platform():
     assert 'set bb_w_wim="newc:boot.wim:(loop)/sources/boot.wim"' in lines
     assert 'set bb_w_args="index=1"' in lines
     inj = next(ln for ln in lines if ln.startswith('set bb_w_inj="newc:winpeshl.ini:'))
-    assert inj == ('set bb_w_inj="newc:winpeshl.ini:$bb_w/winpe/winpeshl.ini newc:beastboot.cmd:'
-                   '$bb_w/winpe/beastboot.cmd newc:beastboot.txt:($bb_esp)/grub/grubenv"')
+    # $bb_w_pe: the ESP's winpe folder under BIOS, the memdisk's under UEFI (test_signed_menu.py)
+    assert inj == ('set bb_w_inj="newc:winpeshl.ini:$bb_w_pe/winpeshl.ini newc:beastboot.cmd:'
+                   '$bb_w_pe/beastboot.cmd newc:beastboot.txt:($bb_esp)/grub/grubenv"')
     assert 'set bb_w_inj="$bb_w_inj newc:beastmount.exe:$bb_w/winpe/beastmount.exe"' in lines
     assert "bb_kargs" not in body
 

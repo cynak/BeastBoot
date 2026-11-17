@@ -30,7 +30,7 @@ name starts it ([§8](#8-trust-ubuntus-secure-boot-key)).
 
 - **Secure Boot stays intact.** The helper kernel is Ubuntu's kernel with its
   code unchanged; the build checks Canonical's signature, then replaces it with
-  the beast-boot key's (§5), and shim verifies it like `grubx64.efi`. Its
+  one made with BeastBoot's kernel certificate (§5), and shim verifies it like `grubx64.efi`. Its
   modules are the unmodified Canonical-signed `.ko` files of that same kernel
   build. The
   helper never kexecs into another kernel when Secure Boot is on; the hand-off
@@ -44,7 +44,7 @@ name starts it ([§8](#8-trust-ubuntus-secure-boot-key)).
 ## 3. Files on the ESP (layout version 2: 512 MiB FAT32 ESP)
 
 ```
-beast-net/vmlinuz                 Ubuntu's kernel (linux-image-<kver>), re-signed with the beast-boot key (code unchanged)
+beast-net/vmlinuz                 Ubuntu's kernel (linux-image-<kver>), re-signed with the BeastBoot kernel leaf certificate (code unchanged)
 beast-net/initrd.img              base initramfs (compressed cpio; see §5)
 beast-net/VERSION                 "beast-net <bb version> kernel <kver>"
 beast-net/catalog.json            firmware pack catalog (§6)
@@ -98,7 +98,7 @@ all versions recorded in the manifest:
   `build/build.sh` treats the kernel like `grubx64.efi`: it checks that the
   kernel is signed through Canonical's Master CA and not by a certificate or
   hash Ubuntu revoked (`build/trust/canonical/`), removes every signature
-  (`sbattach --remove`) and signs it with the beast-boot key. The code is
+  (`sbattach --remove`) and signs it with the BeastBoot kernel leaf certificate (issued by the CA users enroll). The code is
   unchanged: the Authenticode digest is the same before and after. An
   existing `dist/` copy is kept when ours is its only signature and the
   unsigned image is unchanged; `BB_RESIGN=1` forces a fresh signature. The
@@ -185,6 +185,9 @@ BEASTNET: script confirm path=<plan> steps=<n>
 BEASTNET: trust state=<state> sb=<0|1|unknown> ca=<0|1> revoked=<n>/<total> pending=<vars or none>
 BEASTNET: trust request step=<revocations|ca|delete> var=<MokXNew|MokNew|MokDel> certs=<n> hashes=<n>
 BEASTNET: trust requested step=<step> var=<var>
+BEASTNET: addon <name> started ui=<wrapped|local>
+BEASTNET: addon <name> failed <error>
+BEASTNET: addon <name> refused <reason>
 BEASTNET: error <code> <text>
 ```
 Error codes: `no-network`, `wifi-auth`, `dhcp`, `tls`, `http`, `refused-plain-http`

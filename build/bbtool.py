@@ -11,6 +11,8 @@ is error-prone. Every subcommand is read-only except `manifest-write`.
   sbat-vs-level SBAT LEVEL       fail if any SBAT generation is below the level
   build-id DIST VERSION UNSIGNED_SHA256 [--unsigned REL=SHA256]...
                                  deterministic short id of a staged dist/
+                                 (UNSIGNED_SHA256: grubx64.efi built with an empty
+                                 bb_build_id in its version.cfg, unsigned)
   manifest-write ...             write dist/manifest.json (schema 1)
   manifest-verify DIST           re-hash every file listed in DIST/manifest.json
   manifest-get DIST KEY.PATH     print one value from the manifest
@@ -29,7 +31,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 LAYOUT_PY = ROOT / "installer" / "beastbooter" / "layout.py"
-GRUB_ESP_EXCLUDE = ("grub/beast/version.cfg",)  # generated, excluded from build-id
+# Not part of the build id: version.cfg (it carries the id), and the certificate. The id goes
+# into grubx64.efi (its version.cfg), and the release builds the unsigned images with a
+# throw-away key before the real one signs them (docs/RELEASING.md): the image must be the
+# same under either. Who signed a build is in the manifest (secure_boot.cert_sha256).
+BUILD_ID_EXCLUDE = ("esp/grub/beast/version.cfg", "esp/ENROLL_THIS_KEY_IN_MOKMANAGER.cer")
 
 
 def die(msg: str) -> None:
@@ -152,8 +158,10 @@ def cmd_build_id(args) -> None:
         if not sep or len(digest) != 64:
             die(f"--unsigned takes REL=SHA256, got {spec!r}")
         unsigned[rel] = digest
-    for rel in dist_files(dist):
-        if rel.endswith(GRUB_ESP_EXCLUDE):
+    # A signed file need not be in DIST yet: grubx64.efi is built after the id,
+    # because the id goes into the version.cfg inside it (see build.sh).
+    for rel in sorted(set(dist_files(dist)) | set(unsigned)):
+        if rel in BUILD_ID_EXCLUDE:
             continue
         digest = unsigned.get(rel) or sha256_file(dist / rel)
         h.update(f"{digest}  {rel}\n".encode())

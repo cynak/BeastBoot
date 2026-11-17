@@ -20,6 +20,7 @@ for _p in (ROOT / "devtools", ROOT / "installer"):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
+from bbdev import paths
 from bbdev.commands import doctor
 from bbdev.commands.doctor import FAIL, OK, WARN
 
@@ -300,9 +301,11 @@ def test_venv(fake):
 def _keys(fake, mode=0o600):
     k = fake.repo / "keys"
     k.mkdir(exist_ok=True)
-    for n in ("beast-boot.key", "beast-boot.crt", "beast-boot.cer"):
+    for n in paths.KEY_FILES:
         (k / n).write_text("x")
-    (k / "beast-boot.key").chmod(mode)
+    for n in paths.PRIVATE_KEYS:
+        (k / n).chmod(0o600)
+    (k / "beast-boot-kernel.key").chmod(mode)
 
 
 def test_keys(fake):
@@ -319,7 +322,7 @@ def test_keys(fake):
     assert r.status == OK and "2036-10-20" in r.detail
     fake.outputs["openssl x509"] = cp("notAfter=Dec  1 00:00:00 2026 GMT\n")
     r = doctor.check_keys(fake.ctx(), now=now)
-    assert r.status == WARN and "expires" in r.detail and "keygen.sh --force" in r.fix
+    assert r.status == WARN and "expires" in r.detail and "keygen.sh" in r.fix and "--force" in r.fix
     fake.outputs["openssl x509"] = cp("notAfter=Jan  1 00:00:00 2020 GMT\n")
     r = doctor.check_keys(fake.ctx(), now=now)
     assert r.status == WARN and "expired" in r.detail

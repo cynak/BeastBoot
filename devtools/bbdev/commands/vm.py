@@ -37,6 +37,8 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from beastbooter.esp import parse_env_block
+
 from .. import diskimg, freshness, menufiles, paths, qemu
 from ..msg import Failure, confirm, kv, note, rel, run_guarded, warn
 from ..userconfig import UserConfig
@@ -340,11 +342,11 @@ def user_config_bytes(info: diskimg.ImageInfo) -> tuple[bytes | None, str]:
 
 def check_bios_serial(plan: Plan) -> None:
     """BIOS: GRUB only uses the serial port with bb_serial=1, from the ESP's
-    /grub/beast/device.cfg (installer --serial-console) or the data
+    /grub/beast/device.env (installer --serial-console) or the data
     partition's /beast-booter/config.cfg (bb-dev debug-config)."""
     try:
         info = diskimg.image_info(plan.image)
-        if _serial_on(info.esp().read("/grub/beast/device.cfg")):
+        if parse_env_block(info.esp().read(diskimg.DEVICE_ENV) or b"").get("bb_serial") == "1":
             return
     except Failure:
         return
@@ -354,11 +356,11 @@ def check_bios_serial(plan: Plan) -> None:
     where = "on the display only" if plan.display != "none" else "nowhere you can see (--display none)"
     fix = "`bb-dev debug-config --set bb_serial=1` turns it on"
     if unread:
-        msg = (f"BIOS: bb_serial is not set in device.cfg, and {diskimg.USER_CONFIG} on the {info.data_fs} "
+        msg = (f"BIOS: bb_serial is not set in device.env, and {diskimg.USER_CONFIG} on the {info.data_fs} "
                f"data partition could not be read ({unread}); unless it sets bb_serial=1, after SeaBIOS the "
                f"menu is {where}; {fix}")
     else:
-        msg = (f"BIOS: bb_serial is not set (device.cfg or {diskimg.USER_CONFIG}), so after SeaBIOS the menu "
+        msg = (f"BIOS: bb_serial is not set (device.env or {diskimg.USER_CONFIG}), so after SeaBIOS the menu "
                f"is {where}; {fix}")
     (plan.warnings if plan.display == "none" else plan.notes).append(msg)
 

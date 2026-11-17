@@ -1,4 +1,5 @@
-"""bb-dev debug-config: edit /beast-booter/config.cfg on an image's data partition.
+"""bb-dev debug-config: edit /beast-booter/config.cfg on an image's data partition,
+and keep /beast-booter/config.env (what the menu reads on UEFI) in step with it.
 
   bb-dev debug-config                              show it (same as --show)
   bb-dev debug-config --set bb_debug=1 bb_serial=1 --show
@@ -9,6 +10,11 @@
 FAT32 data partitions are edited with mtools, exFAT and NTFS through a udisks
 loop mount. --print writes nothing: it prints the file for you to copy to
 /beast-booter/config.cfg on a real stick (bb-dev never writes real devices).
+
+The menu runs config.cfg (GRUB script) under legacy BIOS only. On UEFI it reads
+config.env, a GRUB environment block with an allow-list of names, as data; every
+change here rewrites config.env from config.cfg, and says which settings it
+cannot carry.
 """
 
 from __future__ import annotations
@@ -101,6 +107,12 @@ def _run(args) -> int:
         sys.stdout.write(cfg.text)
         note(CMD, f"copy this to {diskimg.USER_CONFIG} on the stick's data partition (partition 1, "
                   "the one with your ISOs); bb-dev does not write real devices")
+        _block, left_out = cfg.env_block()
+        env_settings = " ".join(f"'{k}={v}'" for k, v in cfg.settings().items() if k not in left_out)
+        note(CMD, f"the menu runs config.cfg under legacy BIOS only; for UEFI also create {diskimg.USER_ENV}: "
+                  f"grub-editenv config.env set {env_settings}" if env_settings else
+                  f"the menu runs config.cfg under legacy BIOS only; none of these settings can go into "
+                  f"{diskimg.USER_ENV}, which it reads on UEFI")
         return 0
 
     image = Path(args.image or paths.DEFAULT_IMAGE).absolute()
@@ -116,16 +128,22 @@ def _run(args) -> int:
             for w in apply(cfg, args):
                 warn(CMD, w)
             if cfg.is_empty():
+                d.remove(diskimg.USER_ENV)
                 if d.remove(diskimg.USER_CONFIG):
-                    print(f"removed {diskimg.USER_CONFIG} from {rel(image)}")
+                    print(f"removed {diskimg.USER_CONFIG} and config.env from {rel(image)}")
                 else:
                     print(f"no {diskimg.USER_CONFIG} on {rel(image)}; nothing to remove")
-            elif cfg.text != old:
-                d.write(diskimg.USER_CONFIG, cfg.text.encode())
-                print(f"wrote {diskimg.USER_CONFIG} on {rel(image)}: "
-                      + " ".join(f"{k}={v}" for k, v in cfg.settings().items()))
             else:
-                print(f"{diskimg.USER_CONFIG} on {rel(image)} already has these settings")
+                block, left_out = cfg.env_block()
+                d.write(diskimg.USER_ENV, block)  # always: an image from before 0.5.0 has none
+                if left_out:
+                    warn(CMD, userconfig.env_note(left_out))
+                if cfg.text != old:
+                    d.write(diskimg.USER_CONFIG, cfg.text.encode())
+                    print(f"wrote {diskimg.USER_CONFIG} and config.env on {rel(image)}: "
+                          + " ".join(f"{k}={v}" for k, v in cfg.settings().items()))
+                else:
+                    print(f"{diskimg.USER_CONFIG} on {rel(image)} already has these settings")
         if args.show or not changes:
             now = d.read(diskimg.USER_CONFIG)  # read back from the image
             show(now.decode(errors="replace") if now is not None else None, where)

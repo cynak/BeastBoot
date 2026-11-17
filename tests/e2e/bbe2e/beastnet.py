@@ -104,6 +104,9 @@ def empty_drive(base: images.Drive, dest: Path, config: str) -> images.Drive:
         if isinstance(w, images.FatWriter):
             env.run(["mdeltree", "-i", w.spec, f"::{top}"], timeout=60)
             env.run(["mdel", "-i", w.spec, f"::/{trees.BROWSE_ROOT_ISO}"], timeout=60)
+        elif isinstance(w, images.ExfatWriter):
+            w.remove_tree(top)
+            w.remove_tree(trees.BROWSE_ROOT_ISO)
         else:
             shutil.rmtree(w.root / top.lstrip("/"))
             (w.root / trees.BROWSE_ROOT_ISO).unlink()
@@ -123,9 +126,10 @@ def write_plan(drive: images.Drive, plan: dict, path: str = PLAN_PATH) -> None:
         w.put(path, json.dumps(plan))
 
 
-def read_grubenv(drive: images.Drive) -> dict[str, str]:
-    raw = esp_writer(drive).read("/grub/grubenv")
-    assert len(raw) == 1024, f"grubenv is {len(raw)} bytes, expected 1024"
+def read_grubenv(drive: images.Drive, path: str = "/grub/grubenv") -> dict[str, str]:
+    """The values of a GRUB environment block on the ESP (grubenv, or the installer's device.env)."""
+    raw = esp_writer(drive).read(path)
+    assert len(raw) == 1024, f"{path} is {len(raw)} bytes, expected 1024"
     text = raw.decode("utf-8", "replace")
     assert text.startswith("# GRUB Environment Block\n"), text[:80]
     out = {}
@@ -136,12 +140,13 @@ def read_grubenv(drive: images.Drive) -> dict[str, str]:
     return out
 
 
-def write_grubenv(drive: images.Drive, values: dict[str, str]) -> None:
-    """Write ESP:/grub/grubenv as the helper does (1024 bytes, `#`-padded)."""
+def write_grubenv(drive: images.Drive, values: dict[str, str], path: str = "/grub/grubenv") -> None:
+    """Write ESP:/grub/grubenv as the helper does (1024 bytes, `#`-padded), or another
+    environment block on the ESP. Values are written as given (no escaping)."""
     body = "# GRUB Environment Block\n" + "".join(f"{k}={v}\n" for k, v in values.items())
     raw = body.encode()
     assert len(raw) <= 1024
-    esp_writer(drive).put("/grub/grubenv", raw + b"#" * (1024 - len(raw)))
+    esp_writer(drive).put(path, raw + b"#" * (1024 - len(raw)))
 
 
 def data_file(drive: images.Drive, path: str) -> bytes | None:
@@ -172,6 +177,38 @@ def install_fake_pack(drive: images.Drive, pack_id: str, files: dict[str, bytes]
     return blob
 
 
+
+def install_extra_initrd(drive: images.Drive, name: str, files: dict[str, bytes]) -> bytes:
+    """Write an initrd archive (uncompressed newc cpio) with `files` ({path in the initramfs:
+    contents}) as ESP:/beast-net/firmware/<name>.cpio. The menu passes every .cpio there to the
+    helper as one more initrd after its own (grub/beast/lib.cfg bb_beastnet), so the kernel
+    unpacks `files` over the helper's initramfs. Returns the archive."""
+    import sys
+
+    sys.path.insert(0, str(env.INSTALLER_DIR))
+    try:
+        from beastbooter import cpio
+    finally:
+        sys.path.pop(0)
+    names: dict[str, bytes | None] = {}
+    for path, data in files.items():
+        parts = path.strip("/").split("/")
+        for i in range(1, len(parts)):
+            names["/".join(parts[:i])] = None  # every parent directory
+        names["/".join(parts)] = data
+    out = []
+    for ino, (path, data) in enumerate(sorted(names.items()), start=1):
+        if data is None:
+            out.append(cpio.header(path, ino=ino, mode=cpio.DIR_MODE, nlink=2, filesize=0))
+        else:
+            out.append(cpio.header(path, ino=ino, mode=cpio.FILE_MODE, nlink=1, filesize=len(data)))
+            out.append(data + b"\0" * (-len(data) % 4))
+    blob = b"".join(out) + cpio.trailer()
+    w = esp_writer(drive)
+    w.mkdir("/beast-net/firmware")
+    w.put(f"/beast-net/firmware/{name}.cpio", blob)
+    return blob
+
 # ---------------------------------------------------------------------------
 # Menu
 # ---------------------------------------------------------------------------
@@ -181,10 +218,16 @@ def select_entry(vm: VM, *, timeout: float = 120) -> Record:
     `BEAST: boot beast-net` record."""
     vm.wait_record("dir", r"^dir /$", timeout=timeout)
     menu = vm.wait_menu(timeout=timeout)
-    assert len(menu.entries) >= 2 and menu.entries[0].startswith("System:") and menu.entries[1] == ENTRY, \
+    # folders on the data partition come first (e.g. disk-tools/, where Disk tools keep their
+    # ddrescue mapfiles after a stopped copy); the tool entries follow
+    folders = 0
+    while folders < len(menu.entries) and menu.entries[folders].endswith("/"):
+        folders += 1
+    rest = menu.entries[folders:]
+    assert len(rest) >= 2 and rest[0].startswith("System:") and rest[1] == ENTRY, \
         f"root menu (no ISOs) must start with System: ..., {ENTRY!r}:\n{menu}\n--- screen ---\n{vm.screen.text()}"
     mark = vm.mark()
-    vm.keys("down", "enter")
+    vm.keys(*(["down"] * (folders + 1)), "enter")
     return vm.wait_record("boot", r"^boot beast-net recipe=beast-net$", timeout=60, after=mark)
 
 

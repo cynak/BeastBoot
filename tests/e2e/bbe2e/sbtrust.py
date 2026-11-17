@@ -133,32 +133,67 @@ def canonical_kernel(dist: Path, dest: Path) -> tuple[Path | None, str]:
     return Path(dest), ""
 
 
-def make_test_ca(d: Path) -> dict[str, Path]:
-    """A throwaway CA and a code-signing leaf it issued (PEM + DER)."""
+CA_EXT = "basicConstraints=critical,CA:TRUE,pathlen:0\nkeyUsage=critical,keyCertSign,cRLSign\n"
+LEAF_EXT = "basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=codeSigning\n"
+MODSIGN_ONLY_OID = "1.3.6.1.4.1.2312.16.1.2"  # "kernel module signing only": shim refuses such certificates
+EXPIRED = ("20200101000000Z", "20210101000000Z")  # (notBefore, notAfter) in the past
+
+
+def make_chain(d: Path, *, ca_ext: str = CA_EXT, leaf_ext: str = LEAF_EXT, ca_dates: tuple[str, str] | None = None,
+               leaf_dates: tuple[str, str] | None = None, name: str = "e2e test") -> dict[str, Path]:
+    """A throwaway CA and a leaf it issued (PEM + DER), with the given X.509v3 extensions
+    (openssl extfile lines; the defaults are build/keygen.sh's profile) and validity."""
     d.mkdir(parents=True, exist_ok=True)
-    ca_key, ca_crt, ca_der = d / "ca.key", d / "ca.crt", d / "ca.der"
+    ca_key, ca_csr, ca_crt, ca_der = d / "ca.key", d / "ca.csr", d / "ca.crt", d / "ca.der"
     leaf_key, leaf_csr, leaf_crt, leaf_der = d / "leaf.key", d / "leaf.csr", d / "leaf.crt", d / "leaf.der"
-    ext = d / "leaf.ext"
-    env.run(["openssl", "req", "-new", "-x509", "-newkey", "rsa:2048", "-nodes", "-sha256", "-days", "3650",
-             "-subj", "/CN=beast-boot e2e test CA (throwaway)/", "-keyout", ca_key, "-out", ca_crt,
-             "-addext", "basicConstraints=critical,CA:TRUE", "-addext", "keyUsage=critical,keyCertSign,cRLSign"])
+
+    def dates(v: tuple[str, str] | None) -> list[str]:
+        return ["-not_before", v[0], "-not_after", v[1]] if v else ["-days", "3650"]
+
+    (d / "ca.ext").write_text(ca_ext or "# none\n")
+    (d / "leaf.ext").write_text(leaf_ext or "# none\n")
     env.run(["openssl", "req", "-new", "-newkey", "rsa:2048", "-nodes", "-sha256",
-             "-subj", "/CN=beast-boot e2e test signer (throwaway)/", "-keyout", leaf_key, "-out", leaf_csr])
-    ext.write_text("basicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=codeSigning\n")
-    env.run(["openssl", "x509", "-req", "-sha256", "-days", "3650", "-in", leaf_csr, "-CA", ca_crt,
-             "-CAkey", ca_key, "-set_serial", "0x5eed", "-extfile", ext, "-out", leaf_crt])
+             "-subj", f"/CN=beast-boot {name} CA (throwaway)/", "-keyout", ca_key, "-out", ca_csr])
+    env.run(["openssl", "x509", "-req", "-sha256", *dates(ca_dates), "-in", ca_csr, "-signkey", ca_key,
+             "-set_serial", "0x5eec", "-extfile", d / "ca.ext", "-out", ca_crt])
+    env.run(["openssl", "req", "-new", "-newkey", "rsa:2048", "-nodes", "-sha256",
+             "-subj", f"/CN=beast-boot {name} signer (throwaway)/", "-keyout", leaf_key, "-out", leaf_csr])
+    env.run(["openssl", "x509", "-req", "-sha256", *dates(leaf_dates), "-in", leaf_csr, "-CA", ca_crt,
+             "-CAkey", ca_key, "-set_serial", "0x5eed", "-extfile", d / "leaf.ext", "-out", leaf_crt])
     for pem, der in ((ca_crt, ca_der), (leaf_crt, leaf_der)):
         env.run(["openssl", "x509", "-in", pem, "-outform", "DER", "-out", der])
-    return {"ca": ca_der, "leaf": leaf_der, "leaf_key": leaf_key, "leaf_crt": leaf_crt}
+    return {"ca": ca_der, "ca_crt": ca_crt, "ca_key": ca_key, "leaf": leaf_der, "leaf_key": leaf_key,
+            "leaf_crt": leaf_crt}
 
 
-def resign(src: Path, dest: Path, key: Path, crt: Path) -> Path:
-    """`src` with every signature removed, then signed with key/crt."""
+def make_test_ca(d: Path) -> dict[str, Path]:
+    """A throwaway CA and a code-signing leaf it issued (PEM + DER)."""
+    return make_chain(d)
+
+
+def signer_cert(image: Path, dest: Path) -> Path:
+    """The certificate carried in the (single) signature of a signed EFI image, as DER:
+    what a user puts into MokListX to revoke that signer."""
+    sys.path.insert(0, str(env.BB_ROOT / "scripts"))
+    try:
+        import efi_inspect
+    finally:
+        sys.path.pop(0)
+    sigs = efi_inspect.signatures(efi_inspect.parse_pe(Path(image).read_bytes()))
+    assert len(sigs) == 1 and len(sigs[0].certs) == 1, f"{image}: expected one signature carrying one certificate"
+    Path(dest).write_bytes(sigs[0].certs[0])
+    return Path(dest)
+
+
+def resign(src: Path, dest: Path, key: Path, crt: Path, *, addcert: Path | None = None) -> Path:
+    """`src` with every signature removed, then signed with key/crt (addcert: a PEM file
+    of further certificates to embed, e.g. the issuing CA)."""
     unsigned = Path(dest).with_suffix(".unsigned")
     unsigned.write_bytes(Path(src).read_bytes())
     for _ in range(8):
         if "signature " not in env.run(["sbverify", "--list", unsigned], check=False).stdout:
             break
         env.run(["sbattach", "--remove", unsigned])
-    env.run(["sbsign", "--key", key, "--cert", crt, "--output", dest, unsigned])
+    env.run(["sbsign", "--key", key, "--cert", crt, *(["--addcert", addcert] if addcert else []),
+             "--output", dest, unsigned])
     return Path(dest)

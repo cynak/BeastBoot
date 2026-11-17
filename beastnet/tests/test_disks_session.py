@@ -428,7 +428,7 @@ def test_use_disk_refuses_two_disks_with_the_same_serial(ctx, monkeypatch):
     s.inv.disks[4].serial = "TGT0000CCC333"  # two identical USB bridges
     with pytest.raises(BeastNetError) as e:
         s.use_disk("sdb", "CCC333")
-    assert "same serial" in e.value.text and not any(c[0] == "make_writable" for c in parts.calls)
+    assert "two disks report the serial" in e.value.text and not any(c[0] == "make_writable" for c in parts.calls)
 
 
 def test_use_disk_any_error_after_mount_unmounts_and_relocks(ctx, monkeypatch):

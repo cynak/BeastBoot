@@ -22,8 +22,9 @@ Description: term/serial: Reject caller-supplied port addresses under lockdown
  build/grub/security-fixes.json checks that the upstream commit's hunks for
  the files 2.14 has reverse-apply to the patched tree.
  .
- This fix is what shim's proposed SBAT generation grub,7 is for (shim PR
- #830, not merged): we do NOT claim grub,7 until shim publishes that level.
+ This fix is what SBAT generation grub,7 stands for: shim's SbatLevel
+ 2026092500 (shim commit 20e9be4d, 2026-10-27). build/grub/security-fixes.json
+ claims grub,7 and the build refuses the claim when this fix is missing.
 Origin: upstream, https://gitlab.freedesktop.org/gnu-grub/grub/-/commit/26beaa3b2720fefdc4d04c1ae209b776fe6848d6
 Bug-CVE: CVE-2026-97876
 Applied-Upstream: 2.16, commit 26beaa3b2720fefdc4d04c1ae209b776fe6848d6

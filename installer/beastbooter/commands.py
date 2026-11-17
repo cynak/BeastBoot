@@ -6,7 +6,7 @@ whole disk opened by the platform backend (platforms.get_backend()):
 
   partition table   parttable.write_partition_table
   data partition    exfatfs.format_exfat / fatfs.format_fat (FAT32), with a
-                    volume serial chosen here, so device.cfg is known up front;
+                    volume serial chosen here, so device.env is known up front;
                     NTFS is the exception (mkfs.ntfs for images, the backend's
                     format_ntfs on drives; refused where the OS has none)
   ESP               fatfs.build_esp, first into memory (so "does not fit"
@@ -61,6 +61,7 @@ from .esp import (
     esp_files,
     marker_layout_version,
     parse_marker,
+    read_device_values,
     read_kept_files,
     parse_set_lines,
     read_esp_text,
@@ -69,6 +70,7 @@ from .esp import (
 from .exfatfs import check_label as check_exfat_label
 from .exfatfs import ExfatVolume, format_exfat
 from .fatfs import FatVolume, build_esp, format_fat, label_bytes
+from .installed import CERT_CHANGE_NOTICE
 from .fs import (
     NTFS_TOOL,
     fs_name,
@@ -84,7 +86,7 @@ from .layout import (
     BIOS_BOOT_PART_INDEX,
     DATA_PART_INDEX,
     DATA_START_LBA,
-    DEVICE_CFG_PATH,
+    ENROLL_CERT_PATH,
     ESP_LABEL,
     ESP_MARKER_PATH,
     ESP_PART_INDEX,
@@ -213,7 +215,7 @@ def _esp_timestamp(dist: Dist) -> int | None:
 
 
 def _new_config(opts: InstallOptions, label: str) -> tuple[DeviceConfig, int | None]:
-    """device.cfg for a new install and the data volume serial (None for NTFS,
+    """device.env for a new install and the data volume serial (None for NTFS,
     whose serial is only known once mkfs.ntfs / Format-Volume has run)."""
     if opts.fs == "ntfs":
         serial, linux_uuid = None, "0" * 16  # placeholder, replaced after formatting
@@ -247,7 +249,7 @@ DATA_DIR = "/beast-booter"
 
 def _format_data(t, plan: DiskPlan, fs: str, label: str, serial: int, timestamp: int | None) -> None:
     """exFAT / FAT32 on partition 1, with an empty /beast-booter/ (how `prepare-windows`
-    recognises the drive). The serial is ours (device.cfg knows it already);
+    recognises the drive). The serial is ours (device.env knows it already);
     FAT32's label entry is dated `timestamp` (format_exfat writes no timestamps)."""
     if fs == "exfat":
         format_exfat(t, plan.data.offset, plan.data.size_bytes, label=label, volume_serial=serial)
@@ -635,7 +637,7 @@ def _done_line(rep: Reporter, where: str, cfg: DeviceConfig, dist: Dist) -> None
 
 
 def _verify_install(t, where: str, cfg: DeviceConfig, plan: DiskPlan) -> dict:
-    """Read the new drive back: layout, device.cfg and the data filesystem must be what was written."""
+    """Read the new drive back: layout, device.env and the data filesystem must be what was written."""
     problems = []
     _check_table_matches(_read_table(t, where), plan)
     d = _read_info(t, where)
@@ -790,6 +792,7 @@ class _DriveState:
     cfg: DeviceConfig
     esp_volume_id: int
     keep: dict  # ESP path -> bytes: grub/grubenv and beast-net/firmware/**
+    cert: bytes | None = None  # the certificate to enroll that the drive has now (None: not readable)
 
 
 def _read_drive_state(t, where: str, rep: Reporter, records: _UpdateRecords | None = None) -> _DriveState:
@@ -802,10 +805,14 @@ def _read_drive_state(t, where: str, rep: Reporter, records: _UpdateRecords | No
         return st
     if records is not None:  # the ESP is complete: an update finished since any record was made
         records.remove(table, plan, t.size)
-    cfg_text = read_esp_text(vol, DEVICE_CFG_PATH)
-    old_cfg = DeviceConfig.parse(cfg_text) if cfg_text else None
+    vals = read_device_values(vol)  # device.env, or device.cfg on a drive made before 0.5.0
+    old_cfg = DeviceConfig.from_values(vals) if vals else None
     cfg = _reconcile_config(old_cfg, probe_fs(t, plan.data.offset), marker, table.label, rep)
-    return _DriveState(table, plan, marker, cfg, vol.volume_id, read_kept_files(vol, rep))
+    try:
+        cert = vol.read_file(ENROLL_CERT_PATH) if vol.exists(ENROLL_CERT_PATH) else None
+    except BeastError:
+        cert = None
+    return _DriveState(table, plan, marker, cfg, vol.volume_id, read_kept_files(vol, rep), cert)
 
 
 def _interrupted_state(t, where: str, rep: Reporter, records: _UpdateRecords | None) -> _DriveState | None:
@@ -840,7 +847,7 @@ def _interrupted_state(t, where: str, rep: Reporter, records: _UpdateRecords | N
     if fs_name(probe) in FILESYSTEMS and probe.get("UUID"):
         cfg = _reconcile_config(None, probe, {"install_id": install_id}, table.label, _quiet())
     else:
-        rep.warn("the filesystem on partition 1 was not recognised, so the new device.cfg has placeholder values; "
+        rep.warn("the filesystem on partition 1 was not recognised, so the new device.env has placeholder values; "
                  "the boot menu then looks for partition 1 itself")
         cfg = DeviceConfig(install_id=install_id, layout=table.label, data_fs=FILESYSTEMS[0], data_uuid="unknown",
                            data_uuid_linux="unknown", data_label="", serial=False)
@@ -876,7 +883,7 @@ class _Record:
 
 class _UpdateRecords:
     """While update writes a drive, a copy of what it carries over (marker,
-    device.cfg, ESP volume id, grub/grubenv, firmware packs) is kept on this
+    device.env, ESP volume id, grub/grubenv, firmware packs) is kept on this
     computer, in `directory` (backend.state_dir(); None: not kept), one JSON file
     per drive, named after what identifies the drive while its ESP cannot be
     read: the partition table's disk id, layout and geometry, and the disk size.
@@ -919,7 +926,7 @@ class _UpdateRecords:
             "v": self.VERSION, "where": where, "saved": time.strftime("%Y-%m-%d %H:%M:%S"),
             "key": self.key(st.table, st.plan, t.size), "data_uuid": st.cfg.data_uuid_linux,
             "boot_area": [before, _sha(boot)],
-            "marker": st.marker, "device_cfg": st.cfg.render(), "esp_volume_id": st.esp_volume_id,
+            "marker": st.marker, "device_cfg": st.cfg.render().decode("utf-8"), "esp_volume_id": st.esp_volume_id,
             "keep": {k: base64.b64encode(v).decode("ascii") for k, v in st.keep.items()},
         }
         tmp = path + ".tmp"
@@ -963,7 +970,7 @@ class _UpdateRecords:
             if os.stat(path).st_mtime < time.time() - RECORD_MAX_AGE:
                 return None
             return _Record(
-                marker=dict(rec.get("marker") or {}), cfg=DeviceConfig.parse(rec["device_cfg"]),
+                marker=dict(rec.get("marker") or {}), cfg=DeviceConfig.parse(str(rec["device_cfg"]).encode("utf-8")),
                 esp_volume_id=int(rec.get("esp_volume_id") or 0),
                 keep={k: base64.b64decode(v) for k, v in rec.get("keep", {}).items()},
                 when=str(rec.get("saved", "?")), data_uuid=str(rec.get("data_uuid") or ""),
@@ -1063,6 +1070,10 @@ def _update_on(backend, disk, image: str | None, where: str, dist: Dist, *, yes:
     if packs:
         rep.note(f"keeping {len(packs)} installed firmware pack(s) and grub/grubenv")
         _warn_firmware_tag(st.keep, dist, rep)
+    # Said before anything is written, and before the question: a new certificate means a
+    # one-time enrolment on every computer with Secure Boot on (0.4.x -> 0.5.0: always).
+    if st.cert is not None and st.cert != (dist.esp_dir / ENROLL_CERT_PATH).read_bytes():
+        rep.warn(CERT_CHANGE_NOTICE)
     if disk is not None and not yes:
         _confirm_device(disk, "The boot files will be replaced; partition 1 (your files) is not touched.")
     def reread(t) -> _DriveState:
@@ -1110,14 +1121,14 @@ def _update_on(backend, disk, image: str | None, where: str, dist: Dist, *, yes:
 
 def _reconcile_config(old: DeviceConfig | None, probe: dict, marker: dict, layout: str,
                       rep: Reporter) -> DeviceConfig:
-    """Keep device.cfg values; follow partition 1 if it was reformatted since install."""
+    """Keep device.env values; follow partition 1 if it was reformatted since install."""
     fs = fs_name(probe) if probe else None
     linux_uuid = probe.get("UUID") if probe else None
     found = fs in FILESYSTEMS and bool(linux_uuid)
     if old is None:
         if not found:
-            raise BeastError("device.cfg is missing and partition 1 has no supported filesystem")
-        rep.warn("device.cfg was missing; recreating it from partition 1")
+            raise BeastError("device.env is missing and partition 1 has no supported filesystem")
+        rep.warn("device.env was missing; recreating it from partition 1")
         return DeviceConfig(
             install_id=marker.get("install_id") or str(uuid.uuid4()), layout=layout, data_fs=fs,
             data_uuid=grub_uuid(linux_uuid), data_uuid_linux=linux_uuid,
@@ -1125,16 +1136,16 @@ def _reconcile_config(old: DeviceConfig | None, probe: dict, marker: dict, layou
         )
     cfg = old
     if cfg.layout != layout:
-        rep.warn(f"device.cfg says layout {cfg.layout}, the disk is {layout}; using {layout}")
+        rep.warn(f"device.env says layout {cfg.layout}, the disk is {layout}; using {layout}")
         cfg = replace(cfg, layout=layout)
     if not found:
-        rep.warn("could not identify the filesystem on partition 1; keeping the device.cfg values")
+        rep.warn("could not identify the filesystem on partition 1; keeping the device.env values")
         return cfg
     # A label that could not be read (NTFS with an unreadable MFT) is not a change.
     now = (fs, linux_uuid, probe.get("LABEL", cfg.data_label))
     was = (cfg.data_fs, cfg.data_uuid_linux, cfg.data_label)
     if now != was:
-        rep.warn(f"partition 1 changed since install ({' '.join(was)} -> {' '.join(now)}); updating device.cfg")
+        rep.warn(f"partition 1 changed since install ({' '.join(was)} -> {' '.join(now)}); updating device.env")
         cfg = replace(cfg, data_fs=fs, data_uuid=grub_uuid(linux_uuid), data_uuid_linux=linux_uuid,
                       data_label=now[2])
     return cfg
@@ -1153,8 +1164,7 @@ def _read_info(t, where: str) -> dict:
         raise BeastError(f"{where} is not a beast-boot drive (partition 1 or 2 is missing)")
     vol = _open_esp(t, esp.start * SECTOR_SIZE, where)
     marker = _read_marker(vol, where)
-    cfg_text = read_esp_text(vol, DEVICE_CFG_PATH)
-    cfg = parse_set_lines(cfg_text) if cfg_text else {}
+    cfg = read_device_values(vol)
     version_cfg = parse_set_lines(read_esp_text(vol, VERSION_CFG_PATH) or "")
     fs, fs_uuid, label = cfg.get("bb_data_fs"), cfg.get("bb_data_uuid_linux"), cfg.get("bb_data_label")
     if not cfg:

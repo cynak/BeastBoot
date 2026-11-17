@@ -8,6 +8,7 @@ import sys
 import traceback
 
 from . import __version__
+from .addons import close_ui, load_addons
 from .cmdline import read_cmdline
 from .context import Context, Quit
 from .download import Downloader, mount_fs_type
@@ -161,9 +162,15 @@ def _run(args, paths: Paths, params, reporter: Reporter, ui, script, live: bool,
             ui_obj = LineUI()
         else:
             ui_obj = ui
+        # Add-ons the boot loader put into the initramfs (addons.py) may wrap the screen.
+        # Without any nothing changes.
+        shown = load_addons(params, ui_obj, ctx, __version__)
         # beastnet.action= (a tool entry of the boot menu) opens that action first;
         # after a script, "stay" goes on with the normal screens.
-        Interactive(ctx, ui_obj).run(result, action=None if script else params.action)
+        try:
+            Interactive(ctx, shown).run(result, action=None if script else params.action)
+        finally:
+            close_ui(shown, ui_obj, ctx)
         return 0
     except Quit:
         return 0

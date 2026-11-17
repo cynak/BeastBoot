@@ -12,8 +12,8 @@
 # index), resolves the libraries and rewrites packages.lock with every .deb's
 # SHA-256. The build itself only ever uses packages.lock.
 
-linux-image-7.3.0-9-generic=7.3.0-9.9         kernel   suite=stonking
-linux-modules-7.3.0-9-generic=7.3.0-9.9       modules  suite=stonking
+linux-image-7.3.0-10-generic=7.3.0-10.10         kernel   suite=stonking
+linux-modules-7.3.0-10-generic=7.3.0-10.10       modules  suite=stonking
 busybox=1:1.38.0-3ubuntu4                      tool  suite=stonking  # dynamic: uses the locked libc6 (busybox-static embeds its own glibc copy); 1.38.0-3 fixes the ash CVE-2026-38754/38755
 kmod=34.2-2ubuntu2                             tool
 wpasupplicant=2:2.11-0ubuntu5                  tool
@@ -22,7 +22,7 @@ mokutil=0.7.2-2                                tool  # "Trust Ubuntu's Secure Bo
 python3.14-minimal=3.14.4-1ubuntu0.2           tool
 libpython3.14-minimal=3.14.4-1ubuntu0.2        tool
 libpython3.14-stdlib=3.14.4-1ubuntu0.2         tool
-ca-certificates=20260816ubuntu0.26.04.1        data
+ca-certificates=20260816ubuntu0.26.04.2        data
 ncurses-base=6.6+20251231-1                    data
 wireless-regdb=2026.05.30-0ubuntu1~26.04.1      data  # signed regulatory.db for cfg80211 (ISC licence)
 
@@ -39,6 +39,8 @@ mount=2.41.3-3ubuntu2.2                        tool  # losetup (partition scan, 
 e2fsprogs=1.47.2-3ubuntu4                      tool  # e2fsck -n, dumpe2fs
 xfsprogs=6.18.0-3                              tool  # xfs_repair -n, xfs_db
 btrfs-progs=6.17.1-1build1                     tool  # btrfs check --readonly, show, restore
+dosfstools=4.2-1.2build1                       tool  # fsck.fat -a: the stick's FAT32 data partition after a power cut (disks/fsrepair.py)
+exfatprogs=1.3.2-1                             tool  # fsck.exfat -p: exFAT data partition / confirmed image disk after a power cut
 
 # dlopen()ed (no DT_NEEDED entry points at them)
 libzstd1=1.5.7+dfsg-3                          lib   # kmod: reading .ko.zst modules

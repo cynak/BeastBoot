@@ -1056,7 +1056,7 @@ def test_verify_dist_ok_and_failed(make, dist_copy):
 # which beast-boot a drive has: probe_installed + installed.assess
 # ---------------------------------------------------------------------------
 
-from beastbooter.installed import InstalledBoot, ProbeResult  # noqa: E402
+from beastbooter.installed import CERT_CHANGE_NOTICE, InstalledBoot, ProbeResult  # noqa: E402
 
 
 class ProbingBackend(FakeBackend):
@@ -1145,6 +1145,9 @@ def test_notice_and_update_become_the_suggestion(make):
     assert "Update boot files" in c.selected_row.freshness.advice
     upd = c.request_update()
     assert "beast-boot 0.1.0 (it has 0.0.9 now)." in upd.details[0]
+    # a drive from before 0.5.0: the dialog says, before anything is written, that every
+    # computer has to enroll the new certificate once
+    assert CERT_CHANGE_NOTICE in upd.details
     c.cancel_confirm()
     inst = c.request_install()
     assert any("already has beast-boot 0.0.9" in d and "Update boot files" in d for d in inst.details)

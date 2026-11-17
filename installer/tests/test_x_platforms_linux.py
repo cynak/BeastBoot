@@ -76,6 +76,9 @@ class FakeLinux:
 
     def add_process(self, pid, comm, *, cwd="/home/user", fds=(), ns="mnt:[4026531841]", mountinfo=""):
         """A fake /proc/<pid>: comm, cwd, fd/N links, its mount namespace and mountinfo."""
+        # Fake pids are above any real one (Linux pid_max is at most 4194304): the code skips its
+        # own pid, and a test process once had the pid a test had made up.
+        assert pid > 4194304, pid
         d = self.proc / str(pid)
         (d / "fd").mkdir(parents=True)
         (d / "ns").mkdir()
@@ -676,16 +679,16 @@ def test_blkrrpart_on_a_non_disk_fails(tmp_path):
 def test_prepare_busy_retries_then_names_the_holders(fake, backend, fake_run):
     fake.unmount("/media/user/MY STICK")
     fake.mount("8:17", fake.node("sdb1"), "/mnt/stick")
-    fake.add_process(4321, "bash", cwd="/mnt/stick/photos")
-    fake.add_process(999, "vlc", fds=["/dev/null", "/mnt/stick/movie.mkv"])
-    fake.add_process(55, "sshd", fds=["/var/log/auth.log"])  # not ours
+    fake.add_process(9004321, "bash", cwd="/mnt/stick/photos")
+    fake.add_process(9000999, "vlc", fds=["/dev/null", "/mnt/stick/movie.mkv"])
+    fake.add_process(9000055, "sshd", fds=["/var/log/auth.log"])  # not ours
     fake_run["umount"] = subprocess.CompletedProcess([], 32, "", "umount: /mnt/stick: target is busy.\n")
     with pytest.raises(BeastError) as e:
         backend.prepare(backend.get_disk("sdb"))
     msg = str(e.value)
     assert e.value.code == "busy" and msg.startswith("cannot unmount /mnt/stick: it is busy")
-    assert "process 999 (vlc) has /mnt/stick/movie.mkv open" in msg
-    assert "process 4321 (bash) has its current folder in /mnt/stick/photos" in msg
+    assert "process 9000999 (vlc) has /mnt/stick/movie.mkv open" in msg
+    assert "process 9004321 (bash) has its current folder in /mnt/stick/photos" in msg
     assert "sshd" not in msg and "close the programs" in msg
     assert fake.commands == [["umount", "/mnt/stick"]] * (len(linux.BUSY_RETRY_DELAYS) + 1)
     assert fake.probed == []
@@ -737,7 +740,7 @@ def test_exclusive_probe_busy_names_loop_and_other_namespace(fake, backend, fake
         return proc
 
     monkeypatch.setattr(linux, "run", umount_and_attach)
-    fake.add_process(777, "snap-app", ns="mnt:[4026532999]",
+    fake.add_process(9000777, "snap-app", ns="mnt:[4026532999]",
                      mountinfo="40 30 8:17 / /media/user/MY\\040STICK rw - vfat /dev/sdb1 rw\n")
     monkeypatch.setattr(devmod, "_exclusive_open", busy_probe)
     with pytest.raises(BeastError) as e:
@@ -745,13 +748,13 @@ def test_exclusive_probe_busy_names_loop_and_other_namespace(fake, backend, fake
     msg = str(e.value)
     assert e.value.code == "busy" and "is still in use after unmounting its volumes" in msg
     assert "loop5 uses /media/user/MY STICK/debian-12.iso" in msg and "udisksctl loop-delete -b" in msg
-    assert "process 777 (snap-app) still has it mounted at /media/user/MY STICK in its own mount namespace" in msg
+    assert "process 9000777 (snap-app) still has it mounted at /media/user/MY STICK in its own mount namespace" in msg
 
 
 def test_exclusive_probe_busy_device_node_open(fake, backend, fake_run, monkeypatch):
-    fake.add_process(3141, "gparted", fds=[fake.node("sdb")])
+    fake.add_process(9003141, "gparted", fds=[fake.node("sdb")])
     monkeypatch.setattr(devmod, "_exclusive_open", busy_probe)
-    with pytest.raises(BeastError, match=r"process 3141 \(gparted\) has .*/sdb open; close the programs"):
+    with pytest.raises(BeastError, match=r"process 9003141 \(gparted\) has .*/sdb open; close the programs"):
         backend.prepare(backend.get_disk("sdb"))
 
 

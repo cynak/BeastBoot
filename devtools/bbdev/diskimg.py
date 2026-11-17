@@ -32,6 +32,8 @@ from .msg import Failure
 SECTOR = 512
 ESP_MARKER = "BEAST-BOOTER.ID"
 USER_CONFIG = "/beast-booter/config.cfg"
+USER_ENV = "/beast-booter/config.env"  # the only user settings file the menu reads on UEFI
+DEVICE_ENV = "/grub/beast/device.env"  # ESP: written by the installer
 
 
 def tool_env() -> dict[str, str]:

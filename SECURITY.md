@@ -19,11 +19,17 @@ A change that breaks any of these is a security bug, even if it makes more ISOs 
 
 ## Signing keys
 
-Release builds are signed with the project release key. It is generated once on
-an offline machine and stored only as encrypted GitHub Actions secrets that the
-release workflow uses; it is never committed. Local builds are signed with a key
-you generate yourself (`make keys`), which is never committed either. You can always build and sign with your own key and enroll that key
-instead of the project's.
+Users enroll one certificate, the BeastBoot CA certificate (since 0.5.0). The
+CA's private key is generated once on an offline machine and stays offline: it
+is never in GitHub, in CI or on a build host. It issues three signing
+certificates, one each for GRUB, the network helper's kernel and the Windows
+loader; only those three keys are stored, as encrypted GitHub Actions secrets
+of a protected environment that the release workflow's signing job uses. So a
+component whose key leaks can be revoked and replaced on its own, without a
+new enrolment. Nothing is ever committed. Local builds are signed with keys
+you generate yourself (`make keys`: a local CA and three leaves), which are
+never committed either. You can always build and sign with your own keys and
+enroll your own CA certificate instead of the project's.
 
 How release builds are made, signed and published:
 [docs/RELEASING.md](docs/RELEASING.md).
