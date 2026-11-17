@@ -493,6 +493,19 @@ def claim_proven(sf: dict, c: dict) -> bool:
         and all(e.get("present") is True for e in fixes[i]["evidence"]) for i in req)
 
 
+def refuse_unproven(fixes: dict) -> None:
+    """Stop the build when check_fixes() output FIXES has an SBAT claim that is not proven or
+    a listed fix that is not in the source."""
+    for c in fixes["sbat_claims"]:
+        if not c["proven"]:
+            raise Fail(f"SBAT {c['component']},{c['generation']} is claimed in build/grub/security-fixes.json, "
+                       f"but these fixes are NOT in the source: {', '.join(c['missing'])}. "
+                       "Add the missing fixes (build/grub/patches) or lower the claim - never ship a "
+                       "generation the code does not earn.")
+    if fixes["missing"]:
+        raise Fail(f"build/grub/security-fixes.json lists fixes that are not in the source: {fixes['missing']}")
+
+
 def prepare(lock: dict, srcs: dict[str, Path], cache: Path, work: Path, logf: Path) -> tuple[Path, dict]:
     src = work / "src"
     src.mkdir(parents=True)
@@ -520,14 +533,7 @@ def prepare(lock: dict, srcs: dict[str, Path], cache: Path, work: Path, logf: Pa
     for f in fixes["fixes"]:
         f["present_without_our_patches"] = before[f["id"]]
     log("security fixes: " + ", ".join(f"{f['id']} {'ok' if f['present'] else 'MISSING'}" for f in fixes["fixes"]))
-    for c in fixes["sbat_claims"]:
-        if not c["proven"]:
-            raise Fail(f"SBAT {c['component']},{c['generation']} is claimed in build/grub/security-fixes.json, "
-                       f"but these fixes are NOT in the source: {', '.join(c['missing'])}. "
-                       "Add the missing fixes (build/grub/patches) or lower the claim - never ship a "
-                       "generation the code does not earn.")
-    if fixes["missing"]:
-        raise Fail(f"build/grub/security-fixes.json lists fixes that are not in the source: {fixes['missing']}")
+    refuse_unproven(fixes)
     # A fix we say our patch brings must be absent from Ubuntu's tree: shows both that the
     # patch is needed and that the reverse-apply check tells fixed from unfixed code.
     wrong = [f["id"] for f in fixes["fixes"] if f["where"].startswith("build/grub/patches/")
@@ -875,7 +881,10 @@ def sbat_lines(out: Path) -> list[str]:
     """sbat + grub lines and Ubuntu's vendor lines (debian/sbat.ubuntu.csv.in, filled in as
     debian/rules does), with the grub generation raised to what security-fixes.json proves."""
     info = verify(out, quiet=True)
-    proven = {c["component"]: c["generation"] for c in info["security_fixes"]["sbat_claims"] if c["proven"]}
+    proven: dict[str, int] = {}
+    for c in info["security_fixes"]["sbat_claims"]:      # several claims per component: the highest proven one
+        if c["proven"]:
+            proven[c["component"]] = max(proven.get(c["component"], 0), c["generation"])
     lines = []
     for ln in (out / "sbat.ubuntu.csv.in").read_text().splitlines():
         if not ln.strip():

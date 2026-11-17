@@ -494,27 +494,33 @@ def _cert_end(ctx: Ctx, crt: Path) -> _dt.datetime | None:
 
 def check_keys(ctx: Ctx, now: _dt.datetime | None = None) -> Check:
     k = ctx.repo / "keys"
-    miss = [n for n in ("beast-boot.key", "beast-boot.crt", "beast-boot.cer") if not (k / n).is_file()]
+    miss = [n for n in paths.KEY_FILES if not (k / n).is_file()]
     if miss:
-        return Check("keys", FAIL, f"keys/: missing {', '.join(miss)} (the build signs GRUB with it)",
-                     "run `make keys` (creates a local signing key; never commit it)", KEYS, "repo")
-    mode = (k / "beast-boot.key").stat().st_mode & 0o777
-    if mode & 0o077:
-        return Check("keys", WARN, f"keys/beast-boot.key is readable by others (mode {mode:o})",
-                     "chmod 600 keys/beast-boot.key", "", "repo")
-    end = _cert_end(ctx, k / "beast-boot.crt")
-    if end is None:
-        return ok("keys", "keys/beast-boot.{key,crt,cer} (expiry unknown)", "repo")
+        return Check("keys", FAIL, f"keys/: missing {', '.join(miss)} (the build signs GRUB, the helper kernel "
+                     "and wimboot, each with its own key)",
+                     "run `make keys` (creates a local CA and three signing keys; never commit them)", KEYS, "repo")
+    for name in (*paths.PRIVATE_KEYS, "beast-boot-ca.key"):
+        if (k / name).is_file() and (k / name).stat().st_mode & 0o077:
+            mode = (k / name).stat().st_mode & 0o777
+            return Check("keys", WARN, f"keys/{name} is readable by others (mode {mode:o})",
+                         "chmod 600 keys/*.key", "", "repo")
+    # the certificate that runs out first: the CA's, or a signing certificate's
+    ends = {n: _cert_end(ctx, k / n) for n in paths.KEY_FILES if n.endswith(".crt")}
+    if any(e is None for e in ends.values()):
+        return ok("keys", "keys/: CA certificate and three signing keys (expiry unknown)", "repo")
+    name, end = min(ends.items(), key=lambda kv: kv[1])
     now = now or _dt.datetime.now(_dt.timezone.utc)
     days = (end - now).days
     when = end.strftime("%Y-%m-%d")
+    renew = ("build/keygen.sh --force makes a new CA and keys (machines must enroll the new certificate)"
+             if name == "beast-boot.crt" else
+             f"build/keygen.sh leaf {name[len('beast-boot-'):-len('.crt')]} --force issues a new one (nothing to enroll)")
     if days < 0:
-        return Check("keys", WARN, f"certificate expired on {when} (shim ignores dates; other tools may not)",
-                     "build/keygen.sh --force makes a new key (machines must enroll the new certificate)", "", "repo")
+        return Check("keys", WARN, f"keys/{name} expired on {when} (shim ignores dates; the build does not)",
+                     renew, "", "repo")
     if days < CERT_WARN_DAYS:
-        return Check("keys", WARN, f"certificate expires on {when} ({days} days)",
-                     "build/keygen.sh --force before then (machines must enroll the new certificate)", "", "repo")
-    return ok("keys", f"keys/beast-boot.{{key,crt,cer}}; certificate valid until {when} ({days} days)", "repo")
+        return Check("keys", WARN, f"keys/{name} expires on {when} ({days} days)", renew, "", "repo")
+    return ok("keys", f"keys/: CA certificate and three signing keys; first expiry {when} ({days} days, {name})", "repo")
 
 
 def check_dist(ctx: Ctx) -> Check:

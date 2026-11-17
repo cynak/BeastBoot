@@ -22,7 +22,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .esp import marker_layout_version, parse_marker, parse_set_lines
-from .layout import ESP_LABEL, ESP_MARKER_PATH, FIRMWARE_DIR, FIRMWARE_INSTALLED_PATH, LAYOUT_VERSION
+from .layout import (
+    ENROLL_CERT_PATH,
+    ESP_LABEL,
+    ESP_MARKER_PATH,
+    FIRMWARE_DIR,
+    FIRMWARE_INSTALLED_PATH,
+    LAYOUT_VERSION,
+)
 
 VERSION_CFG = "grub/beast/version.cfg"
 
@@ -161,6 +168,28 @@ def version_key(version: str) -> tuple:
     if not tail:
         return (nums, 1, ())
     return (nums, 0, tuple((0, int(n)) if n else (1, w.lower()) for n, w in _PART.findall(tail)))
+
+
+# ---------------------------------------------------------------------------
+# A new Secure Boot certificate (0.5.0: the BeastBoot CA replaces the single
+# self-signed certificate of 0.1 - 0.4). The one text for it, shown before an
+# update writes anything: by the CLI when the certificate on the drive is not
+# the one being installed, and in the app's "Update the boot files?" dialog for
+# a drive older than CERT_CHANGED_IN.
+# ---------------------------------------------------------------------------
+CERT_CHANGED_IN = "0.5.0"
+CERT_CHANGE_NOTICE = (
+    "Secure Boot: this update puts a new BeastBoot certificate on the drive. Afterwards, every computer "
+    "that starts this drive with Secure Boot on asks once to enroll the new certificate (MokManager: "
+    f'"Enroll key from disk", {ESP_LABEL}, {ENROLL_CERT_PATH}), also computers that enrolled the old one. '
+    "With Secure Boot off, and in legacy BIOS mode, nothing changes. The old certificate is not needed "
+    "any more and can be removed from each computer: see docs/SECURE_BOOT.md, section 4."
+)
+
+
+def certificate_changes(installed_version: str) -> bool:
+    """Was a drive with this beast-boot version made before the certificate changed?"""
+    return bool(installed_version) and compare_versions(installed_version, CERT_CHANGED_IN) < 0
 
 
 def compare_versions(a: str, b: str) -> int:

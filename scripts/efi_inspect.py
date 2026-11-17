@@ -442,6 +442,7 @@ def cert_info(der: bytes) -> dict:
         "signature_algorithm": sig_alg,
         "extended_key_usage": eku,
         "code_signing_eku": "Code Signing" in eku,
+        "ca": bool(re.search(r"X509v3 Basic Constraints:.*?\n\s+CA:TRUE", out)),
         "self_signed": subject == grab("issuer="),
         "sha256": hashlib.sha256(der).hexdigest(),
         "sha1": hashlib.sha1(der).hexdigest(),

@@ -404,6 +404,10 @@ def test_stop_and_resume(env, monkeypatch):
     assert env.calls[-1] == ("relock",)
     assert os.path.exists(p.mapfile)
     monkeypatch.setenv("STUB_DELAY", "0")
+    with pytest.raises(BeastNetError) as ei:   # the target changed since this plan was made
+        C.run(env.ctx, p, hooks=env.hooks)
+    assert ei.value.code == E.DISK_CHANGED
+    p = mk(env, confirm="123456")   # as the screens do: a resumed copy is planned again
     r2 = C.run(env.ctx, p, hooks=env.hooks)
     assert r2.ok and r2.errors == 0
     assert open(env.files["sdb"], "rb").read() == open(env.files["sda"], "rb").read()

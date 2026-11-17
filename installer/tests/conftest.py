@@ -20,8 +20,8 @@ sys.path.insert(0, str(HERE))  # fakedist
 import fakedist  # noqa: E402
 from beastbooter import blockio, cli  # noqa: E402
 from beastbooter.errors import BeastError  # noqa: E402
-from beastbooter.esp import parse_set_lines  # noqa: E402
-from beastbooter.layout import SECTOR_SIZE  # noqa: E402
+from beastbooter.esp import parse_env_block  # noqa: E402
+from beastbooter.layout import DEVICE_ENV_PATH, SECTOR_SIZE  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Big sparse image files
@@ -150,6 +150,11 @@ def mtype(img: Path, offset: int, path: str) -> str:
     return sh("mtype", "-i", f"{img}@@{offset}", f"::/{path}", env=MTOOLS_ENV).stdout
 
 
+def device_env(img: Path, esp_offset: int) -> dict[str, str]:
+    """The values of the drive's grub/beast/device.env (a GRUB environment block)."""
+    return parse_env_block(mtype(img, esp_offset, DEVICE_ENV_PATH).encode())
+
+
 def mdir_files(img: Path, offset: int) -> set[str]:
     out = sh("mdir", "-i", f"{img}@@{offset}", "-/", "-b", "::/", env=MTOOLS_ENV).stdout
     return {line[3:] for line in out.splitlines() if line.startswith("::/") and not line.endswith("/")}
@@ -254,7 +259,7 @@ def validate_drive(img: Path, layout: str, fs: str, label: str, tmp: Path) -> di
 
     sfdisk -V (and sgdisk -v for GPT), fsck.fat -n on the ESP, fsck.exfat -n /
     fsck.fat -n on the data partition, and blkid's label and UUID of the data
-    partition == device.cfg == info --json.
+    partition == device.env == info --json.
     """
     p = subprocess.run(["sfdisk", "-V", str(img)], capture_output=True, text=True)
     assert p.returncode == 0 and "No errors detected" in p.stdout, p.stdout + p.stderr
@@ -271,7 +276,7 @@ def validate_drive(img: Path, layout: str, fs: str, label: str, tmp: Path) -> di
     assert p.returncode == 0, p.stdout + p.stderr
     probe = blkid_at(img, data_off)
     assert probe["TYPE"] == {"exfat": "exfat", "fat32": "vfat", "ntfs": "ntfs"}[fs]
-    cfg = parse_set_lines(mtype(img, esp_off, "grub/beast/device.cfg"))
+    cfg = device_env(img, esp_off)
     assert probe["LABEL"] == label == cfg["bb_data_label"] == j["data"]["label"]
     assert probe["UUID"] == cfg["bb_data_uuid_linux"] == j["data"]["uuid"]
     assert cfg["bb_data_uuid"] == probe["UUID"].upper()

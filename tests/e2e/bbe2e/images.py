@@ -4,10 +4,13 @@ Data-partition trees are dicts mapping a path on the data partition to its
 content: bytes, a Path to copy, or None for an (empty) directory. A trailing
 "/" also marks a directory.
 
-FAT32 images are written with mtools at the partition offset. exFAT has no
-userspace writer, so exFAT images are populated through a loop device that
-udisks sets up for us (no root needed): see UdisksMount. That path talks to
-the system D-Bus and therefore only works outside a sandbox.
+FAT32 images are written with mtools at the partition offset. exFAT and NTFS
+images are populated through a loop device that udisks sets up for us (no
+root needed): see udisks_mount. That path talks to the system D-Bus and
+therefore only works outside a sandbox. Where udisks cannot be used (a
+container without it), exFAT images are written with the installer's own
+exFAT code instead (ExfatWriter), so the exFAT tests run there too; NTFS has
+no such writer and its tests skip.
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ import re
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 import uuid
 from contextlib import contextmanager
@@ -25,6 +29,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import env
+
+if str(env.INSTALLER_DIR) not in sys.path:
+    sys.path.append(str(env.INSTALLER_DIR))
+from beastbooter.blockio import ImageTarget  # noqa: E402
+from beastbooter.errors import BeastError  # noqa: E402
+from beastbooter.exfatfs import ExfatVolume  # noqa: E402
 
 SECTOR = 512
 USER_CONFIG = "/beast-booter/config.cfg"
@@ -355,6 +365,60 @@ class MountedWriter:
             self.put(path, content)
 
 
+class ExfatWriter:
+    """Same interface as FatWriter, for an exFAT partition inside an image,
+    written with the installer's exFAT code (no mount, no udisks)."""
+
+    def __init__(self, image: Path, offset: int):
+        self.image, self.offset = Path(image), offset
+
+    @contextmanager
+    def _vol(self, writable: bool):
+        with ImageTarget(str(self.image), writable=writable) as t:
+            yield ExfatVolume(t, self.offset)
+
+    def exists(self, path: str) -> bool:
+        with self._vol(False) as v:
+            return v.exists(path)
+
+    def mkdir(self, path: str) -> None:
+        with self._vol(True) as v:
+            v.mkdir(path)
+
+    def put(self, path: str, content) -> None:
+        with self._vol(True) as v:
+            v.write_file(path, _content_bytes(content))
+
+    def read(self, path: str) -> bytes:
+        with self._vol(False) as v:
+            return v.read_file(path)
+
+    def remove_tree(self, path: str) -> None:
+        """Remove a file, or a directory with everything in it."""
+        with self._vol(True) as v:
+            def rm(p: str) -> None:
+                try:
+                    entries = v.listdir(p)
+                except BeastError:  # a file
+                    entries = []
+                for e in entries:
+                    rm(f"{p}/{e.name}")
+                v.remove(p)
+            rm("/" + path.strip("/"))
+
+    def populate(self, tree: dict) -> None:
+        dirs, files = normalise_tree(tree)
+        for d in dirs:
+            self.mkdir(d)
+        for path, content in files.items():
+            self.put(path, content)
+
+
+def data_fs_status(fs: str) -> tuple[bool, str]:
+    """(usable, reason): can the tests fill a data partition of this file system here?"""
+    return udisks_status() if fs == "ntfs" else (True, "")
+
+
 # ---------------------------------------------------------------------------
 # A beast-boot drive image
 # ---------------------------------------------------------------------------
@@ -393,6 +457,8 @@ class Drive:
     def data_writer(self):
         if self.fs == "fat32":
             yield FatWriter(self.path, self.data_offset)
+        elif self.fs == "exfat" and not udisks_status()[0]:
+            yield ExfatWriter(self.path, self.data_offset)
         else:
             with udisks_mount(self.path, self.data_offset, self.data_size) as mp:
                 yield MountedWriter(mp)

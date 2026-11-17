@@ -44,7 +44,7 @@ def make_esp(tmp_path: Path, fat32: bool = False) -> diskimg.ImageInfo:
     fat.put_bytes("/grub/beast/main.cfg", b"echo main\n")
     fat.put_bytes("/grub/beast/stale.cfg", b"from an older menu\n")
     fat.put_bytes("/grub/beast/version.cfg", b'set bb_version="0.1.0"\n')
-    fat.put_bytes("/grub/beast/device.cfg", b'set bb_layout="msdos"\n')
+    fat.put_bytes("/grub/beast/device.env", b"# GRUB Environment Block\nbb_layout=msdos\n")
     fat.put_bytes("/grub/i386-pc/normal.mod", b"\x7fELF")
     fat.put_bytes("/grub/fonts/unicode.pf2", b"PFF2")
     fat.put_bytes("/grub/oldtheme/theme.txt", b"gone\n")
@@ -58,7 +58,7 @@ def make_esp(tmp_path: Path, fat32: bool = False) -> diskimg.ImageInfo:
 def test_menu_files_applies_build_sh_rules(tmp_path):
     src = make_menu(tmp_path / "grub")
     for name in ("main.cfg~", ".main.cfg.swp", "x.swo", "x.bak", "x.orig", "x.rej", "#x#", "README.md",
-                 "version.cfg", "device.cfg"):
+                 "version.cfg", "device.env", "device.cfg"):
         (src / "beast" / name).write_text("skip\n")
     (src / ".git").mkdir()
     (src / ".git" / "config").write_text("skip\n")
@@ -93,7 +93,7 @@ def test_menu_files_needs_entry_points(tmp_path):
 
 
 def test_protected():
-    for p in ("beast/version.cfg", "beast/device.cfg", "i386-pc/normal.mod", "x86_64-efi/a.mod", "fonts/unicode.pf2"):
+    for p in ("beast/version.cfg", "beast/device.env", "beast/device.cfg", "i386-pc/normal.mod", "x86_64-efi/a.mod", "fonts/unicode.pf2"):
         assert menufiles.protected(p)
     for p in ("grub.cfg", "beast/main.cfg", "fonts/other.pf2"):
         assert not menufiles.protected(p)
@@ -134,7 +134,7 @@ def test_sync_mirrors_grub_into_the_esp(tmp_path, fat32):
     assert not esp.exists("/grub/oldtheme")
     # never touched
     assert esp.read("/grub/beast/version.cfg") == b'set bb_version="0.1.0"\n'
-    assert esp.read("/grub/beast/device.cfg") == b'set bb_layout="msdos"\n'
+    assert esp.read("/grub/beast/device.env") == b"# GRUB Environment Block\nbb_layout=msdos\n"
     assert esp.read("/grub/i386-pc/normal.mod") == b"\x7fELF"
     assert esp.read("/grub/fonts/unicode.pf2") == b"PFF2"
     # second run: nothing to do
@@ -190,6 +190,9 @@ def test_cli_one_shot(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr()
     assert "updated  /grub/grub.cfg" in out.out and "removed  /grub/beast/stale.cfg" in out.out
     assert "no longer matches dist/manifest.json" in out.err
+    # it must say that a UEFI boot does not see the change (the menu is inside the signed GRUB)
+    assert "under legacy BIOS only" in out.err and "Under UEFI the menu is inside the signed grubx64.efi" in out.err
+    assert "`make build`, then `bin/bb-dev vm`" in out.err
 
 
 def test_watch_resyncs_on_change(tmp_path, monkeypatch, capsys):

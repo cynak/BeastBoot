@@ -29,6 +29,7 @@ from beastbooter.layout import (  # noqa: E402
     DIST_CORE_IMG,
     DIST_ESP_DIR,
     DIST_MANIFEST,
+    ENROLL_CERT_PATH,
     REQUIRED_ESP_FILES,
 )
 
@@ -93,7 +94,9 @@ def make_fake_dist(dist: Path, version: str = "0.1.0", core: bytes | None = None
     for rel in REQUIRED_ESP_FILES:
         f = esp / rel
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_bytes(f"fake {rel} {version}\n".encode())
+        # the certificate to enroll is the same from one version to the next (a new one
+        # means a new enrolment on every computer: commands.update says so)
+        f.write_bytes(f"fake {rel}\n".encode() if rel == ENROLL_CERT_PATH else f"fake {rel} {version}\n".encode())
     (esp / "grub/beast/version.cfg").write_text(f'set bb_version="{version}"\nset bb_build_id="test"\n')
     for rel, data in EXTRA_ESP_FILES.items():
         f = esp / rel

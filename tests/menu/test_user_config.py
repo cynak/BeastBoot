@@ -1,8 +1,9 @@
 """User settings on the data partition (docs/MENU.md "User configuration"):
 /beast-booter/config.env is a GRUB environment block read with load_env and an
-allow-list; /beast-booter/config.cfg is GRUB script and is never read with
-Secure Boot on (docs/SECURITY_REVIEW-0.4.0.md D1). Static checks of the menu;
-the behaviour in GRUB is checked by tests/e2e/test_e2e_secureboot.py."""
+allow-list; /beast-booter/config.cfg is GRUB script and is never read on UEFI,
+with Secure Boot on or off (docs/SECURITY_REVIEW-0.4.0.md D1 and D3; legacy
+BIOS still reads it). Static checks of the menu; the behaviour in GRUB is
+checked by tests/e2e/test_e2e_secureboot.py and test_e2e_signed_menu.py."""
 
 from __future__ import annotations
 
@@ -22,7 +23,8 @@ MENU_MD = ROOT / "docs" / "MENU.md"
 GUIDE_MD = ROOT / "docs" / "USER_GUIDE.md"
 
 ALLOWED = {"timeout", "default", "bb_autoboot", "bb_debug", "bb_dryrun", "bb_serial", "bb_gfx",
-           "bb_gfxmode", "bb_theme", "bb_fs_addon", "bb_kargs", "bb_windows", "bb_beastnet_script"}
+           "bb_gfxmode", "bb_theme", "bb_fs_addon", "bb_kargs", "bb_windows", "bb_beastnet_script",
+           "debug", "pager"}
 # Never settable from the data partition: they say where files come from or
 # whether they are checked.
 FORBIDDEN = {"bb_sb", "bb_cfg", "bb_esp", "bb_data", "bb_data_uuid", "bb_data_uuid_linux", "bb_data_fs",
@@ -56,14 +58,14 @@ def env_patterns() -> dict[str, str]:
     return dict(re.findall(r"bb_env_ok (\w+) \"\$\w+\" '([^']*)'", body))
 
 
-def test_config_cfg_is_sourced_only_without_secure_boot():
+def test_config_cfg_is_sourced_only_under_legacy_bios():
     text = code(MAIN.read_text())
     sources = re.findall(r'(?:source|configfile)\s+"?\(\$bb_data\)[^\n]*', text)
     assert sources == ['source "($bb_data)/beast-booter/config.cfg"'], sources
     block = re.search(r'if \[ -f "\(\$bb_data\)/beast-booter/config\.cfg" \]; then\n(.*?)\n  fi\n', text, re.S)
     assert block, "config.cfg block not found"
     assert re.fullmatch(
-        r'\s*if \[ "\$bb_sb" = "1" \]; then\n(?:(?!\n\s*(?:else|elif|fi)\b).)*\n\s*else\n'
+        r'\s*if \[ "\$bb_platform" = "efi" \]; then\n(?:(?!\n\s*(?:else|elif|fi)\b).)*\n\s*else\n'
         r'\s*source "\(\$bb_data\)/beast-booter/config\.cfg"\n\s*fi', block.group(1), re.S), block.group(1)
 
 
@@ -108,15 +110,18 @@ def test_config_env_file_is_read_through_bb_env_load():
     text = code(MAIN.read_text())
     assert 'bb_env_load "($bb_data)/beast-booter/config.env"' in text
     assert text.index("bb_env_load") < text.index('source "($bb_data)/beast-booter/config.cfg"'), \
-        "config.env first, so config.cfg wins without Secure Boot"
+        "config.env first, so config.cfg wins under legacy BIOS"
 
 
 def test_every_allowed_value_is_validated():
     pats = env_patterns()
     assert set(pats) == ALLOWED, set(pats) ^ ALLOWED
-    # bb_debug is checked first, so the other checks can report.
+    # debug and pager act from the moment load_env set them: they are checked first. Then
+    # bb_debug, so the other checks can report.
     body = function_body(LIB.read_text(), "bb_env_load")
-    assert body.index("bb_env_ok bb_debug") < min(body.index(f"bb_env_ok {n} ") for n in ALLOWED - {"bb_debug"})
+    first = {"debug", "pager", "bb_debug"}
+    assert body.index("bb_env_ok debug ") < body.index("bb_env_ok pager ") < body.index("bb_env_ok bb_debug ") \
+        < min(body.index(f"bb_env_ok {n} ") for n in ALLOWED - first)
     for n in ALLOWED:
         assert re.search(rf'else set {n}=""; fi', body), f"a bad {n} must be dropped"
 
@@ -138,6 +143,9 @@ def test_every_allowed_value_is_validated():
     ("bb_beastnet_script", "/beast-booter/plan.json", True),
     ("bb_beastnet_script", "/plan.json init=/bin/sh", False), ("bb_beastnet_script", "plan.json", False),
     ("bb_kargs", "console=ttyS0,115200 nomodeset", True), ("bb_kargs", 'a="b"', False),
+    ("debug", "linux,loader", True), ("debug", "all", True), ("debug", "linux loader", False),
+    ("debug", "all;halt", False), ("debug", "linux,", False), ("debug", "$prefix", False),
+    ("pager", "1", True), ("pager", "0", True), ("pager", "yes", False),
 ])
 def test_value_patterns(name, value, ok):
     assert bool(re.search(env_patterns()[name], value)) is ok

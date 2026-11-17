@@ -24,11 +24,13 @@ from dataclasses import dataclass, field
 from .. import errors as E
 from ..cmdline import netboot
 from ..errors import BeastNetError
-from .model import (CopyKind, CopyPlan, CopyProgress, CopyResult, Disk, Inventory,
+from . import mapstore
+from .model import (SHARED_SERIAL, CopyKind, CopyPlan, CopyProgress, CopyResult, Disk, Inventory,
                     Partition, Stack, Volume, VolumeKind)
 
 IMAGE_FS = frozenset({"exfat", "ntfs", "ntfs3", "ext4", "xfs"})
 CONFIRM_LEN = 6
+FINGERPRINT_SPAN = 1 << 20  # bytes hashed at each end of a target (Hooks.fingerprint)
 CHUNK = 4 * 1024 * 1024
 SET_NOTE = "one disk of a set, not a copy of the array"
 RAM_MAP_NOTE = ("Started over the network, without a BeastBoot drive: the progress file is kept in "
@@ -55,6 +57,19 @@ class DiskCopyPlan(CopyPlan):
     notes: list[str] = field(default_factory=list)   # plain words for the plan screen
     member_of_set: bool = False
     overwrite: bool = False
+    restart: bool = False        # the user chose to start over: an untrusted saved mapfile is set aside
+    target_fingerprint: str = ""  # Hooks.fingerprint of the target when planned, checked again before writing
+
+
+class MapfileUntrusted(BeastNetError):
+    """The saved progress of this copy exists but cannot be trusted (torn, damaged, or not
+    written by this version). The copy can only start over (plan.restart = True)."""
+
+    def __init__(self, mapfile: str, why: str) -> None:
+        super().__init__(E.COPY, f"the saved progress of this copy ({mapfile}) is incomplete or damaged, "
+                         f"so it cannot be trusted ({why})",
+                         "Start the copy over: everything is read again. Nothing has been written yet.")
+        self.mapfile = mapfile
 
 
 @dataclass
@@ -97,6 +112,25 @@ def _open_exclusive(path: str) -> int:
         raise BeastNetError(E.DISK_REFUSED, f"{path} is busy or cannot be opened exclusively ({e.strerror})") from e
 
 
+def _fingerprint(path: str) -> str:
+    """SHA-256 over the size and the first and last FINGERPRINT_SPAN bytes of a device (or
+    file): two disks that report the same serial and size still differ here unless both
+    are blank. "" when it cannot be read."""
+    h = hashlib.sha256()
+    try:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0))
+        try:
+            size = os.lseek(fd, 0, os.SEEK_END)
+            h.update(str(size).encode())
+            for off in sorted({0, max(0, size - FINGERPRINT_SPAN)}):
+                h.update(os.pread(fd, FINGERPRINT_SPAN, off))
+        finally:
+            os.close(fd)
+    except OSError:
+        return ""
+    return h.hexdigest()
+
+
 def _is_block(path: str) -> bool:
     try:
         return stat.S_ISBLK(os.stat(path).st_mode)
@@ -113,6 +147,7 @@ class Hooks:
     relock: Callable = _lazy_guard("reapply")           # (ctx)
     open_exclusive: Callable[[str], int] = _open_exclusive
     is_block: Callable[[str], bool] = _is_block
+    fingerprint: Callable[[str], str] = _fingerprint
     spawn: Callable = subprocess.Popen
     which: Callable[[str], str | None] = shutil.which
     statvfs: Callable = os.statvfs
@@ -255,7 +290,7 @@ def _in_use(ctx, nodes: dict[str, str], holders_dirs: list[str]) -> str:
 # --------------------------------------------------------------------------
 
 def ddrescue_argv(plan: DiskCopyPlan, phase: str, *, force: bool, direct_in: bool,
-                  direct_out: bool) -> list[str]:
+                  direct_out: bool, mapfile: str | None = None) -> list[str]:
     """phase 'fast' = first pass, no trimming/scraping; 'retry' = the rest."""
     argv = ["ddrescue"]
     if force:
@@ -271,13 +306,13 @@ def ddrescue_argv(plan: DiskCopyPlan, phase: str, *, force: bool, direct_in: boo
         argv.append(f"-r{plan.retries}")
     if plan.timeout:
         argv.append(f"--timeout={plan.timeout}")
-    argv += [plan.source, plan.target, plan.mapfile]
+    argv += [plan.source, plan.target, mapfile or plan.mapfile]
     return argv
 
 
-def _check_argv(plan: DiskCopyPlan, argv: list[str]) -> None:
+def _check_argv(plan: DiskCopyPlan, argv: list[str], mapfile: str | None = None) -> None:
     """Last line of defence: output is exactly the plan target, never the source."""
-    if (argv[-3:] != [plan.source, plan.target, plan.mapfile] or plan.target == plan.source
+    if (argv[-3:] != [plan.source, plan.target, mapfile or plan.mapfile] or plan.target == plan.source
             or argv.count(plan.source) != 1):
         raise BeastNetError(E.COPY, "internal check failed: ddrescue arguments do not match the plan")
 
@@ -335,6 +370,8 @@ def _resolve_volume(inv: Inventory, ref: str) -> Volume:
         if ref and ref in (v.id, v.path):
             return v
     d = inv.disk(ref) or next((x for x in inv.disks if x.path == ref), None)
+    if d is None and inv.serial_shared(ref):
+        _refuse(SHARED_SERIAL.format(ref))
     if d:
         for v in inv.volumes:
             if v.id == d.id:
@@ -345,6 +382,8 @@ def _resolve_volume(inv: Inventory, ref: str) -> Volume:
 
 def _resolve_target(inv: Inventory, ref: str) -> tuple[Disk, Partition | None]:
     d = inv.disk(ref) or next((x for x in inv.disks if x.path == ref), None)
+    if d is None and inv.serial_shared(ref):
+        _refuse(SHARED_SERIAL.format(ref))
     if d:
         return d, None
     for dd in inv.disks:
@@ -514,8 +553,8 @@ def plan(ctx, inv: Inventory, kind, source: str, target: str, *, confirm: str | 
         if not tdisk.serial:
             _refuse(f"{tdisk.id} reports no serial number, so it cannot be told apart safely; "
                     f"it cannot be a target")
-        if sum(1 for d in inv.disks if d.serial == tdisk.serial) > 1:
-            _refuse(f"two disks report the serial {tdisk.serial}; the target cannot be told apart")
+        if inv.serial_shared(tdisk.serial):
+            _refuse(SHARED_SERIAL.format(tdisk.serial))
         if tdisk.id in src_disks:
             _refuse("the target is the source, or a disk the source is built on")
         if _real(dst_path) == _real(src_path):
@@ -591,6 +630,7 @@ def plan(ctx, inv: Inventory, kind, source: str, target: str, *, confirm: str | 
                      timeout=timeout, expected_confirmation=expected,
                      target_disk_id=tdisk.id if tdisk else "", target_is_partition=tpart is not None,
                      notes=notes, member_of_set=set_stack is not None, overwrite=overwrite,
+                     target_fingerprint=h.fingerprint(dst_path) if tdisk else "",
                      confirmed=kind == CopyKind.IMAGE or (confirm is not None and confirm.strip() == expected))
     blk_out = kind != CopyKind.IMAGE
     blk_in = h.is_block(src_path)
@@ -688,6 +728,12 @@ def _reidentify(ctx, plan: DiskCopyPlan, h: Hooks) -> Disk:
         raise BeastNetError(E.DISK_REFUSED, "that is the BeastBoot stick itself")
     if disk.id in plan.source_disk_ids:
         raise BeastNetError(E.DISK_REFUSED, "the target is now part of the source")
+    if inv.serial_shared(disk.serial):
+        raise BeastNetError(E.DISK_REFUSED, SHARED_SERIAL.format(disk.serial) + "; nothing was written")
+    if h.fingerprint(plan.target) != plan.target_fingerprint:
+        raise BeastNetError(E.DISK_CHANGED,
+                            f"{disk.id} does not hold what it held when the plan was made: it may be "
+                            f"another disk with the same serial and size; nothing was written")
     return disk
 
 
@@ -732,12 +778,29 @@ def run(ctx, plan: CopyPlan, on_progress: Callable[[CopyProgress], None] | None 
             if not os.path.exists(plan.source):
                 raise BeastNetError(E.DISK_CHANGED, "the source is gone")
         os.makedirs(os.path.dirname(plan.mapfile) or ".", exist_ok=True)
+        # ddrescue works on a RAM copy; plan.mapfile only ever receives complete, sealed
+        # snapshots (mapstore). An untrusted saved map is never used.
+        work = _work_map(ctx, plan)
+        saved = mapstore.load(plan.mapfile, plan.size)
+        if saved.state == "untrusted":
+            if not plan.restart:
+                raise MapfileUntrusted(plan.mapfile, saved.why)
+            _set_aside(plan.mapfile)
+            notes.append("The saved progress could not be trusted; the copy started over.")
+            saved = mapstore.Loaded("absent")
+        for f in (work, work + ".log"):
+            if os.path.exists(f):
+                os.unlink(f)
+        if saved.state == "ok":
+            with open(work, "w", encoding="ascii") as f:
+                f.write(saved.text)
         if writes_device:
             unlocked = True
             # a partition target: only the disk node (a read-only disk blocks its
             # partitions) and that partition become writable; siblings stay read-only
             writable = h.make_writable(ctx, disk, partition=plan.target if plan.target_is_partition else None)
         t_timeout.apply()
+        keeper = mapstore.Keeper(work, plan.mapfile, plan.size, plan.target, fd if writes_device else None)
         rep.emit("copy start", f"kind={kind.value}", f"src={plan.src_label or plan.source}",
                  f"dst={plan.dst_label or plan.target}", f"size={plan.size}")
 
@@ -748,7 +811,9 @@ def run(ctx, plan: CopyPlan, on_progress: Callable[[CopyProgress], None] | None 
         state = {"t": time.monotonic(), "done": 0, "rate": 0.0}
 
         def report(phase_override: str = "", done_override: int | None = None) -> tuple[int, int, int]:
-            done, bad, left, ph = mapfile_state(plan.mapfile, plan.size)
+            done, bad, left, ph = mapfile_state(work, plan.size)
+            if not phase_override:
+                keeper.tick()
             if done_override is not None:
                 done = done_override
             now = time.monotonic()
@@ -759,29 +824,33 @@ def run(ctx, plan: CopyPlan, on_progress: Callable[[CopyProgress], None] | None 
             prog = CopyProgress(done=done, total=plan.size, errors=bad, rate=state["rate"],
                                 phase=phase_override or ph)
             on_progress(prog)
-            if now - last_emit[0] >= 1.0 or done >= plan.size:
+            # the final line always goes out: it carries the last count of bad areas
+            if now - last_emit[0] >= 1.0 or done >= plan.size or phase_override == "finished":
                 last_emit[0] = now
-                rep.emit("copy progress", f"done={done}", f"errors={bad}", f"rate={int(state['rate'])}")
+                rep.emit("copy progress", f"done={done}", f"errors={bad}", f"unread={left}",
+                         f"rate={int(state['rate'])}")
             return done, bad, left
 
         # a finished mapfile here can only be a run that stopped before verifying
         stopped = False
         for phase in ("fast", "retry"):
-            done, bad, left, _ = mapfile_state(plan.mapfile, plan.size)
+            done, bad, left, _ = mapfile_state(work, plan.size)
             if phase == "retry" and left == 0:
                 break
             if phase == "fast" and left == 0:
                 break
-            argv = ddrescue_argv(plan, phase, force=force, direct_in=direct_in, direct_out=direct_out)
-            _check_argv(plan, argv)
+            argv = ddrescue_argv(plan, phase, force=force, direct_in=direct_in, direct_out=direct_out,
+                                 mapfile=work)
+            _check_argv(plan, argv, work)
             argv[0] = exe
-            rc, stopped, err = _run_child(h, argv, plan, report, should_stop)
+            rc, stopped, err = _run_child(h, argv, work, report, should_stop)
+            keeper.save()
             if not stopped and phase == "fast" and should_stop():
                 stopped = True
             if stopped:
                 break
             if rc != 0:
-                done, bad, left, _ = mapfile_state(plan.mapfile, plan.size)
+                done, bad, left, _ = mapfile_state(work, plan.size)
                 msg = (err or f"ddrescue exited with {rc}").strip().splitlines()[-1:] or [""]
                 low = (err or "").lower()
                 if "timeout" in low or "interrupt" in low:
@@ -792,11 +861,13 @@ def run(ctx, plan: CopyPlan, on_progress: Callable[[CopyProgress], None] | None 
                 code = E.DISK_IO if ("write" in low and "error" in low) else E.COPY
                 raise BeastNetError(code, f"ddrescue failed: {msg[0]}")
         if stopped:
+            keeper.save()
             rep.emit("copy stopped", "resumable=1")
-            done, bad, left, _ = mapfile_state(plan.mapfile, plan.size)
+            done, bad, left, _ = mapfile_state(work, plan.size)
             return CopyResult(ok=False, bytes=done, errors=left, resumable=True, notes=notes)
 
-        done, bad, left, _ = mapfile_state(plan.mapfile, plan.size)
+        keeper.save()
+        done, bad, left, _ = mapfile_state(work, plan.size)
         report("finished")
         sha = ""
         if plan.verify and left == 0:
@@ -820,7 +891,7 @@ def run(ctx, plan: CopyPlan, on_progress: Callable[[CopyProgress], None] | None 
         _retire_mapfile(plan) if left == 0 else None
         if kind == CopyKind.IMAGE:
             _write_info(plan, notes)
-        rep.emit("copy done", f"kind={kind.value}", f"bytes={done}", f"errors={left}",
+        rep.emit("copy done", f"kind={kind.value}", f"bytes={done}", f"errors={bad}", f"unread={left}",
                  f"sha256={sha or '-'}")
         return CopyResult(ok=True, bytes=done, errors=left, sha256=sha, notes=notes)
     except BeastNetError:
@@ -841,8 +912,23 @@ def run(ctx, plan: CopyPlan, on_progress: Callable[[CopyProgress], None] | None 
                 pass
 
 
-def _run_child(h: Hooks, argv, plan, report, should_stop) -> tuple[int, bool, str]:
-    logp = plan.mapfile + ".log"
+def _work_map(ctx, plan: DiskCopyPlan) -> str:
+    """ddrescue's own mapfile, in RAM (/run/beastnet/disk-maps)."""
+    base = getattr(ctx.paths, "run", "") or os.path.join(os.path.dirname(plan.mapfile) or ".", ".work")
+    d = os.path.join(base, "disk-maps")
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, os.path.basename(plan.mapfile))
+
+
+def _set_aside(mapfile: str) -> None:
+    """An untrusted saved map is kept for inspection, never used again."""
+    for p in (mapfile, mapfile + ".tmp"):
+        if os.path.exists(p):
+            os.replace(p, p + ".untrusted")
+
+
+def _run_child(h: Hooks, argv, work: str, report, should_stop) -> tuple[int, bool, str]:
+    logp = work + ".log"
     with open(logp, "ab") as log:
         proc = h.spawn(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=log)
         stopped = False

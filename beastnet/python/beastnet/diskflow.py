@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 from .cmdline import netboot
 from .disks.model import (Candidate, CopyKind, CopyPlan, CopyProgress, CopyResult, Disk, Health,
                           HealthStatus, Stack, StackKind, Support, Volume)
+from .disks.copy import MapfileUntrusted
 from .disks.session import LEVELS, DiskSession
 from .download import Progress, human_size
 from .errors import BeastNetError
@@ -24,6 +25,11 @@ if TYPE_CHECKING:
 TITLE = "Disk tools"
 SUBTITLE = "beast-net: Disk tools (recovery and cloning)"
 IMAGES = "/images"
+# Titles of the typed confirmations before a disk is written. A UI that wraps the local one
+# (an add-on, beastnet/README.md "Add-ons") can tell these forms from all others by them.
+CONFIRM_ERASE = "Confirm the disk to erase"
+CONFIRM_OPEN_RW = "Open a disk for image files"
+WRITE_CONFIRMS = frozenset({CONFIRM_ERASE, CONFIRM_OPEN_RW})
 
 KIND_NAME = {
     StackKind.MD: "Linux RAID",
@@ -135,12 +141,24 @@ class DiskScreens:
         self.ui = flow.ui
         self.ctx = flow.ctx
         self.s = session or DiskSession(flow.ctx)
+        attach = getattr(self.ui, "attach_disks", None)  # optional UI method (add-ons): the session
+        if attach is not None:
+            attach(self.s)
 
     # -- top level --------------------------------------------------------------------
     def run(self, entry: bool = False) -> None:
         old = self.ui.set_mode(SUBTITLE, ())
         try:
             try:
+                # after a power cut the BeastBoot drive may need a check (fsrepair) before the
+                # guard goes on; the screen says so, then what was done
+                notes = self.ui.task(TITLE, "Checking the BeastBoot drive...", self.s.check_drive)
+                if notes:
+                    self.ui.message("BeastBoot drive checked", "\n".join(notes), kind="warn")
+                if self.s.stick_problem:
+                    self.ui.message("BeastBoot drive needs attention",
+                                    self.s.stick_problem + "\n\nCopies cannot keep their progress on it "
+                                    "until it is fixed.", kind="warn")
                 self.ui.task(TITLE, "Finding disks and setting all of them read-only...", self.s.enter)
             except BeastNetError as e:
                 self.flow.show_error(e, TITLE)
@@ -508,9 +526,12 @@ class DiskScreens:
                 return None
             return d.serial, disk_label(d)
         if d.id not in self.s.dests or not self.s.dests[d.id].writable:
+            mark = getattr(self.ui, "write_plan", None)  # optional UI method (add-ons): what is written
+            if mark is not None:
+                mark("open_rw", None, d, self.s.inv)
             error = ""
             while True:
-                v = self.ui.form("Open a disk for image files",
+                v = self.ui.form(CONFIRM_OPEN_RW,
                                  f"{disk_label(d)} (serial {d.serial}) is opened read-write; files on it stay, "
                                  "new image files are added. Type the last 6 characters of its serial.",
                                  [Field("serial", "Serial (last 6)")], error=error)
@@ -590,6 +611,9 @@ class DiskScreens:
         if go is not True:
             return
         if isinstance(target, Disk):
+            mark = getattr(self.ui, "write_plan", None)  # optional UI method (add-ons): what is written
+            if mark is not None:
+                mark(kind.value, plan, target, self.s.inv)
             plan = self.confirm(kind, source, target, member_of_set)
             if plan is None:
                 return
@@ -599,7 +623,7 @@ class DiskScreens:
                 member_of_set: bool = False) -> CopyPlan | None:
         error = ""
         while True:
-            v = self.ui.form("Confirm the disk to erase",
+            v = self.ui.form(CONFIRM_ERASE,
                              f"Everything on {disk_label(target)} (serial {target.serial}) is "
                              "overwritten. Type the last 6 characters of its serial number "
                              "(the whole serial if another disk's ends the same).",
@@ -614,16 +638,32 @@ class DiskScreens:
                 error = e.text
 
     def run_copy(self, plan: CopyPlan, shown: str) -> None:
+        seen = getattr(self.ui, "copy_progress", None)  # optional UI method (add-ons): each CopyProgress
+
         def job(on_progress: Callable[[Progress], None], cancel: Any) -> CopyResult:
             on_progress(Progress("copy", done=0, total=plan.size or None))
-            return self.s.run_copy(plan, lambda cp: on_progress(to_progress(cp)), cancel.is_set)
+
+            def report(cp: CopyProgress) -> None:
+                if seen is not None:
+                    seen(cp)
+                on_progress(to_progress(cp))
+            return self.s.run_copy(plan, report, cancel.is_set)
 
         lines = [f"From: {plan.source}", f"To:   {shown}"]
-        try:
-            r = self.ui.download(f"{plan.kind.value.capitalize()}", lines, job, what="copy")
-        except BeastNetError as e:
-            self._error(e)
-            return
+        while True:
+            try:
+                r = self.ui.download(f"{plan.kind.value.capitalize()}", lines, job, what="copy")
+                break
+            except MapfileUntrusted as e:
+                # never resume from a map that cannot be trusted: offer to start over
+                if plan.restart or not self.ui.confirm(
+                        "Saved progress cannot be used", f"{e.text}.\n\n{e.hint}",
+                        yes="Start over", no="Cancel", kind="warn"):
+                    return
+                plan.restart = True
+            except BeastNetError as e:
+                self._error(e)
+                return
         if r.resumable and not r.ok:
             text = ("Stopped. Start the same copy again to resume where it stopped (its progress "
                     + ("is kept with the image, or in memory until this computer restarts)."

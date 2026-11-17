@@ -3,9 +3,16 @@
 # smoke-tests the portable packages on Linux, Windows and macOS, attests build
 # provenance for every file and publishes the GitHub Release (docs/RELEASING.md).
 #
-# Signing: the project's release key comes from the secrets BB_SB_KEY_PEM and
-# BB_SB_CERT_PEM. A tag build without them fails: a throwaway key would make
-# every release need a new MOK enrollment.
+# Signing: users enroll the BeastBoot CA certificate; GRUB, the helper kernel and
+# wimboot are each signed with their own leaf certificate from that CA. The CA's
+# private key is offline and never comes here. The environment "release" holds
+# the three leaf keys and the certificates (secrets BB_SB_CA_CERT_PEM and, for
+# X = GRUB, KERNEL, WIMBOOT: BB_SB_X_KEY_PEM, BB_SB_X_CERT_PEM). A tag build
+# without them fails: throwaway keys would make every release need a new MOK
+# enrollment. Only the small job "sign" sees the leaf keys: "unsigned" builds the
+# boot images, "sign" signs those three files, and "build" builds again without
+# any key, checks each signed file against its own build and its own leaf, then
+# tests, scans and packages.
 #
 # Manual run (workflow_dispatch) with dry_run (the default): built with a
 # throwaway key, marked unofficial, uploaded as workflow artifacts only - no
@@ -48,17 +55,173 @@ jobs:
             echo "::notice::no /dev/kvm on the runner: the end-to-end QEMU tests will be skipped"
           fi
 
-  build:
-    name: build, test and scan (ubuntu:26.04)
+  unsigned:
+    name: build the boot images, unsigned (ubuntu:26.04)
     needs: probe
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    # Container jobs default to `sh` (dash); the steps use bash.
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: docker.io/library/ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
+      options: ${{ needs.probe.outputs.container-options }}
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      LC_ALL: C.UTF-8
+      TZ: UTC
+    steps:
+      # git first: without it actions/checkout downloads an archive, and the build
+      # reads its timestamp and the release its tag from the git history
+      - name: Install git
+        run: |
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends ca-certificates git
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build host (packages, pinned downloads, Debian shim)
+        uses: ./.github/actions/build-host
+
+      # No secret is available here. The key only lets build.sh run to the end; what
+      # leaves this job are the three images without any signature.
+      - name: Build with throwaway keys and keep the unsigned images
+        run: |
+          dir="$(mktemp -d "$RUNNER_TEMP/bb-key.XXXXXX")"
+          BB_KEY_DIR="$dir" BB_KEY_CN="beast-boot throwaway CA (run $GITHUB_RUN_ID)" build/keygen.sh
+          # the same project URL as scripts/release/build_release.sh --official: it is in GRUB's SBAT
+          if [ "$OFFICIAL" = true ]; then export BB_PROJECT_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"; fi
+          BB_KEY_DIR="$dir" BB_UNSIGNED_OUT="$GITHUB_WORKSPACE/out/unsigned" make -s build
+          ls -l out/unsigned
+          rm -rf "$dir"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unsigned-images
+          path: out/unsigned
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+
+  # The only job that sees the release signing keys (the three leaf keys; the CA key is
+  # offline and never here). It runs build/sign.sh (openssl, sbsign, sbverify, sbattach)
+  # on the three unsigned images and nothing else: no build, no tests, no scanners
+  # (docs/RELEASING.md, "Signing in its own job").
+  sign:
+    name: sign the boot images
+    needs: unsigned
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     # Official runs use the protected environment "release" that holds the signing
     # secrets (allowed for v* tags only, with a required reviewer: docs/RELEASING.md).
     # Dry runs use "dry-run", which has no secrets.
     environment: ${{ (github.event_name == 'push' || inputs.dry_run == false) && 'release' || 'dry-run' }}
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: docker.io/library/ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      LC_ALL: C.UTF-8
+      TZ: UTC
+    steps:
+      - name: Install openssl and sbsigntool
+        run: |
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends ca-certificates git openssl sbsigntool
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            build/sign.sh
+            build/sbkeys.sh
+            build/keygen.sh
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: unsigned-images
+          path: unsigned
+
+      - name: Release signing keys (the CA certificate and the three leaves)
+        if: env.OFFICIAL == 'true'
+        env:
+          CA_CERT_PEM: ${{ secrets.BB_SB_CA_CERT_PEM }}
+          GRUB_KEY_PEM: ${{ secrets.BB_SB_GRUB_KEY_PEM }}
+          GRUB_CERT_PEM: ${{ secrets.BB_SB_GRUB_CERT_PEM }}
+          KERNEL_KEY_PEM: ${{ secrets.BB_SB_KERNEL_KEY_PEM }}
+          KERNEL_CERT_PEM: ${{ secrets.BB_SB_KERNEL_CERT_PEM }}
+          WIMBOOT_KEY_PEM: ${{ secrets.BB_SB_WIMBOOT_KEY_PEM }}
+          WIMBOOT_CERT_PEM: ${{ secrets.BB_SB_WIMBOOT_CERT_PEM }}
+        run: |
+          # The keys are only ever written for a version tag: a manual run with
+          # dry_run=false on a branch stops here, before a key touches the disk.
+          if [ "$GITHUB_REF_TYPE" != tag ] || ! [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::the release keys are only used for v*.*.* tags (this run: $GITHUB_REF_TYPE $GITHUB_REF_NAME); use dry_run for other refs"
+            exit 1
+          fi
+          for v in CA_CERT_PEM GRUB_KEY_PEM GRUB_CERT_PEM KERNEL_KEY_PEM KERNEL_CERT_PEM WIMBOOT_KEY_PEM WIMBOOT_CERT_PEM; do
+            if [ -z "${!v}" ]; then
+              echo "::error::the secret BB_SB_$v is not set; an official release must be signed with the project's leaf keys (docs/RELEASING.md section 3)"
+              exit 1
+            fi
+          done
+          umask 077
+          dir="$(mktemp -d "$RUNNER_TEMP/bb-key.XXXXXX")"
+          chmod 0700 "$dir"
+          printf '%s\n' "$CA_CERT_PEM" > "$dir/beast-boot.crt"
+          printf '%s\n' "$GRUB_KEY_PEM" > "$dir/beast-boot-grub.key"
+          printf '%s\n' "$GRUB_CERT_PEM" > "$dir/beast-boot-grub.crt"
+          printf '%s\n' "$KERNEL_KEY_PEM" > "$dir/beast-boot-kernel.key"
+          printf '%s\n' "$KERNEL_CERT_PEM" > "$dir/beast-boot-kernel.crt"
+          printf '%s\n' "$WIMBOOT_KEY_PEM" > "$dir/beast-boot-wimboot.key"
+          printf '%s\n' "$WIMBOOT_CERT_PEM" > "$dir/beast-boot-wimboot.crt"
+          echo "BB_KEY_DIR=$dir" >> "$GITHUB_ENV"
+
+      - name: Throwaway CA and leaves (dry run)
+        if: env.OFFICIAL != 'true'
+        run: |
+          dir="$(mktemp -d "$RUNNER_TEMP/bb-key.XXXXXX")"
+          BB_KEY_DIR="$dir" BB_KEY_CN="beast-boot dry-run throwaway CA (run $GITHUB_RUN_ID)" build/keygen.sh
+          rm -f "$dir/beast-boot-ca.key"   # as in a release: no CA key where files are signed
+          echo "BB_KEY_DIR=$dir" >> "$GITHUB_ENV"
+
+      - name: Sign
+        run: build/sign.sh unsigned signed
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: signed-images
+          path: signed
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove the signing keys
+        if: always()
+        run: |
+          if [ -n "${BB_KEY_DIR:-}" ] && [ -d "$BB_KEY_DIR" ]; then
+            find "$BB_KEY_DIR" -type f -exec shred -u {} + 2>/dev/null || true
+            rm -rf "$BB_KEY_DIR"
+          fi
+
+  build:
+    name: build, test and scan (ubuntu:26.04)
+    needs: [probe, sign]
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    # No environment and no key: the images signed by the job above are checked against
+    # this job's own build and used as they are (BB_PRESIGNED_DIR).
     # Container jobs default to `sh` (dash); the steps use bash.
     defaults:
       run:
@@ -75,80 +238,29 @@ jobs:
       LC_ALL: C.UTF-8
       TZ: UTC
     steps:
-      # The packages scripts/bootstrap-tools.sh documents for a system-wide
-      # install (QEMU/OVMF for the e2e tests), the toolchain of
-      # the GRUB source build (build/grub/grubsrc.py: gcc ... libfreetype-dev),
-      # plus what the beast-net and SBOM steps use. grub-common/grub2-common
-      # give grub-mkfont and unicode.pf2; grub-efi-amd64-signed is only for the
-      # e2e stub images.
-      # shim is Debian's (a step below).
-      - name: Install the build host packages
+      # git first: without it actions/checkout downloads an archive, and the build
+      # reads its timestamp and the release its tag from the git history
+      - name: Install git
         run: |
           apt-get update -q
-          apt-get install -y -q --no-install-recommends \
-            ca-certificates curl git make openssl binutils xz-utils zstd kmod \
-            python3 python3-pytest python3-virt-firmware python3-jsonschema \
-            gcc autoconf automake autopoint bison flex gawk pkgconf patch libfreetype-dev dpkg-dev \
-            grub-common grub2-common grub-efi-amd64-signed sbsigntool \
-            mtools dosfstools exfatprogs ntfs-3g fdisk gdisk xorriso socat qemu-system-x86 ovmf \
-            fonts-noto-core fonts-noto-mono
+          apt-get install -y -q --no-install-recommends ca-certificates git
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Trust the checkout (the container runs as root)
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Build host (packages, pinned downloads, Debian shim)
+        uses: ./.github/actions/build-host
 
-      - name: Cache the pinned downloads (Python runtimes, beast-net packages, linux-firmware, GRUB source)
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          path: |
-            .tools/cache/pbs
-            .tools/cache/beastnet
-            .tools/cache/linux-firmware
-            .tools/cache/grub-src/dl
-            .tools/cache/wimboot/dl
-            .tools/cache/beastmount/dl
-            .tools/debian/debs
-          key: release-dl-${{ hashFiles('packaging/portable/runtimes.lock', 'build/beastnet/packages.lock', 'build/beastnet/firmware.lock', 'build/grub/source.lock.json', 'build/wimboot/source.lock.json', 'build/winpe/mingw-w64.lock.json', 'build/shim/debian-shim.lock') }}
+          name: signed-images
+          path: ${{ runner.temp }}/signed
 
-      # Debian's shim (signed through Microsoft UEFI CA 2011 and 2023) and its
-      # MokManager, pinned by SHA-256 in build/shim/debian-shim.lock;
-      # scripts/dev-env.sh points BB_SHIM_DIR at .tools/debian/root/usr/lib/shim.
-      - name: Debian shim and MokManager (pinned)
-        run: python3 -I build/shim/fetch.py fetch .tools/debian
-
-      - name: Release signing key (secrets BB_SB_KEY_PEM, BB_SB_CERT_PEM)
-        if: env.OFFICIAL == 'true'
-        env:
-          KEY_PEM: ${{ secrets.BB_SB_KEY_PEM }}
-          CERT_PEM: ${{ secrets.BB_SB_CERT_PEM }}
+      - name: Use the signed images and their certificates
         run: |
-          # The release key is only ever written for a version tag: a manual run with
-          # dry_run=false on a branch stops here, before the key touches the disk.
-          if [ "$GITHUB_REF_TYPE" != tag ] || ! [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-            echo "::error::the release key is only used for v*.*.* tags (this run: $GITHUB_REF_TYPE $GITHUB_REF_NAME); use dry_run for other refs"
-            exit 1
-          fi
-          if [ -z "$KEY_PEM" ] || [ -z "$CERT_PEM" ]; then
-            echo "::error::the secrets BB_SB_KEY_PEM and BB_SB_CERT_PEM are not set; an official release must be signed with the project's release key (docs/RELEASING.md)"
-            exit 1
-          fi
-          umask 077
-          dir="$(mktemp -d "$RUNNER_TEMP/bb-key.XXXXXX")"
-          chmod 0700 "$dir"
-          printf '%s\n' "$KEY_PEM" > "$dir/beast-boot.key"
-          printf '%s\n' "$CERT_PEM" > "$dir/beast-boot.crt"
-          openssl x509 -in "$dir/beast-boot.crt" -outform DER -out "$dir/beast-boot.cer"
-          echo "BB_KEY_DIR=$dir" >> "$GITHUB_ENV"
-
-      - name: Throwaway signing key (dry run)
-        if: env.OFFICIAL != 'true'
-        run: |
-          dir="$(mktemp -d "$RUNNER_TEMP/bb-key.XXXXXX")"
-          BB_KEY_DIR="$dir" BB_KEY_CN="beast-boot dry-run throwaway key (run $GITHUB_RUN_ID)" build/keygen.sh
-          echo "BB_KEY_DIR=$dir" >> "$GITHUB_ENV"
+          echo "BB_PRESIGNED_DIR=$RUNNER_TEMP/signed" >> "$GITHUB_ENV"
+          echo "BB_KEY_DIR=$RUNNER_TEMP/signed" >> "$GITHUB_ENV"
 
       - name: Gate baseline (the previous release's vulnerability report)
         if: env.OFFICIAL == 'true'
@@ -218,14 +330,6 @@ jobs:
           path: out/release/_release
           if-no-files-found: ignore
           retention-days: 14
-
-      - name: Remove the signing key
-        if: always()
-        run: |
-          if [ -n "${BB_KEY_DIR:-}" ] && [ -d "$BB_KEY_DIR" ]; then
-            find "$BB_KEY_DIR" -type f -exec shred -u {} + 2>/dev/null || true
-            rm -rf "$BB_KEY_DIR"
-          fi
 
   portable-test:
     name: portable smoke

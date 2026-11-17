@@ -174,7 +174,7 @@ Boot support, UEFI), exactly as from Microsoft's own stick. Details:
 
 ## 6. First boot with Secure Boot on
 
-Once per computer, you enroll the BeastBoot key in MokManager. Nothing
+Once per computer, you enroll the BeastBoot certificate in MokManager. Nothing
 running in an operating system can do this for you; it needs a keyboard
 at the machine.
 
@@ -189,6 +189,12 @@ at the machine.
 
 From then on the computer starts the menu directly. BeastBoot starts on
 PCs that trust Microsoft's old (2011) or new (2023) UEFI certificate.
+
+**After updating a drive from 0.4.x or older to 0.5.0** the blue screen
+comes back once on every computer with Secure Boot on, also on computers
+where you did this before: 0.5.0 has a new certificate. Do the four steps
+again. Afterwards you can remove the old certificate from the computer
+([SECURE_BOOT.md, section 4](SECURE_BOOT.md#4-remove-a-certificate-later)).
 
 Which ISOs then boot with Secure Boot on:
 
@@ -272,6 +278,16 @@ over (for packs installed before 0.1.2, see
 different key (for example, you move from boot files you built yourself to
 a release), enroll the new key once more as in
 [section 6](#6-first-boot-with-secure-boot-on).
+
+**Updating a drive from 0.4.x or older to 0.5.0** changes the Secure Boot
+certificate: the app says so before it writes ("Secure Boot: this update puts
+a new BeastBoot certificate on the drive ..."). Afterwards every computer
+with Secure Boot on asks once to enroll the new certificate
+([section 6](#6-first-boot-with-secure-boot-on)); with Secure Boot off, or in
+legacy BIOS mode, nothing changes. Drives you have not updated keep working
+with the old certificate, so update all of them, then remove the old
+certificate from each computer
+([SECURE_BOOT.md, section 4](SECURE_BOOT.md#4-remove-a-certificate-later)).
 
 **Updating a drive from 0.1.1 or older to 0.1.2** changes its shim: the
 drive now also starts on PCs that trust only Microsoft's 2023 certificate,
@@ -565,19 +581,21 @@ bb_serial=1
 
 On Linux, `grub-editenv /media/$USER/BEASTBOOTER/beast-booter/config.env set
 timeout=10` creates or edits the file safely. A value the menu does not
-accept is ignored with a short notice. All settings, including your own
-theme (`bb_theme`) and debug output: [MENU.md](MENU.md).
+accept is ignored with a short notice. All settings and debug output:
+[MENU.md](MENU.md).
 
-**Secure Boot on:** the menu reads only `config.env`. The older
-`beast-booter/config.cfg` (GRUB script with `set` lines) is then ignored;
-the menu says so and adds a help entry at the end. Anyone who can write to
-the stick could otherwise use it to change what Secure Boot lets start.
-Your own theme (`bb_theme`) is not used either (the built-in one is), and
-the same help entry says so. Extra kernel parameters (`bb_kargs`) still
-apply; whenever they are set, in both modes, the menu shows them in an
+**On UEFI PCs** (nearly every PC made since 2012), with Secure Boot on or
+off, the menu reads only `config.env`. Since 0.5.0 the menu is part of the
+signed boot loader and takes nothing from the stick that could change what
+it does: the older `beast-booter/config.cfg` (GRUB script with `set` lines)
+is ignored there; the menu says so and adds a help entry at the end. Anyone
+who can write to the stick could otherwise use it to change what the signed
+boot loader does. Your own theme (`bb_theme`) is not used either (the
+built-in one is), and the same help entry says so. Extra kernel parameters
+(`bb_kargs`) still apply; whenever they are set the menu shows them in an
 entry "Extra kernel parameters: ..." at the end.
-With Secure Boot off both files are read, `config.cfg` last, so its values
-win.
+In legacy BIOS mode both files are read, `config.cfg` last, so its values
+win, and `bb_theme` works.
 
 ## 11. Troubleshooting
 
@@ -627,7 +645,9 @@ or boot with Secure Boot off.
 
 ### Secure Boot refuses BeastBoot itself
 
-If the blue shim screen keeps coming back after you enrolled the key, or
+If the blue shim screen comes back after an update to 0.5.0, that is the new
+certificate: enroll it once ([section 6](#6-first-boot-with-secure-boot-on)).
+If it keeps coming back after you enrolled the certificate, or
 shim reports an SBAT violation, check the drive's BeastBoot version (the app
 shows it on the drive's card). BeastBoot 0.1.1 and older hit two known
 limits, both fixed in 0.1.2:
@@ -638,6 +658,10 @@ limits, both fixed in 0.1.2:
   newer shim, OS or firmware update) refuses it. 0.1.2 builds GRUB from
   source with the fixes and proves them before it says `grub,6`; the SBAT
   number is never raised by hand.
+- **SBAT `grub,7`.** Since October 2026 the level can require GRUB
+  generation 7 (one more fix, CVE-2026-97876). BeastBoot 0.5.0 carries
+  `grub,7`; 0.4.x and older say `grub,6` and are refused on a computer that
+  applied that level. Update the drive's boot files.
 - **Only the 2023 Microsoft CA.** Up to 0.1.1 our shim was signed only by
   Microsoft's UEFI CA 2011, so a computer whose firmware trusts only the 2023
   CA refuses it. 0.1.2 ships Debian's shim, signed through both.

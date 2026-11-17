@@ -1,4 +1,4 @@
-"""Strings read from a drive (marker, device.cfg, installed.json, device model)
+"""Strings read from a drive (marker, device.env, installed.json, device model)
 must not reach the terminal with control characters: an escape sequence there
 could write the clipboard (OSC 52), retitle the window or fake output."""
 

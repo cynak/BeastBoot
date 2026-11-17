@@ -9,7 +9,7 @@
   "statements": [
     {
       "vulnerability": {
-        "name": "BB-SBAT-REVOKED-grub"
+        "name": "BB-SBAT-REVOKED-grub-6"
       },
       "products": [
         {
@@ -18,7 +18,7 @@
       ],
       "status": "fixed",
       "timestamp": "2026-10-25T00:00:00Z",
-      "status_notes": "Fixed in 0.1.2: grubx64.efi is built from source (build/grub/: Ubuntu grub2 2.14-2ubuntu3 + build/grub/patches) and embeds grub,6, which meets shim's SbatLevel 2025112400. build/grub/grubsrc.py proves on every build that each fix grub,6 stands for (CVE-2025-54770, -54771, -61661, -61662, -61663, -61664) is present by reverse-applying its upstream commit, and refuses the claim otherwise (manifest secure_boot.sbat_version_check; build/grub/security-fixes.json)."
+      "status_notes": "Record of the revocation level that requires grub,6 (shim's SbatLevel 2025112400). Fixed in 0.1.2: grubx64.efi is built from source (build/grub/: Ubuntu grub2 2.14-2ubuntu3 + build/grub/patches) and embeds grub,6 or higher (grub,7 since 0.5.0, for SbatLevel 2026092500). build/grub/grubsrc.py proves on every build that each fix a claimed generation stands for is present by reverse-applying its upstream commit, and refuses the claim otherwise (manifest secure_boot.sbat_version_check; build/grub/security-fixes.json). The id names the required generation, so this statement says nothing about later levels; and the scan never lets a statement close a revocation it measures on the shipped binary."
     },
     {
       "vulnerability": {
@@ -856,28 +856,6 @@
       "status": "fixed",
       "timestamp": "2026-10-25T00:00:00Z",
       "status_notes": "Our GRUB source build contains the fix - grub-src:grub2@2.14-2ubuntu3+bb1: CVE-2025-61664: present (upstream 05d3698b8b03; upstream GRUB 2.14 release). build/grub/grubsrc.py proved it by reverse-applying the upstream commit to the fully patched source (build/grub/security-fixes.json); the scanner matches by version only."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-98432"
-      },
-      "products": [
-        {
-          "@id": "pkg:generic/beast-boot@0.3.1",
-          "subcomponents": [
-            {
-              "@id": "pkg:deb/ubuntu/linux-modules-7.3.0-9-generic@7.3.0-9.9?arch=amd64&distro=ubuntu-26.10&upstream=linux"
-            },
-            {
-              "@id": "pkg:deb/ubuntu/linux@7.3.0-9.9?arch=source&distro=ubuntu-26.10"
-            }
-          ]
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
-      "impact_statement": "beast-net helper kernel 7.3.0-9.9 (upstream base v7.3-rc6; the fix landed in v7.3, Ubuntu: pending 7.3.0-10.10). The use-after-free is in TCP request-socket handling (tcp_v4_syn_recv_sock, tcp_check_req, ip_options_build with saved IP options), so it needs a listening TCP socket that receives SYNs with IP options, or request-socket migration (net.ipv4.tcp_migrate_req=1, default 0, or a BPF_SK_REUSEPORT_SELECT_OR_MIGRATE program). The helper never listens on TCP: its processes are init, the beastnet app (outgoing HTTPS only; its only bind() is the AF_UNIX wpa_supplicant control socket, beastnet/python/beastnet/wifi.py), udhcpc and wpa_supplicant; no server program runs (busybox httpd and netstat are removed, build/beastnet/userland.list). A network attacker therefore cannot reach the code. It is reachable only if the person at the console deliberately starts a TCP listener from the helper's maintenance shell (root, with physical access). Re-check, and move to the fixed kernel, when 7.3.0-10.10 reaches stonking-updates/-security.",
-      "timestamp": "2026-10-25T00:00:00Z"
     },
     {
       "vulnerability": {

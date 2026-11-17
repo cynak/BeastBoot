@@ -1,15 +1,26 @@
-"""update keeps partition 1 and device.cfg; info --json schema; partition table parser."""
+"""update keeps partition 1 and device.env; info --json schema; partition table parser."""
 
 import json
 import subprocess
 
+import fakedist
 import pytest
 
 from beastbooter.commands import _reconcile_config
 from beastbooter.disk import read_partition_table
 from beastbooter.errors import BeastError
 from beastbooter.esp import DeviceConfig, parse_marker, parse_set_lines
-from beastbooter.layout import DEVICE_CFG_PATH, ESP_MARKER_PATH, ESP_SIZE_SECTORS, LAYOUT_VERSION, SECTOR_SIZE
+from beastbooter.fatfs import FatVolume
+from beastbooter.installed import CERT_CHANGE_NOTICE, certificate_changes
+from beastbooter.layout import (
+    DEVICE_ENV_PATH,
+    ENROLL_CERT_PATH,
+    ESP_MARKER_PATH,
+    ESP_SIZE_SECTORS,
+    LAYOUT_VERSION,
+    LEGACY_DEVICE_CFG_PATH,
+    SECTOR_SIZE,
+)
 from beastbooter.plan import make_plan
 from beastbooter.blockio import ImageTarget
 from beastbooter.target import GuardedTarget
@@ -17,9 +28,12 @@ from beastbooter.util import Reporter
 from conftest import (
     MTOOLS_ENV,
     blkid_at,
+    device_env,
     fresh_image,
     info_json,
+    mdir_files,
     mtype,
+    read_events,
     needs_tools,
     run_cli,
     sfdisk_json,
@@ -33,7 +47,7 @@ def esp_offset(img):
 
 @needs_tools
 @pytest.mark.parametrize("layout,fs", [("msdos", "fat32"), ("gpt", "exfat"), ("gpt", "ntfs")])
-def test_update_keeps_data_and_device_cfg(tmp_path, fake_dist, fake_dist_v2, layout, fs):
+def test_update_keeps_data_and_device_env(tmp_path, fake_dist, fake_dist_v2, layout, fs):
     img = fresh_image(tmp_path, fake_dist, layout, fs)
     before = info_json(img)
     d = before["data"]
@@ -44,14 +58,14 @@ def test_update_keeps_data_and_device_cfg(tmp_path, fake_dist, fake_dist_v2, lay
                        check=True, env=MTOOLS_ENV)
     data_hash = sha_region(img, d["start_lba"], d["size_lba"])
     off = esp_offset(img)
-    cfg_before = mtype(img, off, DEVICE_CFG_PATH)
+    cfg_before = mtype(img, off, DEVICE_ENV_PATH)
     esp_uuid = blkid_at(img, off)["UUID"]
     table_before = sfdisk_json(img)
 
     assert run_cli("update", "--image", img, "--quiet", "--dist", fake_dist_v2) == 0
 
     assert sha_region(img, d["start_lba"], d["size_lba"]) == data_hash
-    assert mtype(img, off, DEVICE_CFG_PATH) == cfg_before
+    assert mtype(img, off, DEVICE_ENV_PATH) == cfg_before
     assert sfdisk_json(img) == table_before
     assert blkid_at(img, off)["UUID"] == esp_uuid  # ESP volume id kept
     assert mtype(img, off, "EFI/BOOT/grubx64.efi") == (fake_dist_v2 / "esp/EFI/BOOT/grubx64.efi").read_text()
@@ -139,11 +153,76 @@ def test_write_guard(tmp_path):
     assert p.read_bytes() == b"x" * 1024 + b"\0" * 1024 + b"y" * 1024 + b"\0" * 1024
 
 
-def test_device_cfg_roundtrip_escaping():
+@needs_tools
+def test_update_says_when_the_certificate_changes(tmp_path, fake_dist, fake_dist_v2):
+    """A dist with another certificate to enroll (0.4.x -> 0.5.0: the BeastBoot CA): the
+    update says, before it writes, that every computer needs a one-time enrolment."""
+    img = fresh_image(tmp_path, fake_dist, "gpt", "fat32")
+    progress = tmp_path / "same.jsonl"
+    assert run_cli("update", "--image", img, "--quiet", "--progress-file", progress, "--dist", fake_dist_v2) == 0
+    assert [e["message"] for e in read_events(progress) if e["event"] == "warning"] == []   # same certificate
+
+    other = fakedist.make_fake_dist(tmp_path / "dist-new-cert", "0.5.0")
+    (other / "esp" / ENROLL_CERT_PATH).write_bytes(b"another certificate\n")
+    fakedist.write_manifest(other, "0.5.0")
+    progress = tmp_path / "changed.jsonl"
+    assert run_cli("update", "--image", img, "--quiet", "--progress-file", progress, "--dist", other) == 0
+    events = read_events(progress)
+    warnings = [i for i, e in enumerate(events) if e["event"] == "warning"]
+    assert [events[i]["message"] for i in warnings] == [CERT_CHANGE_NOTICE]
+    first_write = next(i for i, e in enumerate(events) if e.get("step") == "write-esp")
+    assert warnings[0] < first_write, "said before anything is written"
+    assert mtype(img, esp_offset(img), ENROLL_CERT_PATH) == "another certificate\n"
+
+
+def test_certificate_change_notice():
+    assert certificate_changes("0.4.1") and certificate_changes("0.1.0") and certificate_changes("0.5.0-rc.1")
+    assert not certificate_changes("0.5.0") and not certificate_changes("0.6.2") and not certificate_changes("")
+    for word in ("Secure Boot", "enroll", "MokManager", ENROLL_CERT_PATH, "old certificate", "SECURE_BOOT.md"):
+        assert word in CERT_CHANGE_NOTICE, word
+
+
+def test_device_env_roundtrip_escaping():
     cfg = DeviceConfig("i", "gpt", "ntfs", "U", "U", 'we"ird $label\\', False)
-    text = cfg.render()
-    assert r'set bb_data_label="we\"ird \$label\\"' in text
-    assert DeviceConfig.parse(text) == cfg
+    data = cfg.render()
+    assert len(data) == 1024 and data.startswith(b"# GRUB Environment Block\n")
+    assert b'\nbb_data_label=we"ird $label\\\\\n' in data  # only the backslash is escaped: it is data
+    assert DeviceConfig.parse(data) == cfg
+    with pytest.raises(BeastError, match="newlines"):
+        DeviceConfig("i", "gpt", "ntfs", "U", "U", "a\nb", False).render()
+    with pytest.raises(BeastError, match="do not fit"):
+        DeviceConfig("i", "gpt", "ntfs", "U", "U", "x" * 1024, False).render()
+
+
+def test_device_cfg_of_older_drives_is_still_parsed():
+    """Drives made before 0.5.0 have device.cfg, GRUB `set` lines."""
+    old = ('set bb_install_id="i"\nset bb_layout="gpt"\nset bb_data_fs="ntfs"\nset bb_data_uuid="U"\n'
+           'set bb_data_uuid_linux="u"\nset bb_data_label="we\\"ird \\$label\\\\"\nset bb_serial="1"\n')
+    assert DeviceConfig.parse(old.encode()) == DeviceConfig("i", "gpt", "ntfs", "U", "u", 'we"ird $label\\', True)
+
+
+@needs_tools
+def test_update_migrates_device_cfg_to_device_env(tmp_path, fake_dist, fake_dist_v2):
+    """A drive made before 0.5.0: update carries its device.cfg values into device.env
+    and leaves no device.cfg (GRUB script) behind."""
+    img = fresh_image(tmp_path, fake_dist, "gpt", "fat32", "1G", "--serial-console")
+    off = esp_offset(img)
+    values = device_env(img, off)
+    old = "".join(f'set {k}="{v}"\n' for k, v in values.items())
+    with ImageTarget(str(img), writable=True) as t:
+        vol = FatVolume(t, off)
+        vol.write_file(LEGACY_DEVICE_CFG_PATH, old.encode())
+        vol.remove(DEVICE_ENV_PATH)
+    before = info_json(img)
+    assert before["install_id"] == values["bb_install_id"] and before["data"]["uuid"] == values["bb_data_uuid_linux"]
+
+    progress = tmp_path / "u.jsonl"
+    assert run_cli("update", "--image", img, "--quiet", "--progress-file", progress, "--dist", fake_dist_v2) == 0
+
+    assert [e["message"] for e in read_events(progress) if e["event"] == "warning"] == []
+    assert device_env(img, off) == values and values["bb_serial"] == "1"
+    assert LEGACY_DEVICE_CFG_PATH not in mdir_files(img, off)
+    assert {k: v for k, v in info_json(img).items() if k != "version"} == {k: v for k, v in before.items() if k != "version"}
     assert parse_set_lines('set bb_version=0.1.0  # c\nset x="a b"\n') == {"bb_version": "0.1.0", "x": "a b"}
 
 
@@ -165,7 +244,7 @@ def test_info_json_schema(installed, layout, fs):
     assert j["data"] == {"index": 1, "start_lba": 2048, "size_lba": plan.data.size, "fs": fs,
                          "uuid": blkid_at(img, 2048 * 512)["UUID"], "label": "BEASTBOOTER"}
     assert j["esp"] == {"index": 2, "start_lba": plan.esp.start, "size_lba": ESP_SIZE_SECTORS}
-    cfg = parse_set_lines(mtype(img, plan.esp.offset, DEVICE_CFG_PATH))
+    cfg = device_env(img, plan.esp.offset)
     assert j["install_id"] == cfg["bb_install_id"]
     for k in ("disk_sectors", "bios_core_lba"):
         assert isinstance(j[k], int)

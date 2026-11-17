@@ -134,10 +134,10 @@ def cert_facts(cer: Path) -> dict:
 def cmd_cert(a) -> int:
     f = cert_facts(Path(a.cer))
     name = f"beast-boot-{a.version}-ENROLL_THIS_KEY_IN_MOKMANAGER.cer"
-    lines = [f"beast-boot {a.version} - Secure Boot certificate", ""]
+    lines = [f"beast-boot {a.version} - Secure Boot certificate (the BeastBoot CA: the one to enroll)", ""]
     if not a.official:
-        lines += ["*** UNOFFICIAL LOCAL BUILD: signed with a local development key, NOT the project's",
-                  "*** release key. Do not enroll this certificate unless you made this build yourself.", ""]
+        lines += ["*** UNOFFICIAL LOCAL BUILD: signed with local development keys, NOT the project's",
+                  "*** release keys. Do not enroll this certificate unless you made this build yourself.", ""]
     lines += [
         f"File:         {name} (DER; also on every drive as ENROLL_THIS_KEY_IN_MOKMANAGER.cer)",
         f"Subject:      {f['subject']}",
@@ -158,6 +158,17 @@ def cmd_cert(a) -> int:
         f"  openssl x509 -inform DER -in {name} -noout -subject -fingerprint -sha1 -fingerprint -sha256",
         "Only enroll it if both fingerprints match these release notes.",
     ]
+    if a.manifest:
+        # The leaf certificates this CA issued, one per signed file: what a MokListX entry revokes.
+        sb = json.loads(Path(a.manifest).read_text()).get("secure_boot", {})
+        leaves = [(c, sb[f"signer_{c}_subject"], sb.get(f"signer_{c}_cert_sha1", ""), sb.get(f"signer_{c}_not_after", ""))
+                  for c in ("grub", "kernel", "wimboot") if f"signer_{c}_subject" in sb]
+        if leaves:
+            lines += ["", "Signing certificates issued by this CA (you do not enroll these; one of them in",
+                      "MokListX revokes that component alone, docs/SECURE_BOOT.md section 7):"]
+            for comp, subject, sha1, until in leaves:
+                lines += [f"  {comp + ':':9} {subject}", f"            SHA-1 {sha1.upper()}, valid until {until}"]
+            f["leaves"] = [{"component": c, "subject": s_, "sha1": h, "not_after": u} for c, s_, h, u in leaves]
     Path(a.out).write_text("\n".join(lines) + "\n")
     if a.json:
         Path(a.json).write_text(json.dumps(dict(f, official=a.official), indent=1) + "\n")
@@ -405,6 +416,7 @@ def main() -> int:
     p.add_argument("--version", required=True)
     p.add_argument("--official", action="store_true")
     p.add_argument("--json")
+    p.add_argument("--manifest", help="dist/manifest.json: also list the leaf certificates that signed the files")
     p = sub.add_parser("gate")
     p.add_argument("--report", required=True)
     p.add_argument("--out", required=True)

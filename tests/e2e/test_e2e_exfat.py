@@ -1,6 +1,7 @@
-"""exFAT data partition (the installer default). Populating exFAT needs a
-kernel mount, done through udisks; these tests skip when udisksctl cannot set
-up a loop device (e.g. inside a sandbox without the system D-Bus)."""
+"""exFAT data partition (the installer default). It is filled through a kernel
+mount that udisks sets up, or, where udisksctl cannot set up a loop device
+(e.g. inside a container), with the installer's own exFAT code
+(bbe2e.images.ExfatWriter)."""
 
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ MODES = [pytest.param("bios", marks=pytest.mark.bios, id="bios"),
 
 
 @pytest.mark.parametrize("mode", MODES)
-def test_exfat_ready_and_listing(mode, udisks_ok, make_drive, vm_factory):
+def test_exfat_ready_and_listing(mode, make_drive, vm_factory):
     drive = make_drive("exfat", images.user_config())
     assert images.volume_id(drive.path, drive.data_offset)[0] == "exfat"
     vm = vm_factory(mode, drive.path)
@@ -28,7 +29,7 @@ def test_exfat_ready_and_listing(mode, udisks_ok, make_drive, vm_factory):
 
 
 @pytest.mark.uefi
-def test_exfat_casper_dryrun(udisks_ok, make_drive, vm_factory):
+def test_exfat_casper_dryrun(make_drive, vm_factory):
     path = trees.BROWSE_NESTED_PATH
     drive = make_drive("exfat", images.user_config(dryrun=True, autoboot=path))
     vm = vm_factory("uefi", drive.path)
@@ -49,7 +50,7 @@ HOOK_RX = r"^newc:conf/conf\.d/zz-beastbooter\.conf:\(.+\)/grub/beast/hooks/init
 
 
 @pytest.mark.parametrize("mode", MODES)
-def test_exfat_fs_addon_dryrun(mode, udisks_ok, make_drive, vm_factory):
+def test_exfat_fs_addon_dryrun(mode, make_drive, vm_factory):
     """Ubuntu 24.04+ style ISO (loopback.cfg, casper, modules in a squashfs) on
     exFAT: booted with the casper recipe, and the ISO's own exfat module plus
     the hook script are added to its initrd (bb_addon_prepare)."""
@@ -70,7 +71,7 @@ def test_exfat_fs_addon_dryrun(mode, udisks_ok, make_drive, vm_factory):
 
 
 @pytest.mark.uefi
-def test_exfat_fs_addon_disabled(udisks_ok, make_drive, vm_factory):
+def test_exfat_fs_addon_disabled(make_drive, vm_factory):
     """bb_fs_addon=0: the ISO keeps its own loopback.cfg and nothing is added."""
     path = trees.EXFAT_ADDON_PATH
     config = images.user_config(dryrun=True, autoboot=path, extra='set bb_fs_addon="0"\nexport bb_fs_addon\n')

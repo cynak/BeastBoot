@@ -6,6 +6,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
+# shown when a disk is named by a serial that several attached disks report
+SHARED_SERIAL = ("two disks report the serial {}; they cannot be told apart. Unplug one of them"
+                 " (a disk that is only read can also be named by its device name, such as sda)")
+
 
 class Transport(str, Enum):
     NVME = "nvme"
@@ -134,11 +138,21 @@ class Inventory:
     volumes: list[Volume]        # every copyable thing (disks and partitions included)
 
     def disk(self, ref: str) -> Disk | None:
-        """By kernel id or serial (script plans use serials)."""
+        """By kernel id, or by a serial that exactly one disk reports (script plans use
+        serials). A serial that several disks share names none of them: see
+        ``serial_shared``."""
+        if not ref:
+            return None
         for d in self.disks:
-            if ref in (d.id, d.serial) and ref:
+            if d.id == ref:
                 return d
-        return None
+        same = [d for d in self.disks if d.serial == ref]
+        return same[0] if len(same) == 1 else None
+
+    def serial_shared(self, serial: str) -> bool:
+        """Several attached disks report this serial (many USB bridges report a fixed one,
+        such as all zeros), so it cannot name a disk or confirm a write."""
+        return bool(serial) and sum(1 for d in self.disks if d.serial == serial) > 1
 
 
 class HealthStatus(str, Enum):

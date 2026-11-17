@@ -11,12 +11,12 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import re
 import struct
 import sys
 
 import pytest
 
+from bbe2e import beastnet as bn
 from bbe2e import checks, env, images
 
 sys.path.insert(0, str(env.INSTALLER_DIR))
@@ -30,15 +30,6 @@ KINDS = [pytest.param("browse", id="msdos"), pytest.param("gpt", id="gpt")]
 def esp_of(drive):
     _, parts = images.partitions(drive.path)
     return {p.index: p for p in parts}[L.ESP_PART_INDEX]
-
-
-def device_cfg(text: str) -> dict[str, str]:
-    out = {}
-    for line in text.splitlines():
-        m = re.match(r'\s*set\s+(\w+)="?([^"]*)"?\s*(#.*)?$', line)
-        if m:
-            out[m.group(1)] = m.group(2)
-    return out
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -121,7 +112,7 @@ def test_filesystems_and_esp_contents(kind, base_drives, dist_dir):
     manifest = json.loads((dist_dir / L.DIST_MANIFEST).read_text())
     prefix = L.DIST_ESP_DIR + "/"
     expected = {k[len(prefix):].lower(): v for k, v in manifest["files"].items() if k.startswith(prefix)}
-    installer_files = {L.DEVICE_CFG_PATH.lower(), L.ESP_MARKER_PATH.lower(), L.GRUBENV_PATH.lower()}
+    installer_files = {L.DEVICE_ENV_PATH.lower(), L.ESP_MARKER_PATH.lower(), L.GRUBENV_PATH.lower()}
     assert installer_files <= on_esp, f"missing installer files: {installer_files - on_esp}"
     unexplained = on_esp - set(expected) - installer_files
     assert not unexplained, f"files on the ESP that are not in dist/manifest.json: {sorted(unexplained)}"
@@ -132,7 +123,9 @@ def test_filesystems_and_esp_contents(kind, base_drives, dist_dir):
         data = w.read("/" + rel)
         assert hashlib.sha256(data).hexdigest() == meta["sha256"], f"{rel} differs from dist/manifest.json"
 
-    cfg = device_cfg(w.read("/" + L.DEVICE_CFG_PATH).decode())
+    # a GRUB environment block, which the menu reads as data (never GRUB script)
+    assert not w.exists("/" + L.LEGACY_DEVICE_CFG_PATH)
+    cfg = bn.read_grubenv(drive, "/" + L.DEVICE_ENV_PATH)
     assert cfg.get("bb_layout") == drive.layout
     assert cfg.get("bb_data_fs") == drive.fs
     assert cfg.get("bb_data_uuid_linux") == drive.data_uuid

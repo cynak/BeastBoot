@@ -6,4 +6,12 @@
 # Bump the generation (2nd field) when a beast-boot-specific security
 # problem (our patches, the module selection, a bad signing) means older
 # beast-boot GRUB builds must be revoked.
-grub.beastbooter,1,beast-boot,grub2,@GRUB_VERSION@,@PROJECT_URL@
+#
+# Generations:
+#   1  0.1.0 - 0.4.x. grubx64.efi runs the menu scripts, hooks and theme from
+#      the ESP, unsigned (docs/SECURITY_REVIEW-0.4.0.md D3).
+#   2  0.5.0. The menu is inside the signed image (build/early-efi.cfg, the
+#      memdisk). The bump makes every older image revocable as a class
+#      (grub.beastbooter,2 in a shim's SbatLevel). Nothing revokes them yet:
+#      docs/SECURE_BOOT.md section 7.
+grub.beastbooter,2,beast-boot,grub2,@GRUB_VERSION@,@PROJECT_URL@

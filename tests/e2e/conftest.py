@@ -24,7 +24,7 @@ MARKERS = {
     "bios": "boots under legacy BIOS (SeaBIOS)",
     "uefi": "boots under UEFI (OVMF) without Secure Boot",
     "secureboot": "boots under UEFI with Secure Boot (OVMF secboot + Microsoft keys)",
-    "exfat": "uses an exFAT data partition (needs udisksctl; run outside the sandbox)",
+    "exfat": "uses an exFAT data partition (filled through udisksctl, or with the installer's exFAT code)",
     "fat32": "uses a FAT32 data partition",
     "ntfs": "uses an NTFS data partition (needs udisksctl; run outside the sandbox)",
     "selftest": "harness self-test (needs no dist/ or installer)",
@@ -205,10 +205,9 @@ def base_drives(installer_ok, dist_dir, fixture_isos):
     def get(kind: str) -> images.Drive:
         if kind not in cache:
             layout, fs, tree = BASES[kind]
-            if fs != "fat32":
-                ok, reason = images.udisks_status()
-                if not ok:
-                    pytest.skip(reason)
+            ok, reason = images.data_fs_status(fs)
+            if not ok:
+                pytest.skip(reason)
             env.IMAGE_DIR.mkdir(parents=True, exist_ok=True)
             path = env.IMAGE_DIR / f"base-{kind}.img"
             images.install(path, layout=layout, fs=fs, size="2G", dist=dist_dir, serial=True)

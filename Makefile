@@ -13,14 +13,14 @@ SIZE   ?= 2G
 LAYOUT ?= msdos
 FS     ?= exfat
 
-.PHONY: help tools keys build test image e2e net-sources e2e-live clean dev doctor dev-image vm vm-sb menu-sync \
+.PHONY: help tools keys build test test-beastnet image e2e net-sources e2e-live clean dev doctor dev-image vm vm-sb menu-sync \
 	sbom vulns portable lint release prerelease
 
 help:
 	@echo "make tools   fetch the build/test toolchain into .tools/ (no root needed)"
 	@echo "make keys    create a local Secure Boot signing key in keys/"
 	@echo "make build   build boot files into dist/"
-	@echo "make test    run installer unit tests"
+	@echo "make test    run the unit tests (installer, menu, beast-net helper)"
 	@echo "make image   build a drive image: $(IMAGE) ($(SIZE), $(LAYOUT), $(FS))"
 	@echo "make e2e     boot test images in QEMU (BIOS, UEFI, UEFI + Secure Boot)"
 	@echo "make net-sources  internet: check beast-net against official ISO links (seconds)"
@@ -31,7 +31,8 @@ help:
 	@echo "make dev-image  build out/dev/beast-boot-dev.img with test ISOs and debug on"
 	@echo "make vm         boot the dev image in QEMU (MODE=bios|uefi|sb|sb-enrolled|sb-fresh)"
 	@echo "make vm-sb      boot the dev image with Secure Boot (key enrolled)"
-	@echo "make menu-sync  push edited grub/ files into the dev image (WATCH=1 to keep syncing)"
+	@echo "make menu-sync  push edited grub/ files into the dev image, for legacy BIOS boots (WATCH=1 to keep syncing;"
+	@echo "                UEFI reads the menu from inside grubx64.efi: make build)"
 	@echo ""
 	@echo "make lint       ruff (Python) + ShellCheck (shell) - see docs/CODE_QUALITY.md"
 	@echo "make sbom       generate the SBOM into sbom/"
@@ -49,9 +50,13 @@ keys:
 build:
 	$(LINUX) ./build/build.sh
 
-test:
+test: test-beastnet
 	$(ENV) pytest -q installer/tests
 	$(ENV) pytest -q tests/menu
+
+# beast-net helper unit tests (Disk tools, Wi-Fi, UI); some need Linux
+test-beastnet:
+	$(ENV) pytest -q beastnet/tests
 
 image:
 	@mkdir -p $(dir $(IMAGE))

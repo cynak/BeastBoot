@@ -1,6 +1,6 @@
 """Independent tools agree with what the pure-Python installer wrote:
 sfdisk -V / sgdisk -v, fsck.fat -n (ESP), fsck.exfat -n / fsck.fat -n (data),
-and blkid's label + UUID of the data partition == device.cfg == info --json."""
+and blkid's label + UUID of the data partition == device.env == info --json."""
 
 from __future__ import annotations
 

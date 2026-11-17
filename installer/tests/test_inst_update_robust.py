@@ -340,7 +340,7 @@ def test_record_found_without_a_readable_partition_1(backend, fake_dist, fake_di
     install(backend, fake_dist)
     add_pack(backend)
     zero_data_boot_sector(backend.disk_file, "gpt")
-    assert update(backend, fake_dist_v2, tmp_path / "u0.jsonl") == 0  # keeps the device.cfg values
+    assert update(backend, fake_dist_v2, tmp_path / "u0.jsonl") == 0  # keeps the device.env values
     backend.fail_at(4)
     assert update(backend, fake_dist_v2, tmp_path / "u1.jsonl") == 1
     backend.replug()
@@ -365,8 +365,8 @@ def test_rebuild_without_record_or_readable_partition_1(tmp_path, fake_dist, fak
     _done, warnings = error_and_warnings(progress)
     assert any("placeholder values" in w for w in warnings)
     with ImageTarget(str(img), writable=False) as t:
-        cfg = commands.read_esp_text(FatVolume(t, off), commands.DEVICE_CFG_PATH)
-    assert 'set bb_data_uuid="unknown"' in cfg
+        cfg = commands.read_device_values(FatVolume(t, off))
+    assert cfg["bb_data_uuid"] == "unknown"
     assert run_cli("update", "--image", img, "--yes", "--quiet", "--dist", fake_dist_v2) == 0  # and again
 
 

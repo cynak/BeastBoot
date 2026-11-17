@@ -7,6 +7,11 @@
 #   dist/bios/boot.img            GRUB i386-pc boot.img (GRUB built from source, build/grub/)
 #   dist/bios/core.img            GRUB i386-pc core image (prefix (,msdos2)/grub + early-bios.cfg)
 #   dist/esp/...                  copied verbatim into the ESP root
+# esp/EFI/BOOT/grubx64.efi carries the menu itself: grub.cfg, grub/beast/ (scripts,
+# hooks, version.cfg), the theme and the fonts are in its memdisk, inside what our key
+# signs, and under UEFI GRUB reads them only from there (build/early-efi.cfg points its
+# prefix at the memdisk). The copies in esp/grub/ are for legacy BIOS
+# (docs/ARCHITECTURE.md section 5).
 #
 # Every file is either copied unmodified from a named Debian/Ubuntu package
 # (and checked against that package's md5sums), built here from such files
@@ -21,12 +26,23 @@
 #
 # Inputs (environment):
 #   BB_MENU_DIR        menu scripts            (default: $BB_ROOT/grub)
-#   BB_KEY_DIR         signing key             (default: $BB_ROOT/keys; create with `make keys`)
+#   BB_KEY_DIR         signing keys: the CA certificate users enroll and one leaf key and
+#                      certificate per signed file (default: $BB_ROOT/keys; create with
+#                      `make keys`; build/keygen.sh, build/sbkeys.sh)
 #   BB_DIST_DIR        output directory        (default: $BB_ROOT/dist)
 #   BB_PROJECT_URL     URL in our SBAT line    (default: https://github.com/cynak/BeastBoot)
 #   SOURCE_DATE_EPOCH  timestamp for the manifest and file mtimes
 #                      (default: last git commit time, else mtime of VERSION)
 #   BB_RESIGN=1        always make a fresh signature (see "Signing" below)
+#   BB_UNSIGNED_OUT    directory that receives the unsigned grubx64.efi, vmlinuz and
+#                      wimboot of this build (the input of build/sign.sh)
+#   BB_PRESIGNED_DIR   directory with those three files as build/sign.sh signed them.
+#                      No private key is read: BB_KEY_DIR then only needs the
+#                      certificates (the CA's .crt and .cer, the three leaf .crt),
+#                      and a file that is missing, is not this build's image or
+#                      does not carry exactly one signature, made with its own
+#                      component's leaf certificate, stops the build
+#                      (docs/RELEASING.md, "Signing in its own job")
 #   BB_NOTO_DIR        directory with the Noto .ttf fonts of the graphical menu
 #                      (default: /usr/share/fonts/truetype/noto, then .tools)
 #   BB_GRUB_BUILDER    auto (default) | native | docker: how build/grub/grubsrc.py
@@ -62,6 +78,7 @@ log()  { echo "build: $*"; }
 warn() { echo "build: WARNING: $*" >&2; }
 die()  { echo "build: error: $*" >&2; exit 1; }
 bbtool() { python3 -I "$HERE/bbtool.py" "$@"; }
+efi_inspect() { python3 -I "$BB_ROOT/scripts/efi_inspect.py" "$@"; }
 
 # ---------------------------------------------------------------------------
 # Inputs and preflight
@@ -77,20 +94,99 @@ done
 VERSION="$(tr -d ' \t\r\n' < "$BB_ROOT/VERSION")"
 [[ "$VERSION" =~ ^[0-9][0-9A-Za-z.+~-]*$ ]] || die "VERSION has an unexpected format: '$VERSION'"
 
+# Signing keys (build/keygen.sh, build/sbkeys.sh): the CA certificate that users enroll,
+# and one leaf certificate per signed file, issued by that CA. The CA's private key is
+# never needed here.
+# shellcheck source=build/sbkeys.sh
+source "$HERE/sbkeys.sh"
 KEY_DIR="${BB_KEY_DIR:-$BB_ROOT/keys}"
-KEY="$KEY_DIR/beast-boot.key"; CRT="$KEY_DIR/beast-boot.crt"; CER="$KEY_DIR/beast-boot.cer"
-for f in "$KEY" "$CRT" "$CER"; do
-  [ -f "$f" ] || die "signing key not found: $f
-       Run 'make keys' to create a local key (or set BB_KEY_DIR)."
+CRT="$KEY_DIR/beast-boot.crt"; CER="$KEY_DIR/beast-boot.cer"
+PRESIGNED_DIR="${BB_PRESIGNED_DIR:-}"
+UNSIGNED_OUT="${BB_UNSIGNED_OUT:-}"
+if [ -n "$PRESIGNED_DIR" ]; then
+  [ -d "$PRESIGNED_DIR" ] || die "BB_PRESIGNED_DIR is not a directory: $PRESIGNED_DIR"
+  [ "${BB_RESIGN:-0}" != 1 ] || die "BB_RESIGN=1 cannot be used with BB_PRESIGNED_DIR (nothing is signed here)"
+fi
+for f in "$CRT" "$CER"; do
+  [ -f "$f" ] || die "CA certificate not found: $f
+       Run 'make keys' to create local keys (or set BB_KEY_DIR)."
 done
-[ "$(openssl x509 -in "$CRT" -outform DER | sha256sum)" = "$(sha256sum < "$CER")" ] \
+if [ -n "$UNSIGNED_OUT" ]; then mkdir -p "$UNSIGNED_OUT"; fi
+[ "$(bb_cert_sha256 "$CRT")" = "$(sha256sum < "$CER" | cut -d' ' -f1)" ] \
   || die "$CRT and $CER are not the same certificate"
-[ "$(openssl x509 -in "$CRT" -noout -pubkey | sha256sum)" = \
-  "$(openssl pkey -in "$KEY" -pubout 2>/dev/null | sha256sum)" ] \
-  || die "$KEY does not belong to $CRT"
-eku="$(openssl x509 -in "$CRT" -noout -ext extendedKeyUsage 2>/dev/null)" || true
-grep -q 'Code Signing' <<<"$eku" || die "$CRT lacks extendedKeyUsage=codeSigning"
-CERT_SUBJECT="$(openssl x509 -in "$CRT" -noout -subject -nameopt RFC2253 | sed 's/^subject=//')"
+p="$(bb_ca_problem "$CRT")"; [ -z "$p" ] || die "$p"
+CERT_SUBJECT="$(bb_cert_subject "$CRT")"
+SIGNED_NAMES=(grubx64.efi)
+[ "${BB_SKIP_BEASTNET:-0}" = 1 ] || SIGNED_NAMES+=(vmlinuz)
+[ "${BB_SKIP_WIMBOOT:-0}" = 1 ] || SIGNED_NAMES+=(wimboot)
+declare -A LEAF_CRT=() LEAF_KEY=()   # file name -> its leaf certificate / private key
+seen_leaves=" "
+for name in "${SIGNED_NAMES[@]}"; do
+  comp="$(bb_component_of "$name")"
+  LEAF_CRT[$name]="$KEY_DIR/beast-boot-$comp.crt"; LEAF_KEY[$name]="$KEY_DIR/beast-boot-$comp.key"
+  p="$(bb_leaf_problem "$CRT" "${LEAF_CRT[$name]}" "$comp")"; [ -z "$p" ] || die "$p"
+  fp="$(bb_cert_sha256 "${LEAF_CRT[$name]}")"
+  case "$seen_leaves" in *" $fp "*) die "${LEAF_CRT[$name]} is also another component's certificate: each component needs its own" ;; esac
+  seen_leaves+="$fp "
+  if [ -z "$PRESIGNED_DIR" ]; then
+    [ -f "${LEAF_KEY[$name]}" ] || die "signing key not found: ${LEAF_KEY[$name]} (build/keygen.sh leaf $comp)"
+    [ "$(openssl x509 -in "${LEAF_CRT[$name]}" -noout -pubkey | sha256sum)" = \
+      "$(openssl pkey -in "${LEAF_KEY[$name]}" -pubout 2>/dev/null | sha256sum)" ] \
+      || die "${LEAF_KEY[$name]} does not belong to ${LEAF_CRT[$name]}"
+  fi
+done
+
+# signed_by NAME FILE: FILE carries exactly one signature, over its own Authenticode
+# digest, made with NAME's leaf certificate (scripts/efi_inspect.py; the log is kept).
+signed_by() {
+  efi_inspect require "$2" --only "the $1 leaf=${LEAF_CRT[$1]}" > "$WORK/sig-$1.log" 2>&1
+}
+
+# ours_over NAME SIGNED UNSIGNED: SIGNED carries exactly one signature, made with NAME's
+# leaf certificate (which the checks above tie to the CA and to this component), and is
+# byte-identical to UNSIGNED once that signature is removed.
+ours_over() {
+  local stripped="$WORK/ours-over.tmp" n
+  cp "$2" "$stripped"
+  sbattach --remove "$stripped" >/dev/null 2>&1 || return 1
+  cmp -s "$stripped" "$3" || return 1
+  signed_by "$1" "$2" || return 1
+  n="$(sbverify --list "$2" 2>/dev/null | grep -c '^signature ')" || true
+  [ "$n" = 1 ]
+}
+
+# sign_image NAME UNSIGNED PREV OUT: write OUT, the image UNSIGNED with the signature of
+# NAME's leaf certificate. NAME is its file name in BB_UNSIGNED_OUT and BB_PRESIGNED_DIR
+# (grubx64.efi, vmlinuz, wimboot); PREV is the copy an earlier build left in dist/.
+# sbsign puts the current time into the signature (a PKCS#7 signingTime attribute), so a
+# fresh signature changes the file's hash. To keep rebuilds byte-identical, PREV is kept
+# when ours_over holds for it (BB_RESIGN=1 signs again). With BB_PRESIGNED_DIR nothing is
+# signed here: the file from there is used, and it must pass the same check.
+# The signature embeds the leaf certificate only (sbsign's default): shim finds the CA in
+# MokList, and a chain in the file would add nothing it uses.
+sign_image() {
+  local name="$1" unsigned="$2" prev="$3" out="$4" who
+  who="$(bb_cert_subject "${LEAF_CRT[$name]}")"
+  if [ -n "$UNSIGNED_OUT" ]; then install -m 0644 "$unsigned" "$UNSIGNED_OUT/$name"; fi
+  if [ -n "$PRESIGNED_DIR" ]; then
+    [ -f "$PRESIGNED_DIR/$name" ] || die "BB_PRESIGNED_DIR has no $name"
+    ours_over "$name" "$PRESIGNED_DIR/$name" "$unsigned" \
+      || die "$PRESIGNED_DIR/$name is not this build's $name signed (once) by $who"
+    cp "$PRESIGNED_DIR/$name" "$out"
+    log "$name: signed elsewhere by $who (BB_PRESIGNED_DIR), checked against this build"
+  elif [ "${BB_RESIGN:-0}" != 1 ] && [ -f "$prev" ] && ours_over "$name" "$prev" "$unsigned"; then
+    cp "$prev" "$out"
+    log "$name: unsigned image unchanged, keeping the existing signature (BB_RESIGN=1 to re-sign)"
+  else
+    sbsign --key "${LEAF_KEY[$name]}" --cert "${LEAF_CRT[$name]}" --output "$out" "$unsigned" >/dev/null 2>"$WORK/sbsign.log" \
+      || { cat "$WORK/sbsign.log" >&2; die "sbsign failed for $name"; }
+    log "$name: signed with $who"
+  fi
+  # One signature, by this component's leaf, and through it by the CA users enroll.
+  signed_by "$name" "$out" || { cat "$WORK/sig-$name.log" >&2; die "the signed $name must carry exactly one signature, by $who"; }
+  efi_inspect require "$out" --only "the BeastBoot CA=$CRT" > "$WORK/sig-$name.log" 2>&1 \
+    || { cat "$WORK/sig-$name.log" >&2; die "the signature of $name does not chain to $CERT_SUBJECT"; }
+}
 
 MENU_DIR="${BB_MENU_DIR:-$BB_ROOT/grub}"
 [ -f "$MENU_DIR/grub.cfg" ] && [ -f "$MENU_DIR/beast/main.cfg" ] \
@@ -121,7 +217,7 @@ ORIGINS="$WORK/origins.tsv"; : > "$ORIGINS"
 EXTRA="$WORK/extra.tsv"; : > "$EXTRA"
 
 log "beast-boot $VERSION, SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH ($SDE_FROM)"
-log "menu: $MENU_DIR   key: $CRT"
+log "menu: $MENU_DIR   CA: $CRT"
 
 # ---------------------------------------------------------------------------
 # Package provenance: which .deb shipped a file, and is the file unmodified?
@@ -226,6 +322,10 @@ list_modules() {  # strip comments/blank lines from a module list
   sed -e 's/#.*//' -e 's/[[:space:]]//g' "$1" | grep -v '^$'
 }
 
+strip_early() {  # an embedded early config without its comments (GRUB's rescue parser has none)
+  sed -e 's/^[[:space:]]*#.*//' "$1" | grep -v '^[[:space:]]*$'
+}
+
 tool_origin() {  # <tool>: sets T_ORIGIN to "<pkg>=<ver>:<path>" (or unpackaged:<path>)
   local t; t="$(command -v "$1")"
   if pkg_lookup "$t"; then T_ORIGIN="deb:$P_KEY:$P_PATH"; else T_ORIGIN="unpackaged:$t"; fi
@@ -323,7 +423,6 @@ SHIM="$BB_SHIM_DIR/shimx64.efi.signed"
 MM="$BB_SHIM_DIR/mmx64.efi.signed"
 [ -f "$SHIM" ] && [ -f "$MM" ] \
   || die "Debian shim not found in $BB_SHIM_DIR (shimx64.efi.signed, mmx64.efi.signed): run scripts/bootstrap-tools.sh"
-efi_inspect() { python3 -I "$BB_ROOT/scripts/efi_inspect.py" "$@"; }
 MS_CA_2011="Microsoft Corporation UEFI CA 2011=$HERE/shim/microsoft-uefi-ca-2011.pem"
 MS_CA_2023="Microsoft UEFI CA 2023=$HERE/shim/microsoft-uefi-ca-2023.pem"
 # Both signatures are checked cryptographically against the CA certificates in
@@ -415,25 +514,6 @@ for spec in "${FONT_SPECS[@]}"; do
 done
 extra build.font_ranges "$FONT_RANGES"
 
-# The menu's fonts also go into a memdisk inside grubx64.efi: under Secure
-# Boot, GRUB (Ubuntu patch "Enforce verification of font files") only loads
-# fonts from the memdisk of its own signed image, never from the disk. The
-# copies in esp/grub/fonts/ are for legacy BIOS. build/theme/mkmemdisk.py
-# writes a deterministic tar that can be rebuilt from those dist/ files.
-memdisk_args=()
-memdisk_list=()
-for f in "$WORK"/fonts/*.pf2; do
-  rel="esp/grub/fonts/$(basename "$f")"
-  [ -f "$STAGE/$rel" ] || continue                     # build-only fonts stay out
-  memdisk_args+=("fonts/$(basename "$f")=$STAGE/$rel")
-  memdisk_list+=("fonts/$(basename "$f")=$rel")
-done
-MEMDISK="$WORK/memdisk.tar"
-python3 -I "$HERE/theme/mkmemdisk.py" --out "$MEMDISK" "${memdisk_args[@]}" || die "build/theme/mkmemdisk.py failed"
-MEMDISK_SHA="$(sha256sum < "$MEMDISK")"; MEMDISK_SHA="${MEMDISK_SHA%% *}"
-extra build.efi_memdisk[] "${memdisk_list[*]}"
-extra build.efi_memdisk_sha256 "$MEMDISK_SHA"
-
 THEME_OUT="$WORK/theme"
 python3 -I "$HERE/theme/mktheme.py" --out "$THEME_OUT" --version "$VERSION" "${font_args[@]}" \
   || die "build/theme/mktheme.py failed"
@@ -444,53 +524,6 @@ while IFS= read -r -d '' f; do
   ntheme=$((ntheme + 1))
 done < <(find "$THEME_OUT" -type f -print0 | sort -z)
 log "theme: $ntheme files, $(du -sk "$THEME_OUT" | cut -f1) KiB; fonts: $(du -ck "$WORK"/fonts/*.pf2 | tail -n1 | cut -f1) KiB (all sizes)"
-
-# ---------------------------------------------------------------------------
-# EFI GRUB: build, sign, verify
-# ---------------------------------------------------------------------------
-UNSIGNED="$WORK/grubx64.unsigned.efi"
-# NB: no --disable-shim-lock, ever.
-# -m must come before -p: a memdisk implies the prefix (memdisk)/boot/grub
-# unless -p follows it. Our prefix stays /grub on the ESP the image came from.
-"$GRUB_MKIMAGE" -O x86_64-efi -d "$GRUB_EFI_DIR" -m "$MEMDISK" -p /grub --sbat "$WORK/sbat.csv" \
-  -o "$UNSIGNED" "${EFI_MODULES[@]}"
-objcopy -O binary --only-section=.sbat "$UNSIGNED" "$WORK/check.sbat"
-cmp -s <(tr -d '\000' < "$WORK/check.sbat") "$WORK/sbat.csv" || die "SBAT section of the built GRUB is not what we asked for"
-# Ubuntu's signed grubx64.efi is marked NX_COMPAT (W^X memory, which shim 16
-# and newer firmware can enforce); grub-mkimage of this source sets it too.
-objdump -p "$UNSIGNED" > "$WORK/pe-headers.txt"
-grep -q 'NX_COMPAT' "$WORK/pe-headers.txt" || die "the built grubx64.efi lacks the PE NX_COMPAT flag"
-UNSIGNED_SHA="$(sha256sum < "$UNSIGNED")"; UNSIGNED_SHA="${UNSIGNED_SHA%% *}"
-
-# Signing. sbsign puts the current time into the signature (a PKCS#7
-# signingTime attribute), so a fresh signature changes the file's hash. To keep
-# rebuilds byte-identical, an existing dist/ grubx64.efi is reused when its
-# signature verifies with our certificate and, with the signature removed, it
-# is byte-identical to the image we just built. The manifest records the
-# unsigned hash, which anyone can reproduce with grub-mkimage.
-SIGNED="$WORK/grubx64.efi"
-PREV="$DIST/esp/EFI/BOOT/grubx64.efi"
-reused=0
-if [ "${BB_RESIGN:-0}" != 1 ] && [ -f "$PREV" ]; then
-  cp "$PREV" "$WORK/prev.efi"; cp "$PREV" "$WORK/prev-stripped.efi"
-  if sbattach --remove "$WORK/prev-stripped.efi" >/dev/null 2>&1 \
-     && cmp -s "$WORK/prev-stripped.efi" "$UNSIGNED" \
-     && sbverify --cert "$CRT" "$WORK/prev.efi" >/dev/null 2>&1 \
-     && [ "$(sbverify --list "$WORK/prev.efi" 2>/dev/null | grep -c '^signature ')" = 1 ]; then
-    cp "$WORK/prev.efi" "$SIGNED"; reused=1
-    log "grubx64.efi: unsigned image unchanged, keeping the existing signature (BB_RESIGN=1 to re-sign)"
-  fi
-fi
-if [ "$reused" = 0 ]; then
-  sbsign --key "$KEY" --cert "$CRT" --output "$SIGNED" "$UNSIGNED" >/dev/null 2>"$WORK/sbsign.log" \
-    || { cat "$WORK/sbsign.log" >&2; die "sbsign failed"; }
-  log "grubx64.efi: signed with $CERT_SUBJECT"
-fi
-sbverify --cert "$CRT" "$SIGNED" >/dev/null 2>&1 || die "sbverify failed for the signed GRUB"
-add_file "$SIGNED" esp/EFI/BOOT/grubx64.efi "built:grub-mkimage from $GRUB_ORIGIN:/x86_64-efi + memdisk (build.efi_memdisk), signed:beast-boot"
-extra secure_boot.grub_unsigned_sha256 "$UNSIGNED_SHA"
-extra build.efi_modules[] "${EFI_MODULES[*]}"
-extra build.efi_prefix "/grub"
 
 # ---------------------------------------------------------------------------
 # BIOS: boot.img + core.img + i386-pc modules for normal mode
@@ -506,8 +539,7 @@ mapfile -t BIOS_MODULES < <(list_modules "$HERE/modules-bios-core.lst")
 for m in "${BIOS_MODULES[@]}"; do
   [ -f "$GRUB_BIOS_DIR/$m.mod" ] || die "module $m (build/modules-bios-core.lst) missing from $GRUB_BIOS_DIR"
 done
-# GRUB's rescue parser (used for embedded configs) has no comments: strip them.
-sed -e 's/^[[:space:]]*#.*//' "$HERE/early-bios.cfg" | grep -v '^[[:space:]]*$' > "$WORK/early-bios.cfg"
+strip_early "$HERE/early-bios.cfg" > "$WORK/early-bios.cfg"
 "$GRUB_MKIMAGE" -O i386-pc -d "$GRUB_BIOS_DIR" -p '(,msdos2)/grub' -c "$WORK/early-bios.cfg" \
   -o "$WORK/core.img" "${BIOS_MODULES[@]}"
 core_size="$(stat -c %s "$WORK/core.img")"
@@ -530,7 +562,8 @@ for f in "$GRUB_BIOS_DIR"/*.mod "$GRUB_BIOS_DIR"/*.lst; do
 done
 
 # ---------------------------------------------------------------------------
-# Font, menu scripts, version.cfg
+# Font and menu scripts: on the ESP for legacy BIOS; UEFI reads its own copies
+# in the memdisk of grubx64.efi ("EFI GRUB" at the end)
 # ---------------------------------------------------------------------------
 FONT=""
 for f in "${BB_GRUB_FONT:-}" /usr/share/grub/unicode.pf2 "$TOOLS_ROOT/usr/share/grub/unicode.pf2"; do
@@ -547,7 +580,7 @@ while IFS= read -r -d '' f; do
   case "/$rel" in */.*) continue ;; esac                         # dotfiles, .git, swap files
   case "$base" in
     *~|*.swp|*.swo|*.bak|*.orig|*.rej|\#*\#|*.md) continue ;;     # editor backups, docs
-    version.cfg|device.cfg) continue ;;                           # generated by build / installer
+    version.cfg|device.env|device.cfg) continue ;;                # generated by build / installer
   esac
   [ -L "$f" ] && die "symlink in menu dir: $f (copy real files only)"
   case "$rel" in i386-pc/*|x86_64-efi/*|fonts/*.pf2|themes/beast/*) die "menu dir must not provide $rel (build output)";; esac
@@ -640,24 +673,8 @@ for h in m["vendor_dbx"]["sha256"]:
     || die "removing the helper kernel's signatures changed its Authenticode digest"
   BN_UNSIGNED_SHA="$(sha256sum < "$BN_UNSIGNED")"; BN_UNSIGNED_SHA="${BN_UNSIGNED_SHA%% *}"
   BN_SIGNED="$WORK/vmlinuz.signed"
-  PREV="$DIST/esp/beast-net/vmlinuz"
-  reused=0
-  if [ "${BB_RESIGN:-0}" != 1 ] && [ -f "$PREV" ]; then
-    cp "$PREV" "$WORK/prev-k"; cp "$PREV" "$WORK/prev-k-stripped"
-    if sbattach --remove "$WORK/prev-k-stripped" >/dev/null 2>&1 \
-       && cmp -s "$WORK/prev-k-stripped" "$BN_UNSIGNED" \
-       && efi_inspect require "$WORK/prev-k" --only "beast-boot=$CRT" >/dev/null 2>&1; then
-      cp "$WORK/prev-k" "$BN_SIGNED"; reused=1
-      log "beast-net/vmlinuz: unsigned image unchanged, keeping the existing signature (BB_RESIGN=1 to re-sign)"
-    fi
-  fi
-  if [ "$reused" = 0 ]; then
-    sbsign --key "$KEY" --cert "$CRT" --output "$BN_SIGNED" "$BN_UNSIGNED" >/dev/null 2>"$WORK/sbsign.log" \
-      || { cat "$WORK/sbsign.log" >&2; die "sbsign failed for the helper kernel"; }
-    log "beast-net/vmlinuz: replaced the signature of ${bn_replaced:-?} with $CERT_SUBJECT"
-  fi
-  efi_inspect require "$BN_SIGNED" --only "beast-boot=$CRT" > "$WORK/bn-sigs.log" 2>&1 \
-    || { cat "$WORK/bn-sigs.log" >&2; die "the re-signed helper kernel must carry exactly one signature, ours"; }
+  sign_image vmlinuz "$BN_UNSIGNED" "$DIST/esp/beast-net/vmlinuz" "$BN_SIGNED"
+  log "vmlinuz: the signature it came with (${bn_replaced:-?}) was removed first"
   [ "$(efi_inspect authenticode "$BN_SIGNED")" = "$BN_AUTH" ] || die "the re-signed helper kernel has another Authenticode digest"
   add_file "$BN_SIGNED" esp/beast-net/vmlinuz \
     "built:$BN_KERNEL_ORIGIN with its signatures removed (sbattach --remove), signed:beast-boot"
@@ -692,28 +709,8 @@ if [ "${BB_SKIP_WIMBOOT:-0}" != 1 ]; then
   WIM_INFO_SHA="$(sha256sum < "$WIM_OUT/build-info.json")"; WIM_INFO_SHA="${WIM_INFO_SHA%% *}"
   "${WIMBOOTSRC[@]}" check "$WIM_OUT/wimboot" "$WIM_VERSION" >/dev/null || die "the wimboot build output fails its checks"
   WIM_UNSIGNED_SHA="$(sha256sum < "$WIM_OUT/wimboot")"; WIM_UNSIGNED_SHA="${WIM_UNSIGNED_SHA%% *}"
-  # Signing, as for GRUB above: an existing dist/ wimboot is reused when it carries exactly one
-  # signature, ours, and is byte-identical to this build with the signature removed.
   WIM_SIGNED="$WORK/wimboot.signed"
-  PREV="$DIST/esp/beast-booter/wimboot"
-  reused=0
-  if [ "${BB_RESIGN:-0}" != 1 ] && [ -f "$PREV" ]; then
-    cp "$PREV" "$WORK/prev-w"; cp "$PREV" "$WORK/prev-w-stripped"
-    if sbattach --remove "$WORK/prev-w-stripped" >/dev/null 2>&1 \
-       && cmp -s "$WORK/prev-w-stripped" "$WIM_OUT/wimboot" \
-       && efi_inspect require "$WORK/prev-w" --only "beast-boot=$CRT" >/dev/null 2>&1; then
-      cp "$WORK/prev-w" "$WIM_SIGNED"; reused=1
-      log "wimboot: unsigned image unchanged, keeping the existing signature (BB_RESIGN=1 to re-sign)"
-    fi
-  fi
-  if [ "$reused" = 0 ]; then
-    sbsign --key "$KEY" --cert "$CRT" --output "$WIM_SIGNED" "$WIM_OUT/wimboot" >/dev/null 2>"$WORK/sbsign.log" \
-      || { cat "$WORK/sbsign.log" >&2; die "sbsign failed for wimboot"; }
-    log "wimboot: signed with $CERT_SUBJECT"
-  fi
-  sbverify --cert "$CRT" "$WIM_SIGNED" >/dev/null 2>&1 || die "sbverify failed for the signed wimboot"
-  efi_inspect require "$WIM_SIGNED" --only "beast-boot=$CRT" > "$WORK/wim-sigs.log" 2>&1 \
-    || { cat "$WORK/wim-sigs.log" >&2; die "the signed wimboot must carry exactly one signature, ours"; }
+  sign_image wimboot "$WIM_OUT/wimboot" "$DIST/esp/beast-booter/wimboot" "$WIM_SIGNED"
   cp "$WIM_SIGNED" "$WORK/wim-stripped"
   { sbattach --remove "$WORK/wim-stripped" >/dev/null 2>&1 && cmp -s "$WORK/wim-stripped" "$WIM_OUT/wimboot"; } \
     || die "the signed wimboot without its signature is not the wimboot build output"
@@ -752,15 +749,106 @@ if [ "${BB_SKIP_WIMBOOT:-0}" != 1 ]; then
   log "wimboot $WIM_VERSION (key $WIM_KEY, signed) + Windows PE start-up files + beastmount $BM_VERSION (key $BM_KEY)"
 fi
 
-# version.cfg last: its build id covers everything else, the beast-net helper included
-# (grubx64.efi by its unsigned hash), so a drive with other helper files is another build.
-BUILD_ID="$(bbtool build-id "$STAGE" "$VERSION" "$UNSIGNED_SHA" "${BUILD_ID_EXTRA[@]}")"
-cat > "$WORK/version.cfg" <<EOF
+# ---------------------------------------------------------------------------
+# EFI GRUB, last: memdisk, build id, version.cfg, build, sign, verify
+#
+# Under UEFI the signed image must not run or parse anything that someone who
+# can write the drive could have changed, so everything the menu is made of
+# goes into the memdisk inside grubx64.efi: every file staged under esp/grub/
+# except the BIOS modules (grub.cfg, beast/*.cfg, beast/hooks/, the theme, the
+# fonts), plus version.cfg and the two Windows PE start-up scripts. The memdisk mirrors the ESP (grub/... -> grub/...).
+# The embedded early config (build/early-efi.cfg, which says why each line is
+# there) sets the prefix to (memdisk)/grub and unsets fw_path, so GRUB's first
+# config is (memdisk)/grub/grub.cfg, a grub.cfg on the ESP is never looked
+# for, and the menu's $prefix paths never leave the image.
+# Fonts sit in fonts/: Ubuntu's GRUB ("Enforce verification of font files")
+# loads fonts under Secure Boot only as (memdisk)/fonts/NAME.pf2.
+# build/theme/mkmemdisk.py writes a deterministic tar that anyone can rebuild
+# from the dist/ files (manifest build.efi_memdisk) and compare.
+#
+# version.cfg carries the build id, and the build id covers everything on the
+# drive, grubx64.efi included. To keep that without a circle the image is built
+# twice: first with an empty bb_build_id, and the id is computed over the staged
+# files and that image's hash (the signed files count by their unsigned hashes,
+# so a fresh signature is the same build); then with the id filled in, which is
+# the image that ships. manifest secure_boot.grub_unsigned_noid_sha256 records
+# the first, grub_unsigned_sha256 the second; both can be rebuilt.
+# ---------------------------------------------------------------------------
+EFI_PREFIX="/grub"
+strip_early "$HERE/early-efi.cfg" > "$WORK/early-efi.cfg"
+EARLY_EFI_SHA="$(sha256sum < "$WORK/early-efi.cfg")"; EARLY_EFI_SHA="${EARLY_EFI_SHA%% *}"
+memdisk_args=()
+memdisk_list=()
+while IFS= read -r -d '' f; do
+  rel="${f#"$STAGE"/esp/grub/}"
+  case "$rel" in
+    i386-pc/*) continue ;;                               # legacy BIOS modules
+    *[[:space:]=]*) die "esp/grub/$rel: a file name with a space or '=' cannot go into the GRUB memdisk" ;;
+    fonts/*) in_memdisk="$rel" ;;
+    *) in_memdisk="grub/$rel" ;;
+  esac
+  memdisk_args+=("$in_memdisk=$f")
+  memdisk_list+=("$in_memdisk=esp/grub/$rel")
+done < <(find "$STAGE/esp/grub" -type f -print0 | sort -z)
+# The two Windows PE start-up scripts the menu injects with wimboot (they run as SYSTEM in
+# Windows PE): UEFI takes them from the memdisk too. beastmount.exe stays on the ESP only.
+for f in winpeshl.ini beastboot.cmd; do
+  [ -f "$STAGE/esp/beast-booter/winpe/$f" ] || continue        # BB_SKIP_WIMBOOT=1
+  memdisk_args+=("beast-booter/winpe/$f=$STAGE/esp/beast-booter/winpe/$f")
+  memdisk_list+=("beast-booter/winpe/$f=esp/beast-booter/winpe/$f")
+done
+memdisk_list+=("grub/beast/version.cfg=esp/grub/beast/version.cfg")
+
+# efi_image BUILD_ID DIR: write DIR/version.cfg (with that bb_build_id), DIR/memdisk.tar
+# and DIR/grubx64.efi, the unsigned image.
+# NB: no --disable-shim-lock, ever.
+# -m must come before -p: a memdisk implies the prefix (memdisk)/boot/grub
+# unless -p follows it. The prefix has no device on purpose: GRUB then fills in
+# the device it was started from, which early-efi.cfg keeps for the menu before
+# it moves the prefix into the memdisk.
+efi_image() {
+  mkdir -p "$2"
+  cat > "$2/version.cfg" <<EOF
 # Generated by build/build.sh - do not edit.
 set bb_version="$VERSION"
-set bb_build_id="$BUILD_ID"
+set bb_build_id="$1"
 EOF
-add_file "$WORK/version.cfg" esp/grub/beast/version.cfg "built:build/build.sh"
+  python3 -I "$HERE/theme/mkmemdisk.py" --out "$2/memdisk.tar" "${memdisk_args[@]}" \
+    "grub/beast/version.cfg=$2/version.cfg" || die "build/theme/mkmemdisk.py failed"
+  "$GRUB_MKIMAGE" -O x86_64-efi -d "$GRUB_EFI_DIR" -m "$2/memdisk.tar" -p "$EFI_PREFIX" \
+    -c "$WORK/early-efi.cfg" --sbat "$WORK/sbat.csv" -o "$2/grubx64.efi" "${EFI_MODULES[@]}" \
+    || die "grub-mkimage (x86_64-efi) failed"
+}
+
+efi_image "" "$WORK/efi-noid"
+NOID_SHA="$(sha256sum < "$WORK/efi-noid/grubx64.efi")"; NOID_SHA="${NOID_SHA%% *}"
+BUILD_ID="$(bbtool build-id "$STAGE" "$VERSION" "$NOID_SHA" "${BUILD_ID_EXTRA[@]}")"
+efi_image "$BUILD_ID" "$WORK/efi"
+add_file "$WORK/efi/version.cfg" esp/grub/beast/version.cfg "built:build/build.sh"
+MEMDISK_SHA="$(sha256sum < "$WORK/efi/memdisk.tar")"; MEMDISK_SHA="${MEMDISK_SHA%% *}"
+extra build.efi_memdisk[] "${memdisk_list[*]}"
+extra build.efi_memdisk_sha256 "$MEMDISK_SHA"
+
+UNSIGNED="$WORK/efi/grubx64.efi"
+objcopy -O binary --only-section=.sbat "$UNSIGNED" "$WORK/check.sbat"
+cmp -s <(tr -d '\000' < "$WORK/check.sbat") "$WORK/sbat.csv" || die "SBAT section of the built GRUB is not what we asked for"
+# Ubuntu's signed grubx64.efi is marked NX_COMPAT (W^X memory, which shim 16
+# and newer firmware can enforce); grub-mkimage of this source sets it too.
+objdump -p "$UNSIGNED" > "$WORK/pe-headers.txt"
+grep -q 'NX_COMPAT' "$WORK/pe-headers.txt" || die "the built grubx64.efi lacks the PE NX_COMPAT flag"
+UNSIGNED_SHA="$(sha256sum < "$UNSIGNED")"; UNSIGNED_SHA="${UNSIGNED_SHA%% *}"
+
+# Signing (sign_image above). The manifest records the unsigned hash, which anyone
+# can reproduce with grub-mkimage.
+SIGNED="$WORK/grubx64.efi"
+sign_image grubx64.efi "$UNSIGNED" "$DIST/esp/EFI/BOOT/grubx64.efi" "$SIGNED"
+add_file "$SIGNED" esp/EFI/BOOT/grubx64.efi "built:grub-mkimage from $GRUB_ORIGIN:/x86_64-efi + repo:build/early-efi.cfg + memdisk (build.efi_memdisk), signed:beast-boot"
+extra secure_boot.grub_unsigned_sha256 "$UNSIGNED_SHA"
+extra secure_boot.grub_unsigned_noid_sha256 "$NOID_SHA"
+extra build.efi_modules[] "${EFI_MODULES[*]}"
+extra build.efi_prefix "$EFI_PREFIX"
+extra build.efi_early_config_sha256 "$EARLY_EFI_SHA"
+log "grubx64.efi: $(stat -c %s "$SIGNED") bytes signed; memdisk $(stat -c %s "$WORK/efi/memdisk.tar") bytes, ${#memdisk_list[@]} files"
 
 # ---------------------------------------------------------------------------
 # Checks, timestamps, manifest, install
@@ -771,6 +859,14 @@ done < <(bbtool layout REQUIRED_ESP_FILES)
 [ ! -e "$STAGE/esp/EFI/BOOT/fbx64.efi" ] || die "fbx64.efi must not be shipped"
 
 find "$STAGE" -exec touch -h -d "@$SOURCE_DATE_EPOCH" {} +
+# Who signed what: the leaf certificate of each signed file (the CA is cert_sha256).
+for name in "${SIGNED_NAMES[@]}"; do
+  comp="$(bb_component_of "$name")"
+  extra "secure_boot.signer_${comp}_subject" "$(bb_cert_subject "${LEAF_CRT[$name]}")"
+  extra "secure_boot.signer_${comp}_cert_sha256" "$(bb_cert_sha256 "${LEAF_CRT[$name]}")"
+  extra "secure_boot.signer_${comp}_cert_sha1" "$(openssl x509 -in "${LEAF_CRT[$name]}" -outform DER | sha1sum | cut -d' ' -f1)"
+  extra "secure_boot.signer_${comp}_not_after" "$(openssl x509 -in "${LEAF_CRT[$name]}" -noout -enddate | cut -d= -f2)"
+done
 bbtool manifest-write --dist "$STAGE" --origins "$ORIGINS" --out "$STAGE/manifest.json" \
   --version "$VERSION" --source-date-epoch "$SOURCE_DATE_EPOCH" --build-id "$BUILD_ID" \
   --cert-der "$CER" --cert-subject "$CERT_SUBJECT" --sbat "$WORK/sbat.csv" --extra "$EXTRA"
@@ -788,6 +884,7 @@ fi
 
 nfiles="$(grep -c . "$ORIGINS")"
 log "wrote $DIST ($nfiles files + manifest.json), build id $BUILD_ID"
-log "certificate: $CERT_SUBJECT, SHA-256 $(sha256sum < "$CER" | cut -d' ' -f1)"
+log "CA certificate (what users enroll): $CERT_SUBJECT, SHA-256 $(sha256sum < "$CER" | cut -d' ' -f1)"
+for name in "${SIGNED_NAMES[@]}"; do log "  $name signed by: $(bb_cert_subject "${LEAF_CRT[$name]}")"; done
 log "SBAT embedded in esp/EFI/BOOT/grubx64.efi:"
 sed 's/^/  /' "$WORK/sbat.csv"

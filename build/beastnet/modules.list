@@ -100,7 +100,8 @@ fs/fat/msdos
 # sd_mod, sr_mod, sg, scsi_mod, virtio_blk/scsi, ext4 (+jbd2), sha256/512, cbc, xts, aes,
 # ecb, ctr, gcm, cts, libaes. The modules below load by PCI modalias at coldplug
 # (nvme, ahci, vmd, HBAs, sata_*); the md/dm/crypto/filesystem ones are loaded on
-# demand (modprobe by the Python code or by the kernel's request_module).
+# demand by the kernel (request_module) when mdadm, device-mapper, cryptsetup or mount
+# first need them. The Python code does not modprobe them (docs/DISK_TOOLS.md section 8).
 drivers/nvme/host/nvme-core              # NVMe (+ nvme-auth/nvme-keyring by dependency)
 drivers/nvme/host/nvme
 drivers/ata/ahci                         # SATA AHCI (+ libahci)

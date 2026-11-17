@@ -90,7 +90,9 @@ When `bb_sb=1` and an ISO's recipe would be `none`:
 `bb_wb_dir` is set, install media = (`bb_wb_kind` = `setup`), and `bb_win_boot`
 passes `newc:boot.wim:$bb_wb_dir/boot.wim` instead of
 `(loop)/sources/boot.wim`; everything else (winpe files, grubenv hand-off with
-`bb_winpe_iso`, setup/pe/native) is unchanged. If wimboot is refused (`linux`
+`bb_winpe_iso`, setup/pe/native) is unchanged. Since 0.5.0 `winpeshl.ini` and
+`beastboot.cmd` come from inside the signed `grubx64.efi` on UEFI
+(`beastmount.exe` still from the ESP). If wimboot is refused (`linux`
 fails), the usual `sb-verify-failed` explanation. If the firmware refuses the
 ISO's boot manager, wimboot prints `Could not load …`; the menu cannot see it
 (`boot-failed` at best), so docs explain it.

@@ -253,7 +253,7 @@ stand-in `ntfs-3g` and a `mount.ntfs` helper that mounts as `ntfs3`
 ISO's own `loopback.cfg`, whose initramfs mounts NTFS itself.
 
 The kernel command lines use the data partition's UUID as Linux shows it
-(`bb_data_uuid_linux` from the installer's `device.cfg`). If `device.cfg` is
+(`bb_data_uuid_linux` from the installer's `device.env`). If `device.env` is
 missing, or the partition was reformatted since, the menu reads the UUID
 itself (GRUB shows FAT/exFAT UUIDs in upper case already and NTFS ones in
 lower case; the menu converts them to upper case like `/dev/disk/by-uuid`).

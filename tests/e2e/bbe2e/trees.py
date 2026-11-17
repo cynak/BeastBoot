@@ -22,6 +22,7 @@ def main_tree(isos: dict[str, Path]) -> dict:
         "/$RECYCLE.BIN/desktop.ini": b"[.ShellClassInfo]\n",
         "/$RECYCLE.BIN/hidden.iso": isos["casper"],
         "/lost+found/hidden.iso": isos["casper"],
+        "/disk-tools/hidden.iso": isos["casper"],
         # Hidden because of the leading dot.
         "/.Trash-1000/files/trashed.iso": isos["casper"],
         "/._AppleDouble.iso": b"\0" * 4096,
@@ -51,7 +52,7 @@ def ntfs_tree(isos: dict[str, Path]) -> dict:
 MAIN_ROOT_DIRS = {"/recipes", "/Some Folder"}
 MAIN_ROOT_ISOS = {"/UPPER-CASE.ISO", "/Mixed.Iso"}
 MAIN_HIDDEN = {
-    "/beast-booter", "/System Volume Information", "/$RECYCLE.BIN", "/lost+found", "/.Trash-1000",
+    "/beast-booter", "/System Volume Information", "/$RECYCLE.BIN", "/lost+found", "/disk-tools", "/.Trash-1000",
     "/._AppleDouble.iso", "/README.txt", "/not-an-iso.iso.txt",
 }
 

@@ -12,6 +12,11 @@ gen_sbom/validate_sbom need them). Then the real scripts run against it with --r
   keys            every remediation key the scanner emits has a catalogue entry
   empty-cache     --offline with an empty cache: the report is still written, SBAT and dbx
                   say "not checked" (BB-*-NOT-CHECKED, R-DATA-UNAVAILABLE) and --fail-on exits 3
+  sbat-vex        a revocation level one generation above the shipped GRUB (a cached
+                  SbatLevel_Variable.txt): critical BB-SBAT-REVOKED-grub-<N> stays open and
+                  --fail-on critical exits 3, whatever VEX says: a statement under the old id
+                  without a generation is reported and ignored, statements for the level
+                  below and "fixed" for this one do not close it
   stale-sbom      dist/ changed after gen_sbom -> BB-SBOM-STALE
   origin          one byte appended to a package file (manifest updated to match) -> gen_sbom
                   records MISMATCH, validate_sbom FAILs origin-verified, scan reports critical
@@ -166,6 +171,45 @@ def test_empty_cache(root: Path) -> None:
           sc.get("uefi_ca_2011") and sc.get("uefi_ca_2023") and sc.get("one_digest")
           and isinstance(sc.get("verified_with"), list), json.dumps(sc)[:400])
     check("boot-chain: no BB-SHIM-UEFI-CA-2011-ONLY", "BB-SHIM-UEFI-CA-2011-ONLY" not in by_id(report(root)))
+
+
+def test_sbat_vex(root: Path) -> None:
+    import efi_inspect as efi
+    import scan_vulns as sv
+    rows = efi.parse_sbat_csv(efi.inspect_efi(root / "dist/esp/EFI/BOOT/grubx64.efi")["sbat"] or "")
+    have = next((r["generation"] for r in rows if r["component"] == "grub"), None)
+    if not check("sbat-vex: the shipped GRUB has a grub SBAT line", have is not None, str(rows)[:300]):
+        return
+    need = have + 1
+    cache = root / ".tools/cache/sbom-vuln"
+    cache.mkdir(parents=True)
+    text = f"Revocations for:\n - selftest\n\nsbat,1,2099010100\nshim,1\ngrub,{need}\n".encode()
+    (cache / "SbatLevel_Variable.txt").write_bytes(text)
+    (cache / "SbatLevel_Variable.txt.meta.json").write_text(json.dumps({
+        "url": sv.SBAT_URL, "fetched_at": "2026-01-01T00:00:00Z", "sha256": hashlib.sha256(text).hexdigest(),
+        "bytes": len(text)}))
+    grub = {"@id": "file:esp/EFI/BOOT/grubx64.efi"}
+    vex_path = root / "sbom/vex.openvex.json"
+    vex = json.loads(vex_path.read_text())
+    vex["statements"] = [s for s in vex["statements"] if not s["vulnerability"]["name"].startswith(sv.SBAT_REVOKED)]
+    for name in (f"{sv.SBAT_REVOKED}grub", sv.sbat_finding_id("grub", have), sv.sbat_finding_id("grub", need)):
+        vex["statements"].append({"vulnerability": {"name": name}, "products": [grub], "status": "fixed",
+                                  "timestamp": "2026-01-01T00:00:00Z", "status_notes": "selftest: must not close it"})
+    vex_path.write_text(json.dumps(vex))
+    g = run(HERE / "gen_sbom.py", root=root)
+    if not check("sbat-vex: gen_sbom", g.returncode == 0, g.stderr[-500:]):
+        return
+    s = run(HERE / "scan_vulns.py", "--offline", "--fail-on", "critical", root=root)
+    check("sbat-vex: --fail-on critical exits 3", s.returncode == 3, f"rc={s.returncode} {s.stderr[-300:]}")
+    rep = report(root)
+    f = by_id(rep).get(sv.sbat_finding_id("grub", need))
+    check(f"sbat-vex: critical {sv.sbat_finding_id('grub', need)} is open despite three 'fixed' statements",
+          f is not None and f["severity"] == "critical" and f["status"] == "open" and not f["vex"],
+          json.dumps(f)[:300] if f else "absent: " + str(sorted(i for i in by_id(rep) if i.startswith("BB-"))))
+    check("sbat-vex: counted as an open critical boot-chain finding",
+          rep["summary"]["open"]["boot_chain"]["critical"] >= 1, json.dumps(rep["summary"]["open"]["boot_chain"]))
+    errs = [e for e in rep["vex"]["errors"] if "names no SBAT generation" in e]
+    check("sbat-vex: the statement without a generation is reported as ignored", len(errs) == 1, str(rep["vex"]["errors"])[:300])
 
 
 def test_boot_chain(real: Path, base: Path) -> None:
@@ -627,6 +671,7 @@ def main() -> int:
         test_debian_grype(real, base)
         test_modules(real)
         test_empty_cache(scratch_root(real, base, "empty-cache"))
+        test_sbat_vex(scratch_root(real, base, "sbat-vex"))
         test_origin(scratch_root(real, base, "origin"))
     finally:
         if a.keep:

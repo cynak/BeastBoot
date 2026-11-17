@@ -3,6 +3,13 @@ fixture disks attached (NVMe and AHCI), runs a script-mode plan (`"action": "dis
 and the host checks the BEASTNET: event lines, the files imaged out of the
 volumes, and that no source image changed by a single byte (the gate).
 
+Firmware modes (docs/DISK_TOOLS_MATRIX.md section 2f): every test runs under UEFI. A chosen
+set also runs under legacy BIOS and under UEFI with Secure Boot (the real chain: shim, signed
+GRUB, signed helper kernel in lockdown, `beastnet.sb=1`): the scan, the groups in MODE_GROUPS
+(scan, read-only assembly, image), one clone and one rescue (test_e2e_disks_copy.py). Together
+they make the kernel load every module family the tools need; test_modules_load_under_lockdown
+names the modules and shows that the locked-down kernel refuses an unsigned one.
+
 Fixtures: `python tests/e2e/fixtures/disks.py build` (needs docker --privileged).
 Tests skip with a reason when KVM, the fixtures or a helper feature is missing;
 the harness parts that need no Disk tools run today (gate self-test, fixture
@@ -22,6 +29,7 @@ from __future__ import annotations
 
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -50,9 +58,49 @@ GROUPS = {
     "btrfs": (["btrfs"], set()),
     "md-bitmap": (["md-bitmap"], {"mdadm"}),  # internal and stale write-intent bitmaps: md writes them
     "lvm-raid": (["lvm-raid"], {"lvm"}),      # a raid1 LV: the VG must be refused (REFUSED)
+    "md-meta-a": (["md-meta-a"], {"mdadm"}),  # md metadata 0.90 (RAID1, RAID5) and 1.0 (RAID1): superblock at the end
+    "md-meta-b": (["md-meta-b"], {"mdadm"}),  # md metadata 1.0 (RAID5) and 1.1 (RAID1, RAID5)
 }
 REFUSED = {"lvm-raid"}  # detected, but `assemble` must fail before anything starts
 IMAGEABLE = ("md", "imsm", "ddf", "luks")  # single ext4 volume: imaged and read back with debugfs
+# The groups that also run under BIOS and under Secure Boot. They make the kernel load, on
+# demand, every module the read-only stacks need: md-a raid0, raid1 and linear; md-b raid456
+# and raid10; dm-snapshot for the RAM overlays under every md array and LVM volume group;
+# luks dm-crypt. lvm and btrfs load no module of their own (LVM's linear target is built in,
+# a btrfs set is offered as a device and never mounted) but are two more kinds of stack. The
+# other groups add layouts, not modules. test_modules_load_under_lockdown loads the rest.
+MODE_GROUPS = ("md-a", "md-b", "lvm", "luks", "btrfs")
+# RAID1 arrays whose md superblock is at the end of the member (metadata 0.90 and 1.0): each
+# member starts with the ext4 filesystem itself, like a plain ext4 disk
+END_METADATA_RAID1 = ("m090-raid1", "m10-raid1")
+
+
+# ---------------------------------------------------------------------------
+# Firmware modes
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Fw:
+    """How the helper VM boots: a VM mode ("uefi", "bios", "uefi-sb") and, for Secure Boot,
+    the BeastBoot certificate enrolled in shim's MOK list."""
+    mode: str = "uefi"
+    mok_certs: tuple = ()
+
+
+UEFI = Fw()
+OTHER_MODES = (("bios", pytest.mark.bios), ("uefi-sb", pytest.mark.secureboot))
+# every mode, for tests without other parameters: parametrize("fw", EVERY_MODE, indirect=True)
+EVERY_MODE = [pytest.param("uefi", marks=pytest.mark.uefi, id="uefi"),
+              *(pytest.param(m, marks=mark, id=m) for m, mark in OTHER_MODES)]
+
+
+def per_mode(values, in_other_modes=MODE_GROUPS) -> list:
+    """(value, fw) parameters: every value under UEFI (id = the value, as before the other
+    modes existed) and the values of `in_other_modes` under BIOS and Secure Boot."""
+    out = [pytest.param(v, "uefi", marks=pytest.mark.uefi, id=v) for v in values]
+    for m, mark in OTHER_MODES:
+        out += [pytest.param(v, m, marks=mark, id=f"{v}-{m}") for v in values if v in in_other_modes]
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -89,6 +137,16 @@ def kvm():
 
 
 @pytest.fixture
+def fw(request) -> Fw:
+    """The firmware mode of this test: UEFI unless the test parametrizes `fw` (indirect)."""
+    mode = getattr(request, "param", "uefi")
+    if mode != "uefi-sb":
+        return Fw(mode)
+    request.getfixturevalue("secureboot_ok")
+    return Fw(mode, (request.getfixturevalue("mok_cert"),))
+
+
+@pytest.fixture
 def dt_drive(base_drives, workdir, dist_dir, kvm):
     for f in ("vmlinuz", "initrd.img"):
         if not (dist_dir / "esp" / "beast-net" / f).exists():
@@ -100,10 +158,11 @@ def attach(manifest, *sets: str) -> list[dk.Attached]:
     return dk.from_manifest(manifest, *sets)
 
 
-def run_plan(vm_factory, drive, attached, steps, *, timeout=PLAN_TIMEOUT):
-    """Write the plan, boot the helper, wait for poweroff. Returns (vm, boot)."""
+def run_plan(vm_factory, drive, attached, steps, *, timeout=PLAN_TIMEOUT, fw: Fw = UEFI):
+    """Write the plan, boot the helper (in the firmware mode `fw`), wait for poweroff.
+    Returns (vm, boot)."""
     dk.write_plan(drive, dk.plan(*steps))
-    boot = dk.boot_helper(vm_factory, drive, attached)
+    boot = dk.boot_helper(vm_factory, drive, attached, mode=fw.mode, mok_certs=fw.mok_certs)
     dk.wait_done(boot.vm, timeout, after=boot.boot_end)
     return boot.vm, boot
 
@@ -144,13 +203,13 @@ def match_stack(found: list[dict], st: dict) -> dict | None:
 _SCANS: dict[str, dict] = {}
 
 
-def scan_group(name, manifest, vm_factory, drive, extra: list[dk.Attached] | None = None) -> dict:
+def scan_group(name, manifest, vm_factory, drive, extra: list[dk.Attached] | None = None, fw: Fw = UEFI) -> dict:
     sets, _ = GROUPS[name]
-    key = name if not extra else name + "+x"
+    key = (name if not extra else name + "+x") + ("" if fw.mode == "uefi" else "@" + fw.mode)
     if key not in _SCANS:
         attached = attach(manifest, *sets) + (extra or [])
         with dk.gate(attached, manifest):
-            vm, boot = run_plan(vm_factory, drive, attached, [{"op": "scan"}])
+            vm, boot = run_plan(vm_factory, drive, attached, [{"op": "scan"}], fw=fw)
         _SCANS[key] = {"disks": dk.events(vm, "disk found"), "stacks": dk.events(vm, "stack found"),
                        "ro": dk.events(vm, "disk ro"), "errors": dk.errors(vm), "serials": [a.serial for a in attached]}
     return _SCANS[key]
@@ -205,6 +264,21 @@ def test_fixture_manifest_is_the_oracle(manifest, workdir):
     spec = f"{member['path']}?offset={r1['examine']['data_offset_bytes']}"
     for f in r1["volumes"][0]["files"]:
         assert dk.ext4_sha256(spec, f["path"], workdir) == f["sha256"], f["path"]
+    # md metadata versions: the superblock really has the version the recipe asked for, and a
+    # RAID1 member with the superblock at the end (0.90, 1.0) is a readable ext4 from byte 0:
+    # a tool that only looked at the start of the disk would take it for a plain ext4 disk
+    seen = set()
+    for sname in ("md-meta-a", "md-meta-b"):
+        for st in manifest["sets"][sname]["stacks"]:
+            assert st["examine"]["version"].startswith(st["metadata"]), st["examine"]
+            seen.add(st["metadata"])
+            if st["name"] in END_METADATA_RAID1:
+                assert st["examine"]["data_offset_bytes"] == 0, st["examine"]
+                for serial in st["slot_serials"]:
+                    member = next(d for d in manifest["sets"][sname]["disks"] if d["serial"] == serial)
+                    for f in st["volumes"][0]["files"]:
+                        assert dk.ext4_sha256(Path(member["path"]), f["path"], workdir) == f["sha256"], (st["name"], f["path"])
+    assert seen == {"0.90", "1.0", "1.1"}, seen
     # sanity of the oracle itself
     stale = next(s for s in manifest["sets"]["md-bitmap"]["stacks"] if s["bitmap"] == "stale")
     assert all(v["bitmap_now"] < v["superblock"] for v in stale["bitmap_events"].values()), stale
@@ -237,11 +311,12 @@ def test_helper_boots_with_all_disks_under_the_gate(manifest, dt_drive, vm_facto
 # Scan and detection
 # ---------------------------------------------------------------------------
 
-def test_scan_finds_every_disk_and_marks_the_stick(manifest, dt_drive, vm_factory, features, workdir):
+@pytest.mark.parametrize("fw", EVERY_MODE, indirect=True)
+def test_scan_finds_every_disk_and_marks_the_stick(fw, manifest, dt_drive, vm_factory, features, workdir):
     need(features, "discover")
     attached = attach(manifest, "md-a", "gpt", "luks") + [dk.images_disk(workdir / "images.img", 64, transport="nvme")]
     with dk.gate(attached[:-1], manifest):
-        vm, boot = run_plan(vm_factory, dt_drive, attached, [{"op": "scan"}])
+        vm, boot = run_plan(vm_factory, dt_drive, attached, [{"op": "scan"}], fw=fw)
     found = dk.wait_disks(vm, [a.serial for a in attached], after=boot.boot_end)
     sizes = {d["serial"]: d["size"] for s in manifest["sets"].values() for d in s["disks"]}
     for a in attached[:-1]:
@@ -261,10 +336,10 @@ def test_scan_finds_every_disk_and_marks_the_stick(manifest, dt_drive, vm_factor
     assert not dk.errors(vm, boot.boot_end), dk.errors(vm)
 
 
-@pytest.mark.parametrize("group", list(GROUPS))
-def test_stacks_detected(group, manifest, dt_drive, vm_factory, features):
+@pytest.mark.parametrize("group,fw", per_mode(list(GROUPS)), indirect=["fw"])
+def test_stacks_detected(group, fw, manifest, dt_drive, vm_factory, features):
     need(features, "discover", *GROUPS[group][1])
-    scan = scan_group(group, manifest, vm_factory, dt_drive)
+    scan = scan_group(group, manifest, vm_factory, dt_drive, fw=fw)
     assert not scan["errors"], scan["errors"]
     sets = GROUPS[group][0]
     omitted = {d["serial"] for s in sets for d in manifest["sets"][s]["disks"] if d["omit"]}
@@ -299,11 +374,11 @@ def test_wiped_arrays_are_not_assembled(manifest, dt_drive, vm_factory, features
 # Read-only assembly, imaging, files
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("group", [g for g in GROUPS if g not in REFUSED])
-def test_assemble_read_only_and_image(group, manifest, dt_drive, vm_factory, features, workdir):
+@pytest.mark.parametrize("group,fw", per_mode([g for g in GROUPS if g not in REFUSED]), indirect=["fw"])
+def test_assemble_read_only_and_image(group, fw, manifest, dt_drive, vm_factory, features, workdir):
     need(features, "discover", "assemble", "copy", *GROUPS[group][1])
     sets = GROUPS[group][0]
-    scan = scan_group(group, manifest, vm_factory, dt_drive)
+    scan = scan_group(group, manifest, vm_factory, dt_drive, fw=fw)
     stacks = [(s, st) for s in sets for st in manifest["sets"][s]["stacks"]]
     # images go to a separate ext4 disk, opened read-write by use_disk (typed confirmation)
     plan_steps, ids = [{"op": "use_disk", "disk": dk.IMAGES_SERIAL, "confirm": dk.confirm(dk.IMAGES_SERIAL)}], {}
@@ -321,7 +396,7 @@ def test_assemble_read_only_and_image(group, manifest, dt_drive, vm_factory, fea
     images = dk.images_disk(workdir / "images.img", 2048, transport="nvme")
     attached = attach(manifest, *sets) + [images]
     with dk.gate(attached[:-1], manifest):
-        vm, boot = run_plan(vm_factory, dt_drive, attached, plan_steps)
+        vm, boot = run_plan(vm_factory, dt_drive, attached, plan_steps, fw=fw)
     assert not dk.errors(vm, boot.boot_end), dk.errors(vm)
     oks = dk.events(vm, "assemble ok", boot.boot_end)
     assert not dk.events(vm, "assemble fail", boot.boot_end)
@@ -337,6 +412,23 @@ def test_assemble_read_only_and_image(group, manifest, dt_drive, vm_factory, fea
         assert dk.ext4_read(images.path, f"/images/{st['name']}.img", dump), f"{st['name']}.img not on the images disk"
         for f in st["volumes"][0]["files"]:
             assert dk.ext4_sha256(dump, f["path"], workdir) == f["sha256"], (st["name"], f["path"])
+
+
+@pytest.mark.parametrize("array", END_METADATA_RAID1)
+def test_md_member_that_looks_like_ext4_is_not_a_place_for_images(array, manifest, dt_drive, vm_factory, features):
+    """A RAID1 member with metadata 0.90 or 1.0 holds the whole ext4 filesystem from its first
+    byte. It must count as a member of its array, not as an ext4 disk: `use_disk` with the right
+    confirmation is refused, nothing is mounted and no byte of the members changes."""
+    need(features, "discover", "assemble", "mdadm")
+    st = next(s for s in manifest["sets"]["md-meta-a"]["stacks"] if s["name"] == array)
+    member = st["slot_serials"][0]
+    attached = attach(manifest, "md-meta-a")
+    with dk.gate(attached, manifest):
+        vm, boot = run_plan(vm_factory, dt_drive, attached,
+                            [{"op": "use_disk", "disk": member, "confirm": dk.confirm(member)}])
+    errs = dk.errors(vm, boot.boot_end)
+    assert errs and errs[0].startswith("error disk-refused") and "belongs to md set" in errs[0], errs
+    assert not dk.events(vm, "disk dest", boot.boot_end), "the member was opened as a place for images"
 
 
 def test_lvm_vg_with_a_raid_lv_is_refused(manifest, dt_drive, vm_factory, features):
@@ -429,13 +521,14 @@ def test_image_restore_roundtrip(manifest, dt_drive, vm_factory, features, workd
         assert dones[0]["sha256"] == dk.sha256_file(src.path)
 
 
-def test_clone_disk(manifest, dt_drive, vm_factory, features, workdir):
+@pytest.mark.parametrize("fw", EVERY_MODE, indirect=True)
+def test_clone_disk(fw, manifest, dt_drive, vm_factory, features, workdir):
     need(features, "discover", "copy")
     src = gpt_source(manifest)
     target = dk.blank_disk(workdir / "target.img", src.path.stat().st_size, dk.TARGET_SERIAL, fill=0x5A)
     steps = [{"op": "clone", "source": src.serial, "target": target.serial, "confirm": dk.confirm(target.serial)}]
     with dk.gate([src], manifest):
-        vm, boot = run_plan(vm_factory, dt_drive, [src, target], steps)
+        vm, boot = run_plan(vm_factory, dt_drive, [src, target], steps, fw=fw)
     assert not dk.errors(vm, boot.boot_end), dk.errors(vm)
     assert dk.sha256_file(target.path) == dk.sha256_file(src.path)
 
@@ -509,3 +602,136 @@ def test_refuse_member_of_source_stack_as_target(manifest, dt_drive, vm_factory,
     errs = dk.errors(boot.vm, boot.boot_end)
     assert errs and errs[0].startswith("error disk-refused"), errs
     assert not dk.events(boot.vm, "copy start", boot.boot_end)
+
+
+# ---------------------------------------------------------------------------
+# Secure Boot: the modules the tools need load in a locked-down kernel
+# ---------------------------------------------------------------------------
+
+# Runs in the helper's shell: prints the kernel's lockdown state and the loaded modules, then
+# tries one module (argv[1]) as a copy with the signature cut off (insmod), and loads it and
+# every other module named (argv[2:]) from the shipped, signed files (modprobe).
+MODCHECK_PATH = "/beast-booter/modcheck.py"
+MODCHECK = r"""
+import glob, os, subprocess, sys
+
+def out(text):
+    print("BBCHK " + text, flush=True)
+
+def loaded():
+    with open("/proc/modules") as f:
+        return sorted(line.split()[0] for line in f)
+
+subprocess.run(["mount", "-t", "securityfs", "securityfs", "/sys/kernel/security"], capture_output=True)
+try:
+    with open("/sys/kernel/security/lockdown") as f:
+        lock = f.read().strip()
+except OSError as e:
+    lock = "unreadable:" + str(e.errno)
+out("state lockdown=" + lock.replace(" ", ","))
+out("modules loaded=" + ",".join(loaded()))
+name = sys.argv[1]
+mod = name.replace("-", "_")
+path = glob.glob("/lib/modules/%s/kernel/**/%s.ko*" % (os.uname().release, name), recursive=True)[0]
+with open(path, "rb") as f:
+    data = f.read()
+if path.endswith(".zst"):
+    from compression import zstd
+    data = zstd.decompress(data)
+elif path.endswith(".xz"):
+    import lzma
+    data = lzma.decompress(data)
+MAGIC = b"~Module signature appended~\n"
+signed = data.endswith(MAGIC)
+if signed:  # [module][signature][12-byte struct, the last 4 = signature length][MAGIC]
+    sig_len = int.from_bytes(data[-len(MAGIC) - 4:-len(MAGIC)], "big")
+    data = data[:-len(MAGIC) - 12 - sig_len]
+with open("/tmp/unsigned.ko", "wb") as f:
+    f.write(data)
+cp = subprocess.run(["insmod", "/tmp/unsigned.ko"], capture_output=True, text=True)
+out("unsigned-copy module=%s had_signature=%d rc=%d loaded=%d msg=%s" % (
+    mod, signed, cp.returncode, mod in loaded(), "_".join((cp.stderr or "-").split())[:120]))
+subprocess.run(["rmmod", mod], capture_output=True)
+for name in sys.argv[1:]:
+    cp = subprocess.run(["modprobe", name], capture_output=True, text=True)
+    out("signed-file module=%s rc=%d loaded=%d" % (name.replace("-", "_"), cp.returncode, name.replace("-", "_") in loaded()))
+out("end")
+"""
+# what the plan below makes the kernel load by itself: md RAID5 and RAID10 on dm-snapshot
+# overlays and a LUKS2 volume
+LOCKDOWN_MODULES = {"raid456", "raid10", "dm_snapshot", "dm_crypt"}
+PROBE_MODULE = "dm-zero"  # shipped, in-tree, used by none of the steps
+# the modules docs/DISK_TOOLS.md section 8 lists as loaded on demand (build/beastnet/modules.list):
+# md levels, device-mapper targets, filesystems, and the ciphers LUKS and BitLocker volumes name
+ON_DEMAND_MODULES = (
+    "raid0", "raid1", "raid10", "raid456", "linear",
+    "dm-crypt", "dm-snapshot", "dm-mirror", "dm-raid", "dm-thin-pool", "dm-cache", "dm-integrity", "dm-zero",
+    "dm-delay", "dm-flakey",
+    "btrfs", "xfs", "hfsplus", "hfs", "udf", "exfat", "ntfs3", "isofs",
+    "essiv", "adiantum", "lrw", "serpent_generic", "twofish_generic",
+)
+
+
+@pytest.mark.parametrize("fw", [pytest.param("uefi", marks=pytest.mark.uefi, id="uefi-no-lockdown"),
+                                pytest.param("uefi-sb", marks=pytest.mark.secureboot, id="uefi-sb")], indirect=True)
+def test_modules_load_under_lockdown(fw, manifest, dt_drive, vm_factory, features):
+    """Under Secure Boot the helper kernel is locked down: it loads only modules signed by the
+    kernel build. The plan starts md RAID5, RAID10, LUKS and btrfs, then fails on purpose to
+    reach the shell, where MODCHECK reads the lockdown state and the module list, tries an
+    unsigned copy of a shipped module, and loads every module of ON_DEMAND_MODULES from its
+    shipped file. Without Secure Boot (the control) there is no lockdown and the same unsigned
+    copy loads, so the refusal under Secure Boot is the kernel's signature check."""
+    need(features, "discover", "assemble", "mdadm", "cryptsetup")
+    sb = fw.mode == "uefi-sb"
+    steps, attached = [], []
+    for group in ("md-b", "luks", "btrfs"):
+        scan = scan_group(group, manifest, vm_factory, dt_drive, fw=fw)
+        for set_name in GROUPS[group][0]:
+            attached += attach(manifest, set_name)
+            for st in manifest["sets"][set_name]["stacks"]:
+                f = match_stack(scan["stacks"], st)
+                assert f, f"stack {st['name']} not detected; see test_stacks_detected"
+                step = {"op": "assemble", "stack": f["id"]}
+                if st["kind"] == "luks":
+                    step["passphrase"] = manifest["passphrase"]
+                steps.append(step)
+    ahci = 0
+    for a in attached:  # q35 has room for five more AHCI disks: the rest go on NVMe
+        ahci += a.transport == "ahci"
+        if a.transport == "ahci" and ahci > 5:
+            a.transport = "nvme"
+    steps.append({"op": "assemble", "stack": "md:no-such-array"})  # fails: on_error leads to the shell
+    with dt_drive.data_writer() as w:
+        w.put(MODCHECK_PATH, MODCHECK)
+    with dk.gate(attached, manifest):
+        dk.write_plan(dt_drive, dk.plan(*steps, on_error="shell"))
+        boot = dk.boot_helper(vm_factory, dt_drive, attached, mode=fw.mode, mok_certs=fw.mok_certs)
+        vm = boot.vm
+        vm.wait_for(r"beast-net stopped", timeout=PLAN_TIMEOUT, after=boot.boot_end)
+        mark = vm.mark()
+        others = " ".join(m for m in ON_DEMAND_MODULES if m != PROBE_MODULE)
+        vm.send(f"python3 -I /mnt/data{MODCHECK_PATH} {PROBE_MODULE} {others}\r")
+        vm.wait_for(r"BBCHK end\r?\n", timeout=180, after=mark)
+        got = [(ln.split()[0], bn.fields(ln)) for ln in re.findall(r"BBCHK ([^\r\n]+)", vm.text())]
+        vm.stop()
+    ready = next(bn.fields(ln) for ln in bn.lines(vm) if ln.startswith("ready "))
+    assert ready.get("sb") == str(int(sb)), ready
+    oks = dk.events(vm, "assemble ok", boot.boot_end)
+    assert len(oks) >= len(steps) - 1, f"every stack must start before the check: {oks}\n{dk.errors(vm, boot.boot_end)}"
+    errs = dk.errors(vm, boot.boot_end)
+    assert len(errs) == 1 and "no-such-array" in errs[0], errs
+    lockdown = next(f for k, f in got if k == "state")["lockdown"]
+    loaded = set(next(f for k, f in got if k == "modules")["loaded"].split(","))
+    unsigned = next(f for k, f in got if k == "unsigned-copy")
+    signed = {f["module"]: f for k, f in got if k == "signed-file"}
+    assert LOCKDOWN_MODULES <= loaded, f"not loaded by the plan: {sorted(LOCKDOWN_MODULES - loaded)}; loaded: {sorted(loaded)}"
+    assert unsigned["had_signature"] == "1", f"the shipped {PROBE_MODULE} must carry a signature: {unsigned}"
+    assert set(signed) == {m.replace("-", "_") for m in ON_DEMAND_MODULES}, sorted(signed)
+    refused = sorted(m for m, f in signed.items() if f["rc"] != "0" or f["loaded"] != "1")
+    assert not refused, f"shipped modules that did not load (sb={int(sb)}): {[signed[m] for m in refused]}"
+    if sb:
+        assert "[integrity]" in lockdown or "[confidentiality]" in lockdown, f"Secure Boot without lockdown: {lockdown}"
+        assert unsigned["rc"] != "0" and unsigned["loaded"] == "0", f"an unsigned module loaded under lockdown: {unsigned}"
+    else:
+        assert "[none]" in lockdown, lockdown
+        assert unsigned["rc"] == "0" and unsigned["loaded"] == "1", f"control: the unsigned copy must be loadable: {unsigned}"

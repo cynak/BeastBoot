@@ -20,6 +20,7 @@ import sys
 
 from . import __version__
 from .errors import BeastError
+from .esp import env_block, parse_env_block
 from .safedir import SafeDir, UnsafePath, check_name, is_link
 from .udf import UdfError, open_udf
 from .util import Reporter, human_size
@@ -27,40 +28,16 @@ from .util import Reporter, human_size
 HEADROOM = 16 << 20
 FAT_LIMIT = 4 << 30
 BLOCK = 1024
-SIGNATURE = b"# GRUB Environment Block\n"
 CHUNK = 4 << 20
 HEAD_START, HEAD_END = 32768, 98304
 
 
-def _escape(value: str) -> bytes:
-    out = bytearray()
-    for ch in value.encode("utf-8"):
-        if ch in (0x5C, 0x0A):
-            out.append(0x5C)
-        out.append(ch)
-    return bytes(out)
-
-
 def stamp_bytes(items: list[tuple[str, str]]) -> bytes:
-    out = bytearray(SIGNATURE)
-    for k, v in items:
-        out += k.encode() + b"=" + _escape(v) + b"\n"
-    if len(out) > BLOCK:
+    block = env_block(items)
+    if block is None:
         raise BeastError("the stamp does not fit into a GRUB environment block (path too long?)",
                          code="windows-path")
-    return bytes(out) + b"#" * (BLOCK - len(out))
-
-
-def parse_stamp(data: bytes) -> dict[str, str]:
-    if len(data) != BLOCK or not data.startswith(SIGNATURE):
-        return {}
-    body = data[len(SIGNATURE):].rstrip(b"#")
-    out: dict[str, str] = {}
-    for line in body.split(b"\n"):
-        k, sep, v = line.partition(b"=")
-        if sep and not k.startswith(b"#"):
-            out.setdefault(k.decode("utf-8", "replace"), v.replace(b"\\\\", b"\\").decode("utf-8", "replace"))
-    return out
+    return block
 
 
 # -- where the data partition is and what it is ----------------------------------------
@@ -238,7 +215,7 @@ def _open_iso(path: str):
 def _already(root: str, parts: list[str], iso_path: str, head: bytes, size: int) -> bool:
     try:
         with SafeDir(root, parts, create=False) as sd:
-            old = parse_stamp(sd.read(STAMP, BLOCK + 1) or b"")
+            old = parse_env_block(sd.read(STAMP, BLOCK + 1) or b"")
             same_head = sd.read(HEAD, len(head) + 1) == head
             st = sd.lstat(WIM)
             wim_ok = st is not None and stat.S_ISREG(st.st_mode) and st.st_size == size

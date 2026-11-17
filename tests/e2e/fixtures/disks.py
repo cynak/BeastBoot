@@ -1,7 +1,7 @@
 """Disk-image fixtures for the Disk tools tests (docs/DISK_TOOLS.md section 7).
 
 Builds raw sparse images with RAID/volume stacks of known parameters (md with and
-without write-intent bitmaps, IMSM, DDF, LVM incl. a raid1 LV, LUKS, btrfs) inside a
+without write-intent bitmaps, md metadata 0.90/1.0/1.1/1.2, IMSM, DDF, LVM incl. a raid1 LV, LUKS, btrfs) inside a
 privileged Docker container (ubuntu:26.04 with pinned mdadm, lvm2, cryptsetup,
 btrfs-progs, e2fsprogs, xfsprogs, ntfs-3g; needs loop devices), and writes one
 manifest.json: the oracle for the tests (stack parameters, member order, the
@@ -57,11 +57,15 @@ def recipe() -> dict:
     sets: dict[str, dict] = {}
     counter = [0]
 
-    def disk(setname: str, label: str, size_mib: int, omit: bool = False) -> dict:
+    def disk(setname: str, label: str, size_mib: int, omit: bool = False, lss: int = 512,
+             transport: str | None = None) -> dict:
         counter[0] += 1
         n = counter[0]
-        return {"name": f"{setname}.{label}", "serial": f"BB{n:06d}", "size": size_mib * MIB,
-                "transport": "nvme" if n % 2 else "ahci", "omit": omit}
+        d = {"name": f"{setname}.{label}", "serial": f"BB{n:06d}", "size": size_mib * MIB,
+             "transport": transport or ("nvme" if n % 2 else "ahci"), "omit": omit}
+        if lss != 512:
+            d["lss"] = lss  # logical sector size; attached with logical_block_size (NVMe only)
+        return d
 
     def md_set(setname, specs, *, builder="md", member_mib=96, wiped=False):
         disks, arrays = [], []
@@ -156,6 +160,23 @@ def recipe() -> dict:
         names.append(d["name"])
     sets["lvm-raid"]["vgs"].append({"name": "raidvg", "disks": names, "lvs": [
         {"name": "plain", "fs": "ext4", "mib": 32}, {"name": "mirror", "fs": "ext4", "mib": 48, "type": "raid1"}]})
+    # clone/restore breadth: an MBR disk and a 4Kn GPT disk (NVMe: IDE has 512-byte sectors only)
+    sets["mbr"] = {"builder": "mbr", "disks": [disk("mbr", "d0", 160)], "disk_id": "0xbb0d15c1"}
+    sets["gpt4k"] = {"builder": "gpt4k", "disks": [disk("gpt4k", "d0", 160, lss=4096, transport="nvme")],
+                     "disk_guid": _uuid("gpt4k", "disk").upper(), "part_guids": [_uuid("gpt4k", "p1").upper()]}
+    # md metadata other than 1.2. 0.90 and 1.0 keep the superblock at the END of the
+    # member, so a RAID1 member starts with the filesystem itself and can pass for a plain ext4
+    # disk; 1.1 keeps it at the very start (1.2: 4 KiB in). Added last: older serials stay.
+    md_set("md-meta-a", [
+        {"name": "m090-raid1", "level": "1", "n": 2, "metadata": "0.90"},
+        {"name": "m090-raid5", "level": "5", "chunk_kib": 64, "layout": "left-symmetric", "n": 3, "metadata": "0.90"},
+        {"name": "m10-raid1", "level": "1", "n": 2, "metadata": "1.0"},
+    ])
+    md_set("md-meta-b", [
+        {"name": "m10-raid5", "level": "5", "chunk_kib": 64, "layout": "left-symmetric", "n": 3, "metadata": "1.0"},
+        {"name": "m11-raid1", "level": "1", "n": 2, "metadata": "1.1"},
+        {"name": "m11-raid5", "level": "5", "chunk_kib": 128, "layout": "left-symmetric", "n": 3, "metadata": "1.1"},
+    ])
     return {"version": RECIPE_VERSION, "seed": SEED, "passphrase": PASSPHRASE, "sets": sets}
 
 
@@ -239,7 +260,10 @@ def build(only: list[str] | None = None, *, force: bool = False) -> Path:
     for s in names:
         if s not in r["sets"]:
             raise SystemExit(f"unknown set {s}; sets: {', '.join(r['sets'])}")
-    cmd = [docker, "run", "--rm", "--privileged", "-v", f"{work}:/out", "-v", f"{HERE}:/fx:ro",
+    # the Docker host's modules, read-only: the builders load md/dm-raid/btrfs themselves (a
+    # container has no /lib/modules of its own, so modprobe would fail, e.g. lvcreate --type raid1)
+    mods = ["-v", "/lib/modules:/lib/modules:ro"] if Path("/lib/modules").is_dir() else []
+    cmd = [docker, "run", "--rm", "--privileged", *mods, "-v", f"{work}:/out", "-v", f"{HERE}:/fx:ro",
            "-e", f"HOST_UID={os.getuid()}", "-e", f"HOST_GID={os.getgid()}", tag,
            "sh", "-c", 'python3 /fx/_disks_inside.py /out/recipe.json /out "$@"; rc=$?; chown -R $HOST_UID:$HOST_GID /out; exit $rc',
            "sh", *names]

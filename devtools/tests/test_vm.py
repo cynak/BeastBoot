@@ -19,6 +19,8 @@ for _p in (ROOT / "devtools", ROOT / "installer"):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
+from beastbooter import esp  # noqa: E402
+
 from bbdev import cli, diskimg, paths, qemu  # noqa: E402
 from bbdev.commands import vm  # noqa: E402
 from bbdev.msg import Failure  # noqa: E402
@@ -265,7 +267,7 @@ class _Data:
 
 
 class FakeImage:
-    """device.cfg on the ESP and config.cfg on the data partition, for
+    """device.env on the ESP and config.cfg on the data partition, for
     check_bios_serial; exFAT/NTFS reads go through a fake udisks mount."""
 
     def __init__(self, monkeypatch, fs: str, device: bytes = b"", user: bytes | None = None,
@@ -276,7 +278,7 @@ class FakeImage:
 
         def fat_read(fat, path):
             if fat.offset == info.esp_offset:
-                return device if path == "/grub/beast/device.cfg" else None
+                return device if path == "/grub/beast/device.env" else None
             assert fs == "fat32", "mtools on a non-FAT data partition"
             return user if path == diskimg.USER_CONFIG else None
         monkeypatch.setattr(diskimg.Fat, "read", fat_read)
@@ -296,15 +298,16 @@ def bios_plan(display="none"):
     return plan
 
 
-SERIAL_ON, SERIAL_OFF = b'set bb_serial="1"\n', b'set bb_serial="0"\n'
-NOT_SET = "BIOS: bb_serial is not set (device.cfg or /beast-booter/config.cfg), so after SeaBIOS the menu is"
+SERIAL_ON, SERIAL_OFF = b'set bb_serial="1"\n', b'set bb_serial="0"\n'  # config.cfg (GRUB script)
+DEVICE_ON, DEVICE_OFF = (esp.env_block([("bb_layout", "msdos"), ("bb_serial", v)]) for v in "10")  # device.env
+NOT_SET = "BIOS: bb_serial is not set (device.env or /beast-booter/config.cfg), so after SeaBIOS the menu is"
 FIX = "`bb-dev debug-config --set bb_serial=1` turns it on"
 
 
 @pytest.mark.parametrize("fs", ["fat32", "exfat", "ntfs"])
 def test_bios_serial_hint(monkeypatch, fs):
     # set nowhere: a warning with --display none, naming both files and the fix
-    img = FakeImage(monkeypatch, fs, device=SERIAL_OFF, user=None)
+    img = FakeImage(monkeypatch, fs, device=DEVICE_OFF, user=None)
     plan = bios_plan()
     assert len(plan.warnings) == 1 and plan.warnings[0].startswith(NOT_SET), plan.warnings
     assert "nowhere you can see (--display none)" in plan.warnings[0] and FIX in plan.warnings[0]
@@ -314,10 +317,10 @@ def test_bios_serial_hint(monkeypatch, fs):
     plan = bios_plan("vnc")
     assert not plan.warnings and len(plan.notes) == 1 and "on the display only" in plan.notes[0]
     # what `bb-dev debug-config --set bb_serial=1` writes (config.cfg) silences it ...
-    FakeImage(monkeypatch, fs, device=SERIAL_OFF, user=SERIAL_ON)
+    FakeImage(monkeypatch, fs, device=DEVICE_OFF, user=SERIAL_ON)
     assert not bios_plan().warnings
-    # ... and so does the installer's --serial-console (device.cfg), without a mount
-    img = FakeImage(monkeypatch, fs, device=SERIAL_ON, user=None)
+    # ... and so does the installer's --serial-console (device.env), without a mount
+    img = FakeImage(monkeypatch, fs, device=DEVICE_ON, user=None)
     assert not bios_plan().warnings and img.mounts == []
 
 
@@ -328,7 +331,7 @@ def test_bios_serial_hint_when_config_cfg_is_unreadable(monkeypatch, fs):
     assert img.mounts == []
     assert len(plan.warnings) == 1, plan.warnings
     w = plan.warnings[0]
-    assert w.startswith(f"BIOS: bb_serial is not set in device.cfg, and /beast-booter/config.cfg on the {fs} "
+    assert w.startswith(f"BIOS: bb_serial is not set in device.env, and /beast-booter/config.cfg on the {fs} "
                         "data partition could not be read (udisksctl is not installed); unless it sets "
                         "bb_serial=1"), w
     assert FIX in w

@@ -6,11 +6,11 @@ import uuid
 import pytest
 
 from beastbooter.blockio import ImageTarget
-from beastbooter.esp import parse_marker, parse_set_lines
+from beastbooter.esp import GRUBENV_SIGNATURE, is_grubenv, parse_marker
 from beastbooter.exfatfs import ExfatVolume
 from beastbooter.fatfs import FatVolume
 from beastbooter.layout import (
-    DEVICE_CFG_PATH,
+    DEVICE_ENV_PATH,
     ESP_SIZE_SECTORS,
     GRUBENV_PATH,
     ESP_MARKER_PATH,
@@ -24,6 +24,7 @@ from beastbooter.plan import make_plan
 from conftest import (
     ODD_SIZE,
     blkid_at,
+    device_env,
     fresh_image,
     mdir_files,
     mtype,
@@ -73,7 +74,7 @@ def test_sfdisk_readback_gpt(installed, fs):
 
 @pytest.mark.parametrize("layout", ["msdos", "gpt"])
 @pytest.mark.parametrize("fs", ["exfat", "fat32", "ntfs"])
-def test_data_fs_and_device_cfg(installed, layout, fs):
+def test_data_fs_and_device_env(installed, layout, fs):
     img = installed(layout, fs)
     plan = make_plan(SECTORS, layout)
     probe = blkid_at(img, plan.data.offset)
@@ -83,7 +84,7 @@ def test_data_fs_and_device_cfg(installed, layout, fs):
         assert probe["VERSION"] == want_version
     assert probe["LABEL"] == "BEASTBOOTER"
     assert probe["UUID"]
-    cfg = parse_set_lines(mtype(img, plan.esp.offset, DEVICE_CFG_PATH))
+    cfg = device_env(img, plan.esp.offset)
     assert cfg == {
         "bb_install_id": cfg["bb_install_id"],
         "bb_layout": layout,
@@ -103,15 +104,17 @@ def test_data_fs_and_device_cfg(installed, layout, fs):
             assert [(e.name, e.is_dir) for e in vol.listdir("/")] == [("beast-booter", True)]
 
 
-def test_device_cfg_format(installed):
+def test_device_env_format(installed):
+    """A GRUB environment block (data for load_env), not GRUB script: nothing in it is a command."""
     img = installed("msdos", "exfat")
-    text = mtype(img, make_plan(SECTORS, "msdos").esp.offset, DEVICE_CFG_PATH)
-    lines = text.splitlines()
+    data = mtype(img, make_plan(SECTORS, "msdos").esp.offset, DEVICE_ENV_PATH).encode()
+    assert is_grubenv(data)
+    lines = data[len(GRUBENV_SIGNATURE):].rstrip(b"#").decode().splitlines()
     assert [line.split("=")[0] for line in lines] == [
-        "set bb_install_id", "set bb_layout", "set bb_data_fs", "set bb_data_uuid",
-        "set bb_data_uuid_linux", "set bb_data_label", "set bb_serial",
+        "bb_install_id", "bb_layout", "bb_data_fs", "bb_data_uuid",
+        "bb_data_uuid_linux", "bb_data_label", "bb_serial",
     ]
-    assert all(line.startswith("set ") and line.endswith('"') for line in lines)
+    assert not any(c in line for line in lines for c in ' "$;')
 
 
 @pytest.mark.parametrize("layout", ["msdos", "gpt"])
@@ -123,7 +126,7 @@ def test_esp_contents(installed, fake_dist, layout):
     files = mdir_files(img, off)
     dist_files = {p.relative_to(fake_dist / "esp").as_posix() for p in (fake_dist / "esp").rglob("*") if p.is_file()}
     assert set(REQUIRED_ESP_FILES) <= files
-    assert files == dist_files | {DEVICE_CFG_PATH, ESP_MARKER_PATH, GRUBENV_PATH}
+    assert files == dist_files | {DEVICE_ENV_PATH, ESP_MARKER_PATH, GRUBENV_PATH}
     for rel in ("EFI/BOOT/BOOTX64.EFI", "grub/beast/version.cfg", "grub/i386-pc/normal.mod"):
         assert mtype(img, off, rel) == (fake_dist / "esp" / rel).read_text()
     assert not any(f.lower().endswith("fbx64.efi") for f in files)
@@ -138,7 +141,7 @@ def test_label_serial_and_fat_uppercase(tmp_path, fake_dist):
     img = fresh_image(tmp_path, fake_dist, "gpt", "fat32", "1G", "--label", "my usb", "--serial-console")
     plan = make_plan(1024 * 2048, "gpt")
     assert blkid_at(img, plan.data.offset)["LABEL"] == "MY USB"
-    cfg = parse_set_lines(mtype(img, plan.esp.offset, DEVICE_CFG_PATH))
+    cfg = device_env(img, plan.esp.offset)
     assert cfg["bb_data_label"] == "MY USB" and cfg["bb_serial"] == "1"
 
 

@@ -45,6 +45,8 @@ mount                 usr/sbin/losetup
 e2fsprogs             usr/sbin/e2fsck usr/sbin/fsck.ext2 usr/sbin/fsck.ext3 usr/sbin/fsck.ext4 usr/sbin/dumpe2fs
 xfsprogs              usr/sbin/xfs_repair usr/sbin/xfs_db usr/sbin/xfs_info
 btrfs-progs           usr/bin/btrfs usr/bin/btrfs-find-root
+dosfstools            usr/sbin/fsck.fat
+exfatprogs            usr/sbin/fsck.exfat
 exclude usr/sbin/pvmove usr/sbin/pvcreate usr/sbin/pvremove usr/sbin/pvresize usr/sbin/pvchange
 exclude usr/sbin/vgcreate usr/sbin/vgremove usr/sbin/vgextend usr/sbin/vgreduce usr/sbin/vgrename usr/sbin/vgmerge usr/sbin/vgsplit
 exclude usr/sbin/vgexport usr/sbin/vgimport usr/sbin/vgimportclone usr/sbin/vgconvert usr/sbin/vgcfgrestore

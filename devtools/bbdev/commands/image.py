@@ -53,7 +53,7 @@ def register(sub) -> None:
     p.add_argument("--debug", action="store_true", help="config.cfg: bb_debug=1 (BEAST: lines)")
     p.add_argument("--dryrun", action="store_true", help="config.cfg: bb_dryrun=1 (print the hand-off, do not boot)")
     p.add_argument("--autoboot", metavar="PATH", help="config.cfg: bb_autoboot=PATH (an ISO on the data partition)")
-    p.add_argument("--serial-console", action="store_true", help="installer --serial-console (device.cfg bb_serial=1)")
+    p.add_argument("--serial-console", action="store_true", help="installer --serial-console (device.env bb_serial=1)")
     p.add_argument("--force", action="store_true", help="replace an existing image")
     p.add_argument("--yes", "-y", action="store_true",
                    help="existing image: refresh (or rebuild) it without asking")
@@ -227,6 +227,7 @@ def _run(args) -> int:
             with diskimg.data_access(info) as w:
                 if config:
                     w.write(diskimg.USER_CONFIG, config.encode())
+                    w.write(diskimg.USER_ENV, userconfig.UserConfig(config).env_block()[0])
                 w.copy_files(files)
                 for d in dirs:
                     w.mkdirs(d)
@@ -256,7 +257,7 @@ def _run(args) -> int:
               "    (or bb-dev debug-config)")
     if config:
         settings = userconfig.UserConfig(config).settings()
-        print("config  " + diskimg.USER_CONFIG + ": " + " ".join(f"{k}={v}" for k, v in settings.items()))
+        print("config  " + diskimg.USER_CONFIG + " and config.env: " + " ".join(f"{k}={v}" for k, v in settings.items()))
     else:
         print(f"config  none (bb-dev debug-config --set bb_debug=1 adds {diskimg.USER_CONFIG})")
     contents = describe_contents(files, sizes, dirs)

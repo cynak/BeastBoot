@@ -21,10 +21,10 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..layout import DIST_ESP_DIR, DIST_MANIFEST
+from ..layout import DIST_ESP_DIR, DIST_MANIFEST, ENROLL_CERT_PATH
 
 ENV_DIST = "BEAST_BOOTER_DIST"
-CERT_FILE = "ENROLL_THIS_KEY_IN_MOKMANAGER.cer"
+CERT_FILE = ENROLL_CERT_PATH
 
 
 def app_dir() -> Path:

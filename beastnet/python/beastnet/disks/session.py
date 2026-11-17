@@ -10,6 +10,7 @@ Script-mode steps (docs/DISK_TOOLS.md section 6) are checked by
 
 from __future__ import annotations
 
+import errno
 import importlib
 import os
 from collections.abc import Callable
@@ -20,7 +21,7 @@ from ..cmdline import netboot
 from ..context import Context
 from ..errors import COPY, DISK_REFUSED, SCRIPT, BeastNetError
 from ..paths import normalize_data_path
-from .model import Candidate, CopyKind, CopyProgress, CopyResult, Disk, Health, Inventory, Stack, Volume
+from .model import SHARED_SERIAL, Candidate, CopyKind, CopyProgress, CopyResult, Disk, Health, Inventory, Stack, Volume
 
 OPS = ("scan", "health", "assemble", "reconstruct", "use_disk", "image", "clone", "restore")
 LEVELS = ("raid0", "raid1", "raid4", "raid5", "raid6", "raid10", "linear")
@@ -37,9 +38,9 @@ _STEP_KEYS = {
     "reconstruct": ({"op", "members"}, {"mode", "name", "level", "chunk", "order", "offset",
                                          "layout"}),
     "use_disk": ({"op", "disk", "confirm"}, {"partition"}),
-    "image": ({"op", "source", "dest"}, {"verify", "member_of_set", "on"}),
-    "clone": ({"op", "source", "target", "confirm"}, {"verify", "member_of_set"}),
-    "restore": ({"op", "image", "target", "confirm"}, {"verify", "on"}),
+    "image": ({"op", "source", "dest"}, {"verify", "member_of_set", "on", "restart"}),
+    "clone": ({"op", "source", "target", "confirm"}, {"verify", "member_of_set", "restart"}),
+    "restore": ({"op", "image", "target", "confirm"}, {"verify", "on", "restart"}),
 }
 
 
@@ -68,7 +69,7 @@ def parse_steps(steps: object) -> list[dict]:
             elif k in ("chunk", "offset"):
                 if not isinstance(v, int) or isinstance(v, bool) or v < 0:
                     raise _bad(f"step {i}: {k} must be a number of bytes")
-            elif k in ("verify", "member_of_set"):
+            elif k in ("verify", "member_of_set", "restart"):
                 if not isinstance(v, bool):
                     raise _bad(f"step {i}: {k} must be true or false")
             elif not isinstance(v, str) or not v:
@@ -90,6 +91,15 @@ def parse_steps(steps: object) -> list[dict]:
                 except ValueError as e:
                     raise _bad(f"step {i}: {e}") from None
     return steps
+
+
+def _fsrepair(m: Any) -> Any:
+    """fsrepair from the modules (tests may pass a fake), else the real one."""
+    try:
+        return m.fsrepair
+    except AttributeError:
+        from . import fsrepair
+        return fsrepair
 
 
 class _Modules:
@@ -133,9 +143,24 @@ class DiskSession:
         self.health: dict[str, Health] = {}         # Disk.id -> last reading
         self.dests: dict[str, Dest] = {}            # Disk.id -> mounted image destination
         self.entered = False
+        self.drive_checked = False
+        self.notices: list[str] = []                # repairs done, for the screen (fsrepair)
+        self.stick_problem = ""                     # the stick's data partition cannot keep mapfiles
+        self.say: Callable[[str], None] | None = None   # the screen's "what is happening" line
 
     # -- life cycle -------------------------------------------------------------------
+    def check_drive(self) -> list[str]:
+        """The stick's data partition after a power cut: checked and repaired before the
+        guard is on (fsrepair.check_stick). Returns notes for the screen."""
+        if self.drive_checked:
+            return []
+        self.drive_checked = True
+        notes, self.stick_problem = _fsrepair(self.m).check_stick(self.ctx, self.say)
+        self.notices += notes
+        return notes
+
     def enter(self) -> Inventory:
+        self.check_drive()
         self.m.guard.protect_all(self.ctx)
         self.entered = True
         return self.scan()
@@ -172,8 +197,14 @@ class DiskSession:
     def disk(self, ref: str) -> Disk:
         d = self.inv.disk(ref)
         if d is None:
+            self._not_shared(ref)
             raise BeastNetError(SCRIPT, f"no disk with serial or name {ref!r}")
         return d
+
+    def _not_shared(self, ref: str) -> None:
+        """Refuse a name that is a serial several attached disks report."""
+        if self.inv.serial_shared(ref):
+            raise BeastNetError(DISK_REFUSED, SHARED_SERIAL.format(ref))
 
     def _stack(self, ref: str, *, required: bool = True) -> Stack | None:
         for s in self.inv.stacks:
@@ -202,6 +233,7 @@ class DiskSession:
             for v in self.inv.volumes:
                 if v.id == d.id:
                     return v
+        self._not_shared(ref)
         raise BeastNetError(SCRIPT, f"no disk or volume {ref!r}")
 
     def device(self, ref: str) -> str:
@@ -215,6 +247,7 @@ class DiskSession:
             for p in disk.partitions:
                 if ref in (p.id, p.path):
                     return p.path
+        self._not_shared(ref)
         raise BeastNetError(SCRIPT, f"no disk or partition {ref!r}")
 
     # -- image destinations on other disks ----------------------------------------------
@@ -257,9 +290,7 @@ class DiskSession:
             raise BeastNetError(DISK_REFUSED, "the BeastBoot drive's data partition is already the default place")
         if not d.serial:
             raise BeastNetError(DISK_REFUSED, f"{d.id} reports no serial number, so it cannot be told apart safely")
-        if any(o.serial == d.serial for o in self.inv.disks if o.id != d.id):
-            raise BeastNetError(DISK_REFUSED, f"another disk reports the same serial as {d.id}; "
-                                "they cannot be told apart safely")
+        self._not_shared(d.serial)
         why = self.in_use(d.id)
         if why:
             raise BeastNetError(DISK_REFUSED, f"{d.id} cannot hold images: {why}")
@@ -282,6 +313,8 @@ class DiskSession:
                 handle = self.m.guard.make_writable(self.ctx, d, confirmed=True)
                 self.m.guard.exempt(*names)
             os.makedirs(mp, exist_ok=True)
+            if write:  # confirmed for writing: a dirty volume is checked before it is mounted
+                self.notices += _fsrepair(self.m).check_dest(self.ctx, device, fs_type, d.id, self.say)
             opts = DEST_OPTS if write else SOURCE_OPTS[fs_type] + ",nodev,nosuid,noexec"
             cp = self.ctx.system.runner.run(["mount", "-t", DEST_FS[fs_type], "-o", opts, device, mp],
                                             timeout=120)
@@ -416,7 +449,7 @@ class DiskSession:
         return None
 
     def plan_copy(self, kind: CopyKind, source: str, target: str, *, confirm: str | None = None,
-                  verify: bool = True, member_of_set: bool = False):
+                  verify: bool = True, member_of_set: bool = False, restart: bool = False):
         """source: volume ref (clone/image) or a local image path (restore);
         target: disk serial (clone/restore) or a local image path (image).
         ``member_of_set``: the user asked for one disk of a set on its own."""
@@ -427,14 +460,30 @@ class DiskSession:
             if any(os.path.commonpath([os.path.abspath(target), r]) == r for r in roots):
                 os.makedirs(os.path.dirname(target), exist_ok=True)  # e.g. /images
         maps = self.ctx.paths.data_local(MAPS_DIR)
-        return self.m.copy.plan(self.ctx, self.inv, kind, source, target, confirm=confirm,
+        plan = self.m.copy.plan(self.ctx, self.inv, kind, source, target, confirm=confirm,
                                 mapfile_dir=maps, verify=verify, member_of_set=member_of_set)
+        if restart:
+            plan.restart = True
+        return plan
 
     def run_copy(self, plan, on_progress: Callable[[CopyProgress], None] | None = None,
                  should_stop: Callable[[], bool] | None = None) -> CopyResult:
-        result = self.m.copy.run(self.ctx, plan, on_progress or (lambda p: None),
-                                 should_stop or (lambda: False))
-        self.m.guard.reapply(self.ctx)
+        data = os.path.abspath(self.ctx.paths.data)
+        if self.stick_problem and os.path.abspath(plan.mapfile).startswith(data + os.sep):
+            raise BeastNetError(DISK_REFUSED, "the copy's progress cannot be kept on the BeastBoot drive: "
+                                + self.stick_problem)
+        try:
+            result = self.m.copy.run(self.ctx, plan, on_progress or (lambda p: None),
+                                     should_stop or (lambda: False))
+        except OSError as e:
+            if e.errno != errno.EROFS:
+                raise
+            raise BeastNetError(DISK_REFUSED, f"{e.filename or 'a filesystem'} became read-only during the copy "
+                                "(the kernel found an error on it)",
+                                "Restart the computer and start the same copy again: Disk tools check the "
+                                "drive first, and the copy resumes from its last saved progress.") from e
+        finally:
+            self.m.guard.reapply(self.ctx)
         return result
 
     # -- script mode ------------------------------------------------------------------
@@ -464,16 +513,17 @@ class DiskSession:
         else:
             verify = s.get("verify", True)
             member = s.get("member_of_set", False)
+            restart = bool(s.get("restart", False))
             if op == "image":
                 plan = self.plan_copy(CopyKind.IMAGE, s["source"], self.dest_path(s["dest"], s.get("on")),
-                                      verify=verify, member_of_set=member)
+                                      verify=verify, member_of_set=member, restart=restart)
             elif op == "clone":
                 plan = self.plan_copy(CopyKind.CLONE, s["source"], s["target"], confirm=s["confirm"],
-                                      verify=verify, member_of_set=member)
+                                      verify=verify, member_of_set=member, restart=restart)
             else:
                 plan = self.plan_copy(CopyKind.RESTORE, self.dest_path(s["image"], s.get("on"), write=False),
                                       s["target"],
-                                      confirm=s["confirm"], verify=verify)
+                                      confirm=s["confirm"], verify=verify, restart=restart)
             result = self.run_copy(plan)
             if not result.ok:
                 if result.errors and result.bytes:

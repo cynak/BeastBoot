@@ -1,8 +1,8 @@
-"""bb_theme under Secure Boot: a theme from the data partition would make the
-signed GRUB parse theme and PNG files from untrusted storage (GRUB's Secure
-Boot checks do not cover them). With Secure Boot on the menu ignores
-bb_theme, uses its built-in theme and says so like it does for config.cfg.
-Without Secure Boot nothing changes. Static checks of the menu."""
+"""bb_theme on UEFI: a theme from the data partition would make the signed
+GRUB parse theme and PNG files from untrusted storage (nothing checks them).
+On UEFI, with Secure Boot on or off, the menu ignores bb_theme, uses its
+built-in theme (in the memdisk of grubx64.efi) and says so like it does for
+config.cfg. Legacy BIOS still uses it. Static checks of the menu."""
 
 from __future__ import annotations
 
@@ -26,31 +26,31 @@ def code(text: str) -> str:
     return "\n".join(ln for ln in text.splitlines() if not ln.strip().startswith("#"))
 
 
-def test_main_drops_bb_theme_under_secure_boot():
+def test_main_drops_bb_theme_on_uefi():
     text = code(MAIN.read_text())
     last_sb = text.rindex('if [ "$lockdown" = "y" ]; then\n  set bb_sb=1')
-    m = re.search(r'^if \[ "\$bb_sb" = "1" -a -n "\$bb_theme" \]; then\n'
-                  r'  set bb_theme=""\n  set bb_theme_ignored=1\n  bb_dbg "theme-ignored-sb"\n'
+    m = re.search(r'^if \[ "\$bb_platform" = "efi" -a -n "\$bb_theme" \]; then\n'
+                  r'  set bb_theme=""\n  set bb_theme_ignored=1\n  bb_dbg "theme-ignored"\n'
                   r'  echo "[^"\n]*bb_theme[^"\n]*"\n', text, re.M)
-    assert m, "main.cfg must drop bb_theme with Secure Boot on and say so"
+    assert m, "main.cfg must drop bb_theme on UEFI and say so"
     # After bb_sb is final, before the graphical menu is set up.
     assert last_sb < m.start() < text.index("bb_gfx_init")
     assert re.search(r"^set bb_theme_ignored=0$", text[:m.start()], re.M)
 
 
-def test_gfx_init_never_loads_a_data_theme_under_secure_boot():
+def test_gfx_init_never_loads_a_data_theme_on_uefi():
     body = code(function_body(LIB.read_text(), "bb_gfx_init"))
     m = re.search(r'^  if \[ ([^\n]*) \]; then\n    if \[ -f "\(\$bb_data\)\$bb_theme" \]; then\n'
                   r'      set bb_g_theme="\(\$bb_data\)\$bb_theme"\n', body, re.M)
     assert m, "data-partition theme block not found"
-    assert '"$bb_sb" != "1"' in m.group(1).split(" -a "), m.group(1)
+    assert '"$bb_platform" != "efi"' in m.group(1).split(" -a "), m.group(1)
     assert body.count("$bb_theme") == 3
 
 
 def test_ignored_settings_entry_lists_the_theme():
     text = code(MAIN.read_text())
     m = re.search(r'^  if \[ "\$bb_cfg_ignored" = "1" -o "\$bb_theme_ignored" = "1" \]; then\n'
-                  r'    menuentry "[^"\n]*Secure Boot[^"\n]*" --class=help \{\n'
+                  r'    menuentry "[^"\n]*UEFI[^"\n]*" --class=help \{\n'
                   r'      bb_cfg_ignored_text\n', text, re.M)
     assert m, "the help entry must also appear when only bb_theme was ignored"
     body = function_body(LIB.read_text(), "bb_cfg_ignored_text")
@@ -61,7 +61,7 @@ def test_ignored_settings_entry_lists_the_theme():
 
 def test_documented():
     menu = MENU_MD.read_text()
-    assert "theme-ignored-sb" in menu
-    sb = menu[menu.index("### With Secure Boot on"):]
-    assert "`bb_theme`" in sb[:sb.index("\n## ")]
-    assert "bb_theme" in GUIDE_MD.read_text().split("**Secure Boot on:**", 1)[1][:800]
+    assert "`BEAST: theme-ignored`" in menu
+    uefi = menu[menu.index("### On UEFI"):]
+    assert "`bb_theme`" in uefi[:uefi.index("\n## ")]
+    assert "bb_theme" in GUIDE_MD.read_text().split("**On UEFI PCs**", 1)[1][:800]

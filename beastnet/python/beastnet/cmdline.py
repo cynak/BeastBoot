@@ -62,7 +62,11 @@ class BootParams:
     netboot: bool = False
     server: str | None = None  # beastnet.server=http://host:port (the BeastServer; not used yet)
     consoles: list[str] = field(default_factory=list)  # console= values, in order
-    raw: dict[str, str] = field(default_factory=dict)  # every beastnet.* parameter
+    # Every beastnet.* parameter by its name without the prefix ("1" when it has no value).
+    raw: dict[str, str] = field(default_factory=dict)
+    # The ones of raw that this parser does not know. They are kept, never rejected and never
+    # logged (they may hold secrets): add-ons read theirs from here (addons.py).
+    extra: dict[str, str] = field(default_factory=dict)
 
     @property
     def serial_console(self) -> str | None:
@@ -109,6 +113,8 @@ def parse_cmdline(text: str) -> BootParams:
             p.netboot = _truthy(value)
         elif key == "server":
             p.server = value or None
+        else:
+            p.extra[key] = p.raw[key]
     return p
 
 

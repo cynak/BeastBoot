@@ -117,9 +117,9 @@ jobs:
       - name: "Boot files: real dist from the pinned build container"
         if: env.DIST_SOURCE == 'container'
         run: |
-          # A signing key that exists only in this run: these packages are for
-          # testing. Release builds sign with the project key (docs/SECURE_BOOT.md).
-          BB_KEY_CN="beast-boot CI throwaway key (run $GITHUB_RUN_ID)" build/keygen.sh
+          # Signing keys that exist only in this run: these packages are for
+          # testing. Release builds sign with the project keys (docs/SECURE_BOOT.md).
+          BB_KEY_CN="beast-boot CI throwaway CA (run $GITHUB_RUN_ID)" build/keygen.sh
           docker build -t beast-boot-build -f build/Containerfile .
           mkdir -p out/container
           docker run --rm -v "$PWD/keys:/src/keys:ro" -v "$PWD/out/container:/out" \

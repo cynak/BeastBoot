@@ -3,7 +3,7 @@
   "binaries": [
     "sh", "mount", "umount", "mkdir", "cat", "cp", "find", "xargs", "sort", "wc", "sleep", "grep", "mv",
     "setsid", "mdev", "dmesg", "ip", "udhcpc", "date", "sync", "reboot", "poweroff",
-    "modprobe", "wpa_supplicant", "iw", "python3", "mokutil"
+    "modprobe", "wpa_supplicant", "iw", "python3", "mokutil", "fsck.fat", "fsck.exfat"
   ],
   "python_modules": [
     "curses", "termios", "locale", "textwrap", "dataclasses", "unicodedata", "encodings.idna",

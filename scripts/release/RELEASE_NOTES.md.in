@@ -4,6 +4,22 @@ ${kind} ${tag}. Download the package for your system, unpack it and start **Beas
 (docs/PORTABLE.md), or install from the boot files directly with
 `beast-boot install --dist beast-boot-${version}-dist.zip`.
 
+### What is new in 0.5.0
+
+- **Signed menu.** On UEFI the boot menu, its scripts and its themes are now inside the signed
+  GRUB file, so with Secure Boot on nothing unsigned runs before an operating system starts.
+  `config.cfg` and custom themes on the drive are no longer read on UEFI (legacy BIOS is
+  unchanged); settings go in `config.env` (docs/MENU.md).
+- **BeastBoot CA.** GRUB, the network helper's kernel and the Windows loader each have their own
+  certificate, issued by one CA certificate that you enroll once (see below).
+- **GRUB reports SBAT level `grub,7`** (fix for CVE-2026-97876), which shim's current revocation
+  list requires.
+- **Disk tools.** Stop and resume after a power cut, md arrays with 0.90, 1.0
+  and 1.1 metadata, and runs under legacy BIOS and Secure Boot. Two disks that report the same
+  serial number are refused until only one is attached (docs/DISK_TOOLS.md).
+- **Network helper kernel** 7.3.0-10.10.
+- Releases are signed in a separate build job that sees only the signing keys (docs/RELEASING.md).
+
 ### Secure Boot certificate
 
 On the first Secure Boot start, MokManager asks you to enroll
@@ -18,6 +34,13 @@ On the first Secure Boot start, MokManager asks you to enroll
 - SHA-256: `${cert_sha256}`
 
 The procedure is in docs/SECURE_BOOT.md, section 3 "Check the key before you enroll it".
+
+This is the BeastBoot CA certificate, new in 0.5.0 (releases up to 0.4.x used another
+certificate). After updating a drive from 0.4.x or older, every computer with Secure Boot on
+asks once to enroll it; the old certificate can then be removed from each computer
+(docs/SECURE_BOOT.md, section 4). GRUB, the network helper's kernel and the Windows loader
+are each signed with their own certificate issued by this CA, so one of them can be revoked
+without the others (docs/SECURE_BOOT.md, section 7).
 
 ### Vulnerabilities
 

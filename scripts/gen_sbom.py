@@ -660,7 +660,7 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
             continue
         used = {"grub-efi-amd64-signed": "only its SBAT CSV is copied into grubx64.efi's .sbat; "
                                          "its signed grubx64.efi.signed is NOT shipped",
-                "grub2-common": "shipped: grub/fonts/unicode.pf2; build: grub-mkfont",
+                "grub2-common": "shipped: grub/fonts/unicode.pf2 (also in grubx64.efi's memdisk); build: grub-mkfont",
                 "shim-signed": "shipped: esp/EFI/BOOT/BOOTX64.EFI (Debian's shim, signed through Microsoft "
                                "UEFI CA 2011 and Microsoft UEFI CA 2023)",
                 "shim-helpers-amd64-signed": "shipped: esp/EFI/BOOT/mmx64.efi (MokManager, signed with "
@@ -1009,6 +1009,16 @@ def build_model(root: Path, dist: Path, distro: str, spdx_ids: dict,
                 m.dep(fref, grub_ref, "GENERATED_FROM")
                 if rel.endswith("grubx64.efi"):
                     item["props"]["sbat-source"] = sb.get("sbat_source")
+            if rel.endswith("grubx64.efi"):
+                # its memdisk: the menu scripts, hooks, theme and fonts GRUB runs under UEFI
+                # (manifest build.efi_memdisk, "path in the memdisk=path in dist/")
+                inside = [e.split("=", 1)[1] for e in manifest.get("build", {}).get("efi_memdisk", []) if "=" in e]
+                for other in inside:
+                    if other in files:
+                        m.dep(fref, f"file:{other}", "GENERATED_FROM")
+                item["props"]["memdisk"] = (f"{len(inside)} files of dist/esp/ (menu scripts, hooks, theme, fonts, "
+                                            "the two Windows PE start-up scripts) are embedded and signed with the "
+                                            "image; under UEFI GRUB reads them only from there")
             if rel.endswith("grubx64.efi") and sbat_src:
                 m.dep(fref, pkg_ref(sbat_src.group(1), sbat_src.group(2)), "GENERATED_FROM")
                 item["props"]["sbat-source"] = sb.get("sbat_source")

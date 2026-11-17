@@ -99,7 +99,7 @@ so a second run is a quick check:
    debugpy, ruff and their dependencies, every file pinned by SHA-256 and
    installed with `pip --require-hashes`; on hosts without `ensurepip` the
    pinned pip wheel is downloaded and checked first);
-4. **keys**: `make keys`, if `keys/` holds no signing key yet;
+4. **keys**: `make keys`, if `keys/` holds no signing keys yet (a local CA and three leaves);
 5. **build**: `make build`, if `dist/` is missing or older than `grub/` or `build/`;
 6. **unit tests**: `pytest -q installer/tests`, when something changed;
 7. **dev image**: `bb-dev image --fixtures --debug`, if the image is missing.
@@ -175,7 +175,7 @@ Activate it in a shell with `source .venv/bin/activate` if you want its
 | `build/winpe/` | the Windows PE start-up files the menu injects with wimboot (`dist/esp/beast-booter/winpe/`): `winpeshl.ini`, `beastboot.cmd`, and `beastmount.exe`, built from `beastmount.c` by `beastmountsrc.py` with the pinned MinGW-w64 .debs of `mingw-w64.lock.json` (reproducible: compiled twice and compared; `BB_BEASTMOUNT_BUILDER`, `BB_BEASTMOUNT_CACHE`) |
 | `build/beastnet/` | builds the beast-net helper (`dist/esp/beast-net/`): pinned Ubuntu packages, module list, initramfs, firmware catalog; see [build/beastnet/README.md](../build/beastnet/README.md) |
 | `beastnet/` | the helper's own code: `python/beastnet/` (network, WiFi, download, hand-off, curses and plain UIs), `rootfs/` (`/init`, udhcpc script), `tests/` (unit tests) |
-| `keys/` | your local Secure Boot signing key (`make keys`; private files are git-ignored) |
+| `keys/` | your local Secure Boot signing keys: a CA and three leaves (`make keys`; private files are git-ignored) |
 | `dist/` | build output (git-ignored): exactly what goes on a drive, plus `manifest.json` |
 | `bin/` | `beast-boot` (installer) and `bb-dev` (developer helpers) |
 | `devtools/bbdev/` | `bb-dev`: `cli.py`, `paths.py`, `qemu.py` (all QEMU flags), `commands/<command>.py` |
@@ -207,10 +207,11 @@ Generated, git-ignored:
 ### 4.1 Full loop: edit, build, image, boot
 
 Use this after changing anything in `build/`, `installer/`, the module lists,
-the SBAT template or the key, and before trusting a result:
+the SBAT template or the key, for every change to the menu (`grub/`) or the
+theme that you want to see **under UEFI**, and before trusting a result:
 
 ```sh
-make build                              # dist/ (signs GRUB with keys/beast-boot.key)
+make build                              # dist/ (signs GRUB, the helper kernel and wimboot with the leaf keys in keys/)
 bin/bb-dev image --fixtures --debug     # out/dev/beast-boot-dev.img (make dev-image)
 bin/bb-dev image --fixtures --debug --force   # ... again, replacing the existing image
 bin/bb-dev vm                           # boot it: UEFI, USB stick, a window (make vm)
@@ -263,7 +264,7 @@ Your own ISOs:
 bin/bb-dev image --isos ~/isos --force                  # copy ~/isos (folders kept) into a new image
 bin/bb-dev image --out out/dev/gpt.img --layout gpt --fs fat32 --fixtures --dryrun
 bin/bb-dev image --fixtures --debug --autoboot /recipes/casper.iso --force   # boot one ISO straight away
-bin/bb-dev image --fixtures --serial-console --force    # installer --serial-console (bb_serial=1 in device.cfg)
+bin/bb-dev image --fixtures --serial-console --force    # installer --serial-console (bb_serial=1 in device.env)
 ```
 
 The data partition is exFAT by default when `udisksctl` works for you
@@ -271,22 +272,49 @@ The data partition is exFAT by default when `udisksctl` works for you
 `bb-dev image` falls back to FAT32 and says so; FAT32 cannot hold files of
 4 GiB or more.
 
-### 4.2 Fast menu loop: edit grub/, sync, reboot
+### 4.2 The menu edit loop
 
-For changes to the menu scripts (`grub/`), skip the build and reinstall:
+Since 0.5.0 the menu is inside the signed `grubx64.efi`: `grub.cfg`,
+`grub/beast/`, the hooks, the theme and the fonts are in its memdisk, and
+under UEFI GRUB reads them only from there, with Secure Boot on or off
+([ARCHITECTURE.md §5](ARCHITECTURE.md#5-grub-runtime-contract)). The files in
+the ESP's `/grub/` are what legacy BIOS runs. So there are two loops:
+
+**UEFI (and Secure Boot): rebuild.** A menu change is a new `grubx64.efi`.
+
+```sh
+make build                 # GRUB itself is cached; this re-packs the menu into grubx64.efi and signs it
+bin/bb-dev vm              # sees the new build id and updates the image's boot files first
+bin/bb-dev vm --mode sb-enrolled
+```
+
+`bb-dev vm --build` does both. `bin/beast-boot update --image IMG --yes` is
+what `bb-dev vm` runs for the update; ISOs and settings on the data
+partition are kept.
+
+**Legacy BIOS: sync and reboot.** The same menu scripts run under BIOS from
+the ESP, so for most menu work (listing, recipes, texts, navigation) the
+quick loop is still there:
 
 ```sh
 bin/bb-dev menu-sync                # copy changed grub/ files into the image's ESP
 bin/bb-dev menu-sync --watch        # keep syncing on every save (make menu-sync WATCH=1)
+bin/bb-dev vm --mode bios
 ```
 
 Then reboot the guest: `system_reset` on the QEMU monitor (see 7.1),
-Ctrl+Alt+Del in the QEMU window, or quit and run `bin/bb-dev vm` again.
+Ctrl+Alt+Del in the QEMU window, or quit and run `bin/bb-dev vm --mode bios`
+again. Before you trust a change, run the UEFI loop once: what is specific
+to UEFI (the early config, the memdisk paths, lockdown) only shows there.
 
+- **`menu-sync` changes nothing for a UEFI boot**, and says so on every run.
+  There is no unsigned or "read the menu from the ESP" build of
+  `grubx64.efi` for development: such an image would be exactly what this
+  design removes, and one build flag away from shipping.
 - It uses the same file selection as `build/build.sh` (no dotfiles, editor
   backups or `*.md`). The ESP's `/grub/` then mirrors `grub/`: changed files
   are rewritten, new ones added, menu files you deleted are removed. It
-  never touches `version.cfg`, `device.cfg`, `grubenv` or what the build
+  never touches `version.cfg`, `device.env`, `grubenv` or what the build
   puts under `/grub/` from elsewhere (per `dist/manifest.json`: the theme
   from `build/theme`, the fonts, `i386-pc/`). `BB_MENU_DIR` overrides the
   source directory, as for `build.sh`.
@@ -298,13 +326,14 @@ Ctrl+Alt+Del in the QEMU window, or quit and run `bin/bb-dev vm` again.
 - It writes the ESP with mtools at the offset `beast-boot info --json`
   reports, and prints what changed. `--watch` polls every second
   (`--interval`).
-- It works in every mode, Secure Boot included: GRUB script files are not
-  signature-checked (shim verifies GRUB itself and the kernels it starts),
-  so nothing about verification changes.
 - A synced image no longer matches `dist/manifest.json`. `make build`
   followed by `bb-dev vm` (a new build id triggers `update`), or
   `bb-dev vm --refresh always`, brings it back in line; do that before
   trusting an e2e run or a release.
+- The e2e tests never change menu files to steer a test: they use
+  `config.env` (and `config.cfg` for BIOS). `tests/e2e/test_e2e_signed_menu.py`
+  changes them on purpose, to prove that UEFI ignores them. A test that
+  needs another menu builds another `dist/` (`BB_MENU_DIR`, `BB_DIST_DIR`).
 
 ### 4.3 Installer loop
 
@@ -329,7 +358,7 @@ source scripts/dev-env.sh
 esp=$(bin/beast-boot info --image out/dev/try.img --json |
       python3 -c 'import json, sys; print(json.load(sys.stdin)["esp"]["start_lba"] * 512)')
 MTOOLS_SKIP_CHECK=1 mdir -i "out/dev/try.img@@$esp" ::/grub/beast
-MTOOLS_SKIP_CHECK=1 mtype -i "out/dev/try.img@@$esp" ::/grub/beast/device.cfg
+MTOOLS_SKIP_CHECK=1 mtype -i "out/dev/try.img@@$esp" ::/grub/beast/device.env
 ```
 
 To debug the installer in VS Code, see [section 8](#8-vs-code).
@@ -491,7 +520,7 @@ OVMF code and vars (including `OVMF_CODE_4M.secboot.fd` and
 `OVMF_VARS_4M.ms.fd`); SeaBIOS; QEMU and its GTK display module; KVM access;
 mtools; xorriso; sfdisk; `mkfs.fat`, `mkfs.exfat`, `mkfs.ntfs`; sbsign/sbverify;
 openssl; virt-fw-vars; a usable `udisksctl`; gdb and the GRUB debug symbols;
-`.venv`; the signing key (and how long its certificate is still valid);
+`.venv`; the signing keys (and how long the certificates are still valid);
 `dist/` present and not older than `grub/` and `build/`; whether the
 default dev image is current (the installer's layout version and the build
 id of `dist/`), with the command that refreshes it; free disk space.
@@ -514,10 +543,10 @@ the data partition and writes `/beast-booter/config.cfg`.
 | `--fs exfat\|fat32\|ntfs` | exFAT if udisks works, else FAT32 | data filesystem |
 | `--isos DIR` | | copy this directory tree of ISOs (structure kept) |
 | `--fixtures` | | add the e2e fixture ISOs under `/recipes/` (built and cached in `out/e2e/fixtures/`) |
-| `--debug` | | `set bb_debug=1` in config.cfg |
+| `--debug` | | `bb_debug=1` in config.cfg and config.env |
 | `--dryrun` | | `set bb_dryrun=1` |
 | `--autoboot PATH` | | `set bb_autoboot="PATH"` |
-| `--serial-console` | | installer `--serial-console` (`bb_serial=1` in device.cfg) |
+| `--serial-console` | | installer `--serial-console` (`bb_serial=1` in device.env) |
 | `--force` | | replace an existing image at `--out` |
 | `--yes`, `-y` | | existing image without `--force`: refresh or rebuild it without asking |
 
@@ -555,7 +584,7 @@ Boots an image in QEMU with the flags the e2e suite uses (KVM with
 | `uefi` | OVMF, Secure Boot off | `out/vm/<stem>/uefi.vars`, kept between runs |
 | `sb` | OVMF Secure Boot, Microsoft keys | `sb.vars`, created from the Microsoft-keys template on first run and kept, so a key you enroll by hand in MokManager stays enrolled |
 | `sb-fresh` | same | brand-new Microsoft-keys vars on every run: never enrolled |
-| `sb-enrolled` | same | rebuilt on every run: Microsoft keys plus `keys/beast-boot.cer` in MokList (`virt-fw-vars --add-mok`, exactly what MokManager enrollment stores). Warns when the image was signed with another key (`bb-dev image --force` rebuilds it) |
+| `sb-enrolled` | same | rebuilt on every run: Microsoft keys plus `keys/beast-boot.cer` (the CA certificate) in MokList (`virt-fw-vars --add-mok`, exactly what MokManager enrollment stores). Warns when the image was signed with another key (`bb-dev image --force` rebuilds it) |
 
 Everything for one image lives in `out/vm/<image stem>/`: `<mode>.vars`,
 `serial-<mode>.log`, `ovmf-debug.log` / `seabios-debug.log`, `monitor.sock`
@@ -586,14 +615,19 @@ bin/bb-dev vm --mode sb --print-cmd -- -d int   # just show the command (with ex
 
 ### `bb-dev menu-sync [--image PATH] [--watch] [--interval SECONDS]`
 
-Copies `grub/` into the image's ESP (`/grub/`), see [4.2](#42-fast-menu-loop-edit-grub-sync-reboot).
-`--watch` polls every `--interval` seconds and re-syncs on change. Refuses
-an image with older boot files than `dist/`, with the command that fixes it.
+Copies `grub/` into the image's ESP (`/grub/`), see [4.2](#42-the-menu-edit-loop).
+**Legacy BIOS only**: under UEFI the menu is inside the signed `grubx64.efi`
+and the ESP's `/grub/` is not read, so there `make build` and `bb-dev vm` are
+the loop; the command says so on every run. `--watch` polls every
+`--interval` seconds and re-syncs on change. Refuses an image with older boot
+files than `dist/`, with the command that fixes it.
 
 ### `bb-dev debug-config [--image PATH] [--show] [--set KEY=VALUE ...] [--unset KEY ...] [--clear] [--print]`
 
 Edits `/beast-booter/config.cfg` on the image's data partition (FAT32 with
-mtools, exFAT/NTFS through udisks).
+mtools, exFAT/NTFS through udisks) and writes `/beast-booter/config.env` next
+to it with the same settings. The menu runs `config.cfg` under legacy BIOS
+only; on UEFI it reads `config.env`, as data (MENU.md).
 
 | Key | Meaning |
 |---|---|
@@ -619,17 +653,20 @@ bin/bb-dev debug-config --set bb_debug=1 bb_serial=1 --print > config.cfg   # fo
   Booleans accept `1/0`, `on/off`, `yes/no`; `timeout` must be a number.
   Other names are written as given (with a warning) and GRUB gets them
   unchanged.
-- With Secure Boot on (`sb-enrolled` VMs) the menu ignores config.cfg and
-  reads only `/beast-booter/config.env` (MENU.md); make that with
-  `grub-editenv FILE set bb_debug=1` and copy it in, or use `device.cfg`.
-- The menu reads config.cfg at boot: after a change, reboot the VM
+- `config.env` carries the settings on the menu's list (everything in the
+  table above, `default`, and the other `bb_*` settings of MENU.md) and no
+  value with a double quote. A name that is not on the list, or such a
+  value, stays in config.cfg only and so applies under legacy BIOS only;
+  bb-dev warns when that happens.
+- The menu reads both files at boot: after a change, reboot the VM
   (monitor `system_reset`). bb-dev reminds you when a VM is running on the
   image.
 - `--print` writes nothing: it prints the resulting file on stdout, for a
   **real USB stick** (you copy it to `/beast-booter/config.cfg` on the
   stick's data partition yourself; bb-dev never writes real devices). It
   starts from an empty file, or from the config.cfg of `--image` when you
-  give one.
+  give one. For a UEFI PC it also prints the `grub-editenv` command that
+  makes the matching `config.env`.
 
 ### `bb-dev gdb [--port 1234] [--platform pc|efi] [--image PATH] [--print-cmd]`
 
@@ -709,13 +746,14 @@ fastest way to check a recipe: the `BEAST: dryrun linux ...` line shows the
 exact kernel and command line the ISO would get.
 
 `config.env` and `config.cfg` are read after the data partition was found
-(with Secure Boot on only `config.env`, see MENU.md). To get `bb_debug`
-output when the data partition itself is the problem, the same settings can
-go in `grub/beast/device.cfg` on the ESP (see MENU.md). bb-dev leaves
-`device.cfg` to the installer: `bb-dev image --serial-console` puts
-`bb_serial=1` there, and for anything else copy the file out and back with
-`mtype`/`mcopy` at the ESP offset ([4.3](#43-installer-loop)) on a scratch
-copy of the image.
+(on UEFI only `config.env`, see MENU.md), so they cannot switch `bb_debug` on
+when the data partition itself is the problem. The installer's
+`grub/beast/device.env` on the ESP is read earlier, but as data with its own
+list of names: of the settings here it takes only `bb_serial`
+(`bb-dev image --serial-console`). To debug that early part, boot the image
+under legacy BIOS and add `set bb_debug=1` to the ESP's `grub/grub.cfg`
+(`menu-sync`, or `mcopy` at the ESP offset, [4.3](#43-installer-loop)); for
+UEFI put the line into `grub/grub.cfg` in the repo and rebuild.
 
 ### 7.4 GRUB's own debug output
 
@@ -737,8 +775,12 @@ bin/bb-dev debug-config --set debug=linux,loader pager=1
   when the output only needs to reach the serial log.
 - Like the `bb_*` settings, this takes effect when config.cfg is sourced,
   so messages from before that point (finding the ESP and data partition)
-  are not shown. `debug` and `pager` are not accepted from `config.env`,
-  so with Secure Boot on put them in `device.cfg` on the ESP.
+  are not shown.
+- `debug` and `pager` are on the `config.env` list (0.5.0), so this works
+  on UEFI and with Secure Boot on too. `debug` takes facility names of
+  lower-case letters, digits and `_`, separated by commas; anything else is
+  dropped with a notice. At GRUB's command line (`c` in the menu)
+  `set debug=linux,loader` does the same for one boot.
 
 ### 7.5 gdb on BIOS
 
@@ -870,7 +912,9 @@ Common failures:
 | shim "SBAT data failed: Security Policy Violation" | the machine's SBAT revocation level is newer than our GRUB | rebuild with a newer GRUB; the sbom-vuln skill checks SBAT |
 | `grub rescue>` or "error: file '/grub/...' not found" | GRUB found no usable ESP / menu files (damaged ESP, or BIOS core.img could not find partition 2) | `beast-boot update --device /dev/sdX` |
 | `BEAST: error no-data-partition`, menu empty | partition 1 not found or not readable; with Secure Boot on an NTFS data partition is invisible | check the partition table (`beast-boot info`); use exFAT/FAT32 |
-| `BEAST: config-cfg-ignored-sb` | Secure Boot is on and `/beast-booter/config.cfg` exists: it is not read | put the settings in `/beast-booter/config.env` (MENU.md) |
+| `BEAST: config-cfg-ignored` | the PC booted in UEFI mode and `/beast-booter/config.cfg` exists: it is not read there | put the settings in `/beast-booter/config.env` (MENU.md) |
+| a menu file edited on the stick's boot partition has no effect | UEFI: the menu is inside the signed `grubx64.efi`; the files in `/grub/` are for legacy BIOS | build with the change ([4.2](#42-the-menu-edit-loop)) |
+| `BEAST: error device-env-bad-value <name>` | `grub/beast/device.env` on the boot partition has a value of the wrong form; it is ignored and the data partition is found by position | `beast-boot update` rewrites the file |
 | `BEAST: error config-env-bad-value <name>` | a `config.env` value has the wrong form; the setting is ignored | fix it (value forms in MENU.md) |
 | `BEAST: error iso-not-found` | `bb_autoboot` (or a menu path) points to a file that is not there | fix the path; it is relative to the data partition root |
 | `BEAST: error loopback-failed` | GRUB could not open the ISO as a loop device | check the file (checksum); try copying it again |

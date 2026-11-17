@@ -7,6 +7,7 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-52525b"></a>
+  <a href="https://beastboot.com/"><img alt="Website: beastboot.com" src="https://img.shields.io/badge/website-beastboot.com-d62839"></a>
   <a href="VERSION"><img alt="Version: 0.3.0" src="https://img.shields.io/badge/version-0.3.0-orange"></a>
   <a href="docs/ARCHITECTURE.md#2-boot-flows"><img alt="Platforms: BIOS, UEFI, Secure Boot" src="https://img.shields.io/badge/platforms-BIOS%20%7C%20UEFI%20%7C%20Secure%20Boot-d62839"></a>
   <br>
@@ -21,7 +22,8 @@
 <p align="center">
   <strong>An open-source, fully transparent multi-boot USB drive, in the spirit of Ventoy.</strong><br>
   Copy <code>.iso</code> files onto a drive that stays normal storage and boot them on BIOS or UEFI.<br>
-  Secure Boot can stay on: nothing is disabled or bypassed.
+  Secure Boot can stay on: nothing is disabled or bypassed.<br>
+  <a href="https://beastboot.com/"><b>beastboot.com</b></a>: features, live demos and downloads.
 </p>
 
 <p align="center">
@@ -132,7 +134,8 @@ again; the colours are in [docs/assets/BRAND.md](docs/assets/BRAND.md).
 ## Download and use
 
 Each [release](https://github.com/cynak/BeastBoot/releases) has a portable package per OS. Unpack it
-and run it; nothing is installed.
+and run it; nothing is installed. You can also try the boot menu and the app in your browser first, on
+the [live demos](https://beastboot.com/demo.html) page.
 
 | OS | File | Start |
 |---|---|---|
@@ -190,7 +193,7 @@ boots the one you choose with a recipe for its distribution family
 (Ubuntu/casper, Debian live, Arch, Fedora live and installer, openSUSE, or
 the ISO's own `loopback.cfg`). Updating rewrites only partition 2 and the
 boot code; your files are never touched. Settings go in
-`/beast-booter/config.cfg` on the drive ([docs/MENU.md](docs/MENU.md)).
+`/beast-booter/config.env` on the drive ([docs/MENU.md](docs/MENU.md)).
 Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [docs/ISO_SUPPORT.md](docs/ISO_SUPPORT.md).
 
@@ -301,6 +304,8 @@ On the first boot with Secure Boot on, shim reports that it can't verify
 BeastBoot and opens MokManager. Choose **Enroll key from disk**, select
 `ENROLL_THIS_KEY_IN_MOKMANAGER.cer` on the `BEAST-EFI` volume, check the
 fingerprint, confirm, and reboot. This is a one-time step per computer.
+(Once more after updating a drive from 0.4.x or older to 0.5.0, which has a
+new certificate: [docs/USER_GUIDE.md](docs/USER_GUIDE.md#6-first-boot-with-secure-boot-on).)
 ISOs then boot if their kernel is signed by a key the machine trusts:
 Debian out of the box; other distributions after you enroll their key;
 unsigned ones only with Secure Boot off. Windows ISOs boot with Secure
@@ -380,7 +385,7 @@ How to contribute: [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Build
 
 ```sh
-make keys       # your own Secure Boot signing key in keys/
+make keys       # your own Secure Boot signing keys in keys/ (a local CA and three leaves)
 make build      # boot files into dist/ (with dist/manifest.json)
 make portable   # portable app for this OS into out/portable/ (ARGS=--all for all four)
 make release    # every release file into out/release/
@@ -398,7 +403,7 @@ Releases are built by GitHub Actions when a `vX.Y.Z` tag is pushed, with
 | [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | making a drive, booting, updating, troubleshooting |
 | [docs/PORTABLE.md](docs/PORTABLE.md) | the portable packages: checking, running, building |
 | [docs/SECURE_BOOT.md](docs/SECURE_BOOT.md) | chain of trust, enrolling and removing the key, SBAT |
-| [docs/MENU.md](docs/MENU.md) | the boot menu and `/beast-booter/config.cfg` |
+| [docs/MENU.md](docs/MENU.md) | the boot menu and its settings file `/beast-booter/config.env` |
 | [docs/ISO_SUPPORT.md](docs/ISO_SUPPORT.md) | which ISOs boot, recipes, filesystems |
 | [docs/BEASTNET.md](docs/BEASTNET.md) | network download and firmware packs |
 | [docs/DISK_TOOLS.md](docs/DISK_TOOLS.md) | Disk tools: safety rules, support, script steps |
