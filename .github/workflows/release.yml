@@ -289,7 +289,8 @@ jobs:
           BB_RELEASE_REPO: ${{ github.repository }}
           BB_RELEASE_ATTESTATIONS: ${{ env.OFFICIAL == 'true' && '1' || '0' }}
           # Optional repository variables (Settings > Secrets and variables > Variables)
-          BB_RELEASE_CERT_SHA256: ${{ vars.BB_RELEASE_CERT_SHA256 }}
+          # The pin is the release CA's. A dry run is signed under a throwaway CA, so it gets no pin.
+          BB_RELEASE_CERT_SHA256: ${{ env.OFFICIAL == 'true' && vars.BB_RELEASE_CERT_SHA256 || '' }}
           BB_RELEASE_GATE: ${{ vars.BB_RELEASE_GATE }}
           BB_RELEASE_GATE_SEVERITY: ${{ vars.BB_RELEASE_GATE_SEVERITY }}
           BB_RELEASE_GATE_IGNORE_UNFIXED: ${{ vars.BB_RELEASE_GATE_IGNORE_UNFIXED }}
