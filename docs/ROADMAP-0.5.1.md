@@ -47,3 +47,17 @@ removed, by each user running `mokutil` on an installed Linux
   next start.
 - Until then the old certificate stays enrolled until a user removes it
   (accepted for 0.5.0: documented, not enforced).
+
+## C. Interface tests that depend on the runner
+
+In the 0.5.0 release dry runs two interface tests failed once each on GitHub's
+macOS runners and passed on a re-run of the same commit:
+
+- `test_x_gui_scroll_window.py::test_wheel_burst_is_coalesced_smooth_and_cheap`
+  measures timing and fails on a slow runner.
+- `test_x_gui_window.py::test_selftest` with `--scale`: on a runner with a
+  1024x768 screen the self-test reported the default scaling, not the requested
+  one. The cause is not known; nothing in the app sets the scaling back.
+
+Find the cause of the second, then make both skip (with the reason) where the
+runner cannot meet their conditions, as `test_small_screens_cut_nothing` does.
